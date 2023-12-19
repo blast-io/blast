@@ -1,0 +1,111 @@
+# This Dockerfile builds all the dependencies needed by the monorepo, and should
+# be used to build any of the follow-on services
+#
+
+# Stage 0 (named `manifests`) collects
+# dependency manifest files (`package.json` and `pnpm-lock.yaml`) which are then
+# used by stage 1 to install these dependencies
+# development. The only reason we need a separate stage just for collecting the
+# dependency manifests is that Docker's `COPY` command still does not allow
+# copying based on a glob pattern (see this GitHub issue for more details
+# https://github.com/moby/moby/issues/15858). Being able to copy only manifests
+# into stage 1 (the `COPY --from=manifests` statement) is important to maximize
+# Docker build cache hit rate. `alpine` is chosen as the base image for the
+# first stage because it's the smallest image that have access to the `cp
+# --parents -t` command (by installing the `coreutils` package).
+FROM alpine:3.16 as manifests
+RUN apk add coreutils
+
+WORKDIR /tmp
+COPY pnpm-lock.yaml pnpm-workspace.yaml .nvmrc package.json ./src/
+COPY packages src/packages/
+RUN mkdir manifests && \
+  cd src && \
+  # copy package.json recursively
+  find . -name 'package.json' | xargs cp --parents -t ../manifests/ && \
+  # pnpm-lock.yaml
+  cp pnpm-lock.yaml ../manifests/ && \
+  # pnpm-workspace.yaml
+  cp pnpm-workspace.yaml ../manifests/ && \
+  # .nvmrc
+  cp .nvmrc ../manifests/
+
+FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:latest as foundry
+# bullseye-slim is debian based
+# we use it rather than alpine because it's not much
+# bigger and alpine is often missing packages for node applications
+# alpine is not officially supported by node.js
+FROM node:20.8.1-bullseye-slim as base
+
+# Base: install deps
+RUN apt-get update && apt-get install -y \
+  curl \
+  jq \
+  python3 \
+  ca-certificates \
+  git \
+  g++ \
+  make \
+  gcc \
+  musl-dev \
+  bash \
+  # the following 4 deps are needed for node-hid
+  # which is a deep sub dependency of ethers to install
+  # correctly
+  pkg-config \
+  libusb-1.0-0-dev \
+  libudev-dev \
+  --no-install-recommends
+
+RUN npm install pnpm --global
+
+COPY --from=foundry /usr/local/bin/forge /usr/local/bin/forge
+COPY --from=foundry /usr/local/bin/cast /usr/local/bin/cast
+
+WORKDIR /opt/optimism
+
+# Copy manifest files into the image in
+# preparation for `pnpm install`.
+COPY --from=manifests /tmp/manifests  ./
+COPY *.json ./
+
+RUN pnpm install --frozen-lockfile
+
+COPY ./packages ./packages
+
+COPY .git/ ./.git
+COPY .gitmodules ./.gitmodules
+RUN git submodule update --init --recursive
+
+RUN pnpm build
+
+ENTRYPOINT ["pnpm", "run"]
+
+FROM base as chain-mon
+WORKDIR /opt/optimism/packages/chain-mon
+
+# TODO keeping the rest of these here for now because they are being used
+# but we should really delete them we only need one image
+FROM base as replica-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:replica-mon"]
+
+FROM base as balance-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:balance-mon"]
+
+FROM base as drippie-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:drippie-mon"]
+
+FROM base as wd-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:wd-mon"]
+
+FROM base as wallet-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:wallet-mon"]
+
+from base as fault-mon
+WORKDIR /opt/optimism/packages/chain-mon
+CMD ["start:fault-mon"]

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": [
+    "deploy-config/**/*",
+    "deploy-config/**/*.json",
+    "scripts/**/*"
+  ]
+}
