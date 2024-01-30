@@ -6,6 +6,8 @@ RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
 COPY ./go.mod /app/go.mod
 COPY ./go.sum /app/go.sum
 
+COPY --from=blast-geth . /blast-geth
+
 WORKDIR /app
 
 RUN echo "go mod cache: $(go env GOMODCACHE)"

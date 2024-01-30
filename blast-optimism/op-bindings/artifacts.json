@@ -41,5 +41,11 @@
   "SafeProxyFactory",
   "DelayedVetoable",
   "ISemver",
-  "StorageSetter"
+  "StorageSetter",
+  "Shares",
+  "Gas",
+  "Blast",
+  "USDB",
+  "WETHRebasing",
+  "L2BlastBridge"
 ]

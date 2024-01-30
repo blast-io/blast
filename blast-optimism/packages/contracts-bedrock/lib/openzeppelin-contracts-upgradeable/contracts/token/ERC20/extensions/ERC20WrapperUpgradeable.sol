@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.6.0) (token/ERC20/extensions/ERC20Wrapper.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/extensions/ERC20Wrapper.sol)
 
 pragma solidity ^0.8.0;
 
@@ -19,21 +19,22 @@ import "../../../proxy/utils/Initializable.sol";
  * @custom:storage-size 51
  */
 abstract contract ERC20WrapperUpgradeable is Initializable, ERC20Upgradeable {
-    IERC20Upgradeable public underlying;
+    IERC20Upgradeable private _underlying;
 
     function __ERC20Wrapper_init(IERC20Upgradeable underlyingToken) internal onlyInitializing {
         __ERC20Wrapper_init_unchained(underlyingToken);
     }
 
     function __ERC20Wrapper_init_unchained(IERC20Upgradeable underlyingToken) internal onlyInitializing {
-        underlying = underlyingToken;
+        require(underlyingToken != this, "ERC20Wrapper: cannot self wrap");
+        _underlying = underlyingToken;
     }
 
     /**
      * @dev See {ERC20-decimals}.
      */
     function decimals() public view virtual override returns (uint8) {
-        try IERC20MetadataUpgradeable(address(underlying)).decimals() returns (uint8 value) {
+        try IERC20MetadataUpgradeable(address(_underlying)).decimals() returns (uint8 value) {
             return value;
         } catch {
             return super.decimals();
@@ -41,10 +42,19 @@ abstract contract ERC20WrapperUpgradeable is Initializable, ERC20Upgradeable {
     }
 
     /**
+     * @dev Returns the address of the underlying ERC-20 token that is being wrapped.
+     */
+    function underlying() public view returns (IERC20Upgradeable) {
+        return _underlying;
+    }
+
+    /**
      * @dev Allow a user to deposit underlying tokens and mint the corresponding number of wrapped tokens.
      */
     function depositFor(address account, uint256 amount) public virtual returns (bool) {
-        SafeERC20Upgradeable.safeTransferFrom(underlying, _msgSender(), address(this), amount);
+        address sender = _msgSender();
+        require(sender != address(this), "ERC20Wrapper: wrapper can't deposit");
+        SafeERC20Upgradeable.safeTransferFrom(_underlying, sender, address(this), amount);
         _mint(account, amount);
         return true;
     }
@@ -54,7 +64,7 @@ abstract contract ERC20WrapperUpgradeable is Initializable, ERC20Upgradeable {
      */
     function withdrawTo(address account, uint256 amount) public virtual returns (bool) {
         _burn(_msgSender(), amount);
-        SafeERC20Upgradeable.safeTransfer(underlying, account, amount);
+        SafeERC20Upgradeable.safeTransfer(_underlying, account, amount);
         return true;
     }
 
@@ -63,7 +73,7 @@ abstract contract ERC20WrapperUpgradeable is Initializable, ERC20Upgradeable {
      * function that can be exposed with access control if desired.
      */
     function _recover(address account) internal virtual returns (uint256) {
-        uint256 value = underlying.balanceOf(address(this)) - totalSupply();
+        uint256 value = _underlying.balanceOf(address(this)) - totalSupply();
         _mint(account, value);
         return value;
     }

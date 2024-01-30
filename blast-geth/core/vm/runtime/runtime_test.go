@@ -42,7 +42,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	cfg := new(Config)
-	setDefaults(cfg)
+	setDefaults(cfg, nil)
 
 	if cfg.Difficulty == nil {
 		t.Error("expected difficulty to be non nil")
@@ -72,7 +72,7 @@ func TestEVM(t *testing.T) {
 		}
 	}()
 
-	Execute([]byte{
+	_, _, err := Execute([]byte{
 		byte(vm.DIFFICULTY),
 		byte(vm.TIMESTAMP),
 		byte(vm.GASLIMIT),
@@ -81,6 +81,9 @@ func TestEVM(t *testing.T) {
 		byte(vm.BLOCKHASH),
 		byte(vm.COINBASE),
 	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestExecute(t *testing.T) {
@@ -326,7 +329,7 @@ func TestBlockhash(t *testing.T) {
 // state, this should not be used, since it does not reset the state between runs.
 func benchmarkNonModifyingCode(gas uint64, code []byte, name string, tracerCode string, b *testing.B) {
 	cfg := new(Config)
-	setDefaults(cfg)
+	setDefaults(cfg, nil)
 	cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	cfg.GasLimit = gas
 	if len(tracerCode) > 0 {
@@ -362,12 +365,14 @@ func benchmarkNonModifyingCode(gas uint64, code []byte, name string, tracerCode 
 	//cfg.State.CreateAccount(cfg.Origin)
 	// set the receiver's (the executing contract) code for execution.
 	cfg.State.SetCode(destination, code)
-	vmenv.Call(sender, destination, nil, gas, cfg.Value)
+	gasTracker := vm.NewGasTracker()
+	vmenv.Call(sender, destination, nil, gas, cfg.Value, gasTracker)
 
 	b.Run(name, func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			vmenv.Call(sender, destination, nil, gas, cfg.Value)
+			gasTracker := vm.NewGasTracker()
+			vmenv.Call(sender, destination, nil, gas, cfg.Value, gasTracker)
 		}
 	})
 }
@@ -661,7 +666,7 @@ func TestColdAccountAccessCost(t *testing.T) {
 		},
 	} {
 		tracer := logger.NewStructLogger(nil)
-		Execute(tc.code, nil, &Config{
+		_, _, err := Execute(tc.code, nil, &Config{
 			EVMConfig: vm.Config{
 				Tracer: tracer,
 			},
@@ -672,6 +677,9 @@ func TestColdAccountAccessCost(t *testing.T) {
 				t.Logf("%d: %v %d", ii, op.OpName(), op.GasCost)
 			}
 			t.Fatalf("tescase %d, gas report wrong, step %d, have %d want %d", i, tc.step, have, want)
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }

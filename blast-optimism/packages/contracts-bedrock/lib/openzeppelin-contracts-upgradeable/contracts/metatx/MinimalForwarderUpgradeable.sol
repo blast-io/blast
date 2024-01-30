@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (metatx/MinimalForwarder.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (metatx/MinimalForwarder.sol)
 
 pragma solidity ^0.8.0;
 
 import "../utils/cryptography/ECDSAUpgradeable.sol";
-import "../utils/cryptography/draft-EIP712Upgradeable.sol";
+import "../utils/cryptography/EIP712Upgradeable.sol";
 import "../proxy/utils/Initializable.sol";
 
 /**
@@ -49,11 +49,10 @@ contract MinimalForwarderUpgradeable is Initializable, EIP712Upgradeable {
         return _nonces[req.from] == req.nonce && signer == req.from;
     }
 
-    function execute(ForwardRequest calldata req, bytes calldata signature)
-        public
-        payable
-        returns (bool, bytes memory)
-    {
+    function execute(
+        ForwardRequest calldata req,
+        bytes calldata signature
+    ) public payable returns (bool, bytes memory) {
         require(verify(req, signature), "MinimalForwarder: signature does not match request");
         _nonces[req.from] = req.nonce + 1;
 
@@ -62,7 +61,7 @@ contract MinimalForwarderUpgradeable is Initializable, EIP712Upgradeable {
         );
 
         // Validate that the relayer has sent enough gas for the call.
-        // See https://ronan.eth.link/blog/ethereum-gas-dangers/
+        // See https://ronan.eth.limo/blog/ethereum-gas-dangers/
         if (gasleft() <= req.gas / 63) {
             // We explicitly trigger invalid opcode to consume all gas and bubble-up the effects, since
             // neither revert or assert consume all gas since Solidity 0.8.0

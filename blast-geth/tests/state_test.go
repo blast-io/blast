@@ -265,8 +265,9 @@ func runBenchmark(b *testing.B, t *StateTest) {
 			evm := vm.NewEVM(context, txContext, statedb, config, vmconfig)
 
 			// Create "contract" for sender to cache code analysis.
+			gasTracker := vm.NewGasTracker()
 			sender := vm.NewContract(vm.AccountRef(msg.From), vm.AccountRef(msg.From),
-				nil, 0)
+				nil, 0, gasTracker)
 
 			var (
 				gasUsed uint64
@@ -281,7 +282,8 @@ func runBenchmark(b *testing.B, t *StateTest) {
 				start := time.Now()
 
 				// Execute the message.
-				_, leftOverGas, err := evm.Call(sender, *msg.To, msg.Data, msg.GasLimit, msg.Value)
+				gasTracker := vm.NewGasTracker()
+				_, leftOverGas, err := evm.Call(sender, *msg.To, msg.Data, msg.GasLimit, msg.Value, gasTracker)
 				if err != nil {
 					b.Error(err)
 					return

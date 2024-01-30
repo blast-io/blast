@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (crosschain/arbitrum/LibArbitrumL1.sol)
+// OpenZeppelin Contracts (last updated v4.8.0) (crosschain/arbitrum/LibArbitrumL1.sol)
 
 pragma solidity ^0.8.4;
 
 import { IBridgeUpgradeable as ArbitrumL1_Bridge } from "../../vendor/arbitrum/IBridgeUpgradeable.sol";
-import { IInboxUpgradeable as ArbitrumL1_Inbox } from "../../vendor/arbitrum/IInboxUpgradeable.sol";
 import { IOutboxUpgradeable as ArbitrumL1_Outbox } from "../../vendor/arbitrum/IOutboxUpgradeable.sol";
 import "../errorsUpgradeable.sol";
 

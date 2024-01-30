@@ -49,12 +49,17 @@ func TestLoopInterrupt(t *testing.T) {
 		statedb.Finalise(true)
 
 		evm := NewEVM(vmctx, TxContext{}, statedb, params.AllEthashProtocolChanges, Config{})
+		gasTracker := NewGasTracker()
 
 		errChannel := make(chan error)
 		timeout := make(chan bool)
 
 		go func(evm *EVM) {
-			_, _, err := evm.Call(AccountRef(common.Address{}), address, nil, math.MaxUint64, new(big.Int))
+			_, leftOverGas, err := evm.Call(AccountRef(common.Address{}), address, nil, math.MaxUint64, new(big.Int), gasTracker)
+			gasUsed := math.MaxUint64 - leftOverGas
+			if gasUsed != gasTracker.gasUsed {
+				t.Errorf("Error: leftOverGas = %d, gasTracker.gasUsed = %d", leftOverGas, gasTracker.gasUsed)
+			}
 			errChannel <- err
 		}(evm)
 

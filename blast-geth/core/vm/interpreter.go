@@ -109,6 +109,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
 
+	// Increment the # of frames processed
+	if contract.gasTracker.GetGasUsedByContract(contract.Address()) == 0 {
+		in.evm.frameCount++
+	}
+
 	// Make sure the readOnly is only set if we aren't in readOnly yet.
 	// This also makes sure that the readOnly flag isn't removed for child calls.
 	if readOnly && !in.readOnly {
@@ -185,7 +190,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		} else if sLen > operation.maxStack {
 			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
 		}
-		if !contract.UseGas(cost) {
+		if !contract.UseGasForConstantCost(cost) {
 			return nil, ErrOutOfGas
 		}
 		if operation.dynamicGas != nil {
@@ -211,7 +216,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // for tracing
-			if err != nil || !contract.UseGas(dynamicCost) {
+			if err != nil || !contract.UseGasWithOp(dynamicCost, op, in.evm) {
 				return nil, ErrOutOfGas
 			}
 			// Do tracing before memory expansion

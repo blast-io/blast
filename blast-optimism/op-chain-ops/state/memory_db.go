@@ -72,6 +72,42 @@ func (db *MemoryStateDB) CreateAccount(addr common.Address) {
 
 }
 
+func (db *MemoryStateDB) GetClaimableAmount(common.Address) *big.Int {
+	panic("not implemented")
+}
+
+func (db *MemoryStateDB) SubClaimableAmount(common.Address, *big.Int) {
+	panic("not implemented")
+}
+
+func (db *MemoryStateDB) GetFlags(addr common.Address) uint8 {
+	db.rw.RLock()
+	defer db.rw.RUnlock()
+
+	account, ok := db.genesis.Alloc[addr]
+	if !ok {
+		return 0
+	}
+	return account.Flags
+}
+
+func (db *MemoryStateDB) SetFlags(addr common.Address, flags uint8) {
+	db.rw.Lock()
+	defer db.rw.Unlock()
+
+	account, ok := db.genesis.Alloc[addr]
+	if !ok {
+		panic(fmt.Sprintf("%s not in state", addr))
+	}
+	// TODO(blast): better validation
+	if flags > 2 {
+		panic("invalid flags")
+
+	}
+	account.Flags = flags
+	db.genesis.Alloc[addr] = account
+}
+
 func (db *MemoryStateDB) SubBalance(addr common.Address, amount *big.Int) {
 	db.rw.Lock()
 	defer db.rw.Unlock()
@@ -174,8 +210,8 @@ func (db *MemoryStateDB) SetCode(addr common.Address, code []byte) {
 }
 
 func (db *MemoryStateDB) GetCodeSize(addr common.Address) int {
-	db.rw.Lock()
-	defer db.rw.Unlock()
+	db.rw.RLock()
+	defer db.rw.RUnlock()
 
 	account, ok := db.genesis.Alloc[addr]
 	if !ok {
@@ -227,6 +263,9 @@ func (db *MemoryStateDB) SetState(addr common.Address, key, value common.Hash) {
 }
 
 func (db *MemoryStateDB) DeleteState(addr common.Address, key common.Hash) {
+	db.rw.Lock()
+	defer db.rw.Unlock()
+
 	account, ok := db.genesis.Alloc[addr]
 	if !ok {
 		panic(fmt.Sprintf("%s not in state", addr))

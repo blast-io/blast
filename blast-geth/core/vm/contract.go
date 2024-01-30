@@ -60,10 +60,12 @@ type Contract struct {
 
 	Gas   uint64
 	value *big.Int
+
+	gasTracker *GasTracker
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
-func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
+func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64, gasTracker *GasTracker) *Contract {
 	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object}
 
 	if parent, ok := caller.(*Contract); ok {
@@ -78,6 +80,9 @@ func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uin
 	c.Gas = gas
 	// ensures a value is set
 	c.value = value
+
+	// assign gas tracker to contract
+	c.gasTracker = gasTracker
 
 	return c
 }
@@ -159,11 +164,55 @@ func (c *Contract) Caller() common.Address {
 }
 
 // UseGas attempts the use gas and subtracts it and returns true on success
+// Gas-tracker not included in this logic
 func (c *Contract) UseGas(gas uint64) (ok bool) {
 	if c.Gas < gas {
 		return false
 	}
 	c.Gas -= gas
+	return true
+}
+
+// UseGasForConstantCost attempts the use gas and subtracts it and returns true on success for
+// The gas consumed is also factored into the gas tracker. This is called for to consume the CONSTANT cost for op-codes
+func (c *Contract) UseGasForConstantCost(gas uint64) (ok bool) {
+	if c.Gas < gas {
+		return false
+	}
+	c.Gas -= gas
+	c.gasTracker.UseGas(c.Address(), gas)
+
+	return true
+}
+
+// UseGasNatively attempts the use gas and subtracts it and returns true on success
+// The gas consumed is also factored into the gas tracker. This is called by operation_acl
+func (c *Contract) UseGasNatively(gas uint64) (ok bool) {
+	if c.Gas < gas {
+		return false
+	}
+	c.Gas -= gas
+	c.gasTracker.UseGas(c.Address(), gas)
+
+	return true
+}
+
+// UseGasWithOp attempts the use gas and subtracts it and returns true on success
+// The gas consumed is also factored into the gas tracker, with special handling for CALLS
+func (c *Contract) UseGasWithOp(gas uint64, op OpCode, evm *EVM) (ok bool) {
+	if c.Gas < gas {
+		return false
+	}
+	c.Gas -= gas
+
+	if op.IsContractCall() {
+		c.gasTracker.UseGas(c.Address(), evm.baseGasTemp+evm.coldCostTemp)
+	} else if op.IsContractCreate() {
+		c.gasTracker.UseGas(c.Address(), gas)
+	} else {
+		c.gasTracker.UseGas(c.Address(), gas)
+	}
+
 	return true
 }
 

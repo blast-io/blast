@@ -184,7 +184,7 @@ func (s *L2Client) OutputV0AtBlock(ctx context.Context, blockHash common.Hash) (
 		return nil, fmt.Errorf("proof %w", ethereum.NotFound)
 	}
 	// make sure that the proof (including storage hash) that we retrieved is correct by verifying it against the state-root
-	if err := proof.Verify(head.Root()); err != nil {
+	if err := proof.VerifyL2(head.Root()); err != nil {
 		return nil, fmt.Errorf("invalid withdrawal root hash, state root was %s: %w", head.Root(), err)
 	}
 	stateRoot := head.Root()

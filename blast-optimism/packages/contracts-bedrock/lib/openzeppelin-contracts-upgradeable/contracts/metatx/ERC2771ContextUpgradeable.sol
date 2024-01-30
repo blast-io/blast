@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (metatx/ERC2771Context.sol)
+// OpenZeppelin Contracts (last updated v4.9.3) (metatx/ERC2771Context.sol)
 
 pragma solidity ^0.8.9;
 
@@ -23,7 +23,7 @@ abstract contract ERC2771ContextUpgradeable is Initializable, ContextUpgradeable
     }
 
     function _msgSender() internal view virtual override returns (address sender) {
-        if (isTrustedForwarder(msg.sender)) {
+        if (isTrustedForwarder(msg.sender) && msg.data.length >= 20) {
             // The assembly code is more direct than the Solidity version using `abi.decode`.
             /// @solidity memory-safe-assembly
             assembly {
@@ -35,7 +35,7 @@ abstract contract ERC2771ContextUpgradeable is Initializable, ContextUpgradeable
     }
 
     function _msgData() internal view virtual override returns (bytes calldata) {
-        if (isTrustedForwarder(msg.sender)) {
+        if (isTrustedForwarder(msg.sender) && msg.data.length >= 20) {
             return msg.data[:msg.data.length - 20];
         } else {
             return super._msgData();

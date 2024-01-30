@@ -65,6 +65,7 @@ func LoadOPStackGenesis(chainID uint64) (*Genesis, error) {
 		genesis.Alloc[common.Address(addr)] = GenesisAccount{
 			Code:    code,
 			Storage: storage,
+			Flags:   1,
 			Balance: bal,
 			Nonce:   acc.Nonce,
 		}

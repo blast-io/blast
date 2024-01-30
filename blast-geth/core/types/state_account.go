@@ -26,11 +26,25 @@ import (
 
 //go:generate go run ../../rlp/rlpgen -type StateAccount -out gen_account_rlp.go
 
+const (
+	YieldAutomatic = iota
+	YieldDisabled
+	YieldClaimable
+)
+
 // StateAccount is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
 type StateAccount struct {
-	Nonce    uint64
-	Balance  *big.Int
+	Nonce uint64
+	Flags uint8 // valid values: 0-2
+
+	// raw representation
+	Fixed *big.Int
+
+	// share representation
+	Shares    *big.Int
+	Remainder *big.Int
+
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
 }
@@ -38,23 +52,32 @@ type StateAccount struct {
 // NewEmptyStateAccount constructs an empty state account.
 func NewEmptyStateAccount() *StateAccount {
 	return &StateAccount{
-		Balance:  new(big.Int),
-		Root:     EmptyRootHash,
-		CodeHash: EmptyCodeHash.Bytes(),
+		Fixed:     new(big.Int),
+		Shares:    new(big.Int),
+		Remainder: new(big.Int),
+		Root:      EmptyRootHash,
+		CodeHash:  EmptyCodeHash.Bytes(),
 	}
+}
+
+func copyBigInt(src *big.Int) *big.Int {
+	var copied *big.Int
+	if src != nil {
+		copied = new(big.Int).Set(src)
+	}
+	return copied
 }
 
 // Copy returns a deep-copied state account object.
 func (acct *StateAccount) Copy() *StateAccount {
-	var balance *big.Int
-	if acct.Balance != nil {
-		balance = new(big.Int).Set(acct.Balance)
-	}
 	return &StateAccount{
-		Nonce:    acct.Nonce,
-		Balance:  balance,
-		Root:     acct.Root,
-		CodeHash: common.CopyBytes(acct.CodeHash),
+		Nonce:     acct.Nonce,
+		Flags:     acct.Flags,
+		Fixed:     copyBigInt(acct.Fixed),
+		Shares:    copyBigInt(acct.Shares),
+		Remainder: copyBigInt(acct.Remainder),
+		Root:      acct.Root,
+		CodeHash:  common.CopyBytes(acct.CodeHash),
 	}
 }
 
@@ -62,17 +85,23 @@ func (acct *StateAccount) Copy() *StateAccount {
 // with a byte slice. This format can be used to represent full-consensus format
 // or slim format which replaces the empty root and code hash as nil byte slice.
 type SlimAccount struct {
-	Nonce    uint64
-	Balance  *big.Int
-	Root     []byte // Nil if root equals to types.EmptyRootHash
-	CodeHash []byte // Nil if hash equals to types.EmptyCodeHash
+	Nonce     uint64
+	Flags     uint8
+	Fixed     *big.Int
+	Shares    *big.Int
+	Remainder *big.Int
+	Root      []byte // Nil if root equals to types.EmptyRootHash
+	CodeHash  []byte // Nil if hash equals to types.EmptyCodeHash
 }
 
 // SlimAccountRLP encodes the state account in 'slim RLP' format.
 func SlimAccountRLP(account StateAccount) []byte {
 	slim := SlimAccount{
-		Nonce:   account.Nonce,
-		Balance: account.Balance,
+		Nonce:     account.Nonce,
+		Flags:     account.Flags,
+		Fixed:     account.Fixed,
+		Shares:    account.Shares,
+		Remainder: account.Remainder,
 	}
 	if account.Root != EmptyRootHash {
 		slim.Root = account.Root[:]
@@ -94,8 +123,13 @@ func FullAccount(data []byte) (*StateAccount, error) {
 	if err := rlp.DecodeBytes(data, &slim); err != nil {
 		return nil, err
 	}
-	var account StateAccount
-	account.Nonce, account.Balance = slim.Nonce, slim.Balance
+	account := StateAccount{
+		Nonce:     slim.Nonce,
+		Flags:     slim.Flags,
+		Fixed:     slim.Fixed,
+		Shares:    slim.Shares,
+		Remainder: slim.Remainder,
+	}
 
 	// Interpret the storage root and code hash in slim format.
 	if len(slim.Root) == 0 {

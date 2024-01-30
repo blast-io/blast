@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity ^0.8.0;
 
 import { Attestation } from "../Common.sol";

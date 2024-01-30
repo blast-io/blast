@@ -103,7 +103,10 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 			panic(err)
 		}
 		fmt.Printf("\taccount.nonce: %d\n", account.Nonce)
-		fmt.Printf("\taccount.balance: %x\n", account.Balance)
+		fmt.Printf("\taccount.flags: %d\n", account.Flags)
+		fmt.Printf("\taccount.fixed: %x\n", account.Fixed)
+		fmt.Printf("\taccount.shares: %x\n", account.Shares)
+		fmt.Printf("\taccount.remainder: %x\n", account.Remainder)
 		fmt.Printf("\taccount.root: %x\n", account.Root)
 		fmt.Printf("\taccount.codehash: %x\n", account.CodeHash)
 	}
@@ -134,7 +137,10 @@ func CheckJournalAccount(db ethdb.KeyValueStore, hash common.Hash) error {
 				panic(err)
 			}
 			fmt.Printf("\taccount.nonce: %d\n", account.Nonce)
-			fmt.Printf("\taccount.balance: %x\n", account.Balance)
+			fmt.Printf("\taccount.flags: %d\n", account.Flags)
+			fmt.Printf("\taccount.fixed: %x\n", account.Fixed)
+			fmt.Printf("\taccount.shares: %x\n", account.Shares)
+			fmt.Printf("\taccount.remainder: %x\n", account.Remainder)
 			fmt.Printf("\taccount.root: %x\n", account.Root)
 			fmt.Printf("\taccount.codehash: %x\n", account.CodeHash)
 		}

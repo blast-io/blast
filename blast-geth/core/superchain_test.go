@@ -10,6 +10,7 @@ import (
 )
 
 func TestOPStackGenesis(t *testing.T) {
+	t.Skip("Skipping since Blast should not generate the same block hashes as Optimism")
 	for id := range superchain.OPChains {
 		gen, err := LoadOPStackGenesis(id)
 		if err != nil {

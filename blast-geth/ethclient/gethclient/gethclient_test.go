@@ -80,8 +80,10 @@ func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
 func generateTestChain() (*core.Genesis, []*types.Block) {
 	genesis := &core.Genesis{
 		Config: params.AllEthashProtocolChanges,
-		Alloc: core.GenesisAlloc{testAddr: {Balance: testBalance, Storage: map[common.Hash]common.Hash{testSlot: testValue}},
-			testContract: {Nonce: 1, Code: []byte{0x13, 0x37}}},
+		Alloc: core.GenesisAlloc{
+			testAddr:     {Balance: testBalance, Flags: 1, Storage: map[common.Hash]common.Hash{testSlot: testValue}},
+			testContract: {Flags: 1, Nonce: 1, Code: []byte{0x13, 0x37}},
+		},
 		ExtraData: []byte("test genesis"),
 		Timestamp: 9000,
 	}
@@ -221,8 +223,8 @@ func testGetProof(t *testing.T, client *rpc.Client, addr common.Address) {
 		t.Fatalf("invalid nonce, want: %v got: %v", nonce, result.Nonce)
 	}
 	// test balance
-	if balance, _ := ethcl.BalanceAt(context.Background(), addr, nil); result.Balance.Cmp(balance) != 0 {
-		t.Fatalf("invalid balance, want: %v got: %v", balance, result.Balance)
+	if balance, _ := ethcl.BalanceAt(context.Background(), addr, nil); result.Fixed.Cmp(balance) != 0 {
+		t.Fatalf("invalid balance, want: %v got: %v", balance, result.Fixed)
 	}
 	// test storage
 	if len(result.StorageProof) != 1 {

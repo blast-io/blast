@@ -25,6 +25,12 @@ const (
 	L1FeeVault                    = "0x420000000000000000000000000000000000001a"
 	SchemaRegistry                = "0x4200000000000000000000000000000000000020"
 	EAS                           = "0x4200000000000000000000000000000000000021"
+	Shares                        = "0x4300000000000000000000000000000000000000"
+	Gas                           = "0x4300000000000000000000000000000000000001"
+	Blast                         = "0x4300000000000000000000000000000000000002"
+	USDB                          = "0x4300000000000000000000000000000000000003"
+	WETHRebasing                  = "0x4300000000000000000000000000000000000004"
+	L2BlastBridge                 = "0x4300000000000000000000000000000000000005"
 )
 
 var (
@@ -47,6 +53,12 @@ var (
 	L1FeeVaultAddr                    = common.HexToAddress(L1FeeVault)
 	SchemaRegistryAddr                = common.HexToAddress(SchemaRegistry)
 	EASAddr                           = common.HexToAddress(EAS)
+	SharesAddr                        = common.HexToAddress(Shares)
+	GasAddr                           = common.HexToAddress(Gas)
+	BlastAddr                         = common.HexToAddress(Blast)
+	USDBAddr                          = common.HexToAddress(USDB)
+	WETHRebasingAddr                  = common.HexToAddress(WETHRebasing)
+	L2BlastBridgeAddr                 = common.HexToAddress(L2BlastBridge)
 
 	Predeploys = make(map[string]*common.Address)
 )
@@ -82,4 +94,10 @@ func init() {
 	Predeploys["L1FeeVault"] = &L1FeeVaultAddr
 	Predeploys["SchemaRegistry"] = &SchemaRegistryAddr
 	Predeploys["EAS"] = &EASAddr
+	Predeploys["Shares"] = &SharesAddr
+	Predeploys["Gas"] = &GasAddr
+	Predeploys["Blast"] = &BlastAddr
+	Predeploys["USDB"] = &USDBAddr
+	Predeploys["WETHRebasing"] = &WETHRebasingAddr
+	Predeploys["L2BlastBridge"] = &L2BlastBridgeAddr
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -139,7 +139,7 @@ abstract contract CrossDomainMessenger is
     mapping(bytes32 => bool) public failedMessages;
 
     /// @notice Reserve extra slots in the storage layout for future upgrades.
-    ///         A gap size of 41 was chosen here, so that the first slot used in a child contract
+    ///         A gap size of 42 was chosen here, so that the first slot used in a child contract
     ///         would be a multiple of 50.
     uint256[42] private __gap;
 
@@ -218,6 +218,7 @@ abstract contract CrossDomainMessenger is
     )
         external
         payable
+        virtual
     {
         (, uint16 version) = Encoding.decodeVersionedNonce(_nonce);
         require(version < 2, "CrossDomainMessenger: only version 0 or 1 messages are supported at this time");

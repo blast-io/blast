@@ -304,6 +304,15 @@ func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	return gas, nil
 }
 
+func blastGasCreationCost(evm *EVM) uint64 {
+	var blastGasCost uint64
+	if evm.frameCount > params.BlastMaxFrameCount {
+		blastGasCost = params.BlastGasParamStorageGas
+	}
+	return blastGasCost
+
+}
+
 func gasCreateEip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -318,6 +327,12 @@ func gasCreateEip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, m
 	if gas, overflow = math.SafeAdd(gas, moreGas); overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	blastGasCost := blastGasCreationCost(evm)
+	if gas, overflow = math.SafeAdd(gas, blastGasCost); overflow {
+		return 0, ErrGasUintOverflow
+	}
+
 	return gas, nil
 }
 func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
@@ -334,6 +349,12 @@ func gasCreate2Eip3860(evm *EVM, contract *Contract, stack *Stack, mem *Memory, 
 	if gas, overflow = math.SafeAdd(gas, moreGas); overflow {
 		return 0, ErrGasUintOverflow
 	}
+
+	blastGasCost := blastGasCreationCost(evm)
+	if gas, overflow = math.SafeAdd(gas, blastGasCost); overflow {
+		return 0, ErrGasUintOverflow
+	}
+
 	return gas, nil
 }
 
@@ -392,6 +413,10 @@ func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
 	}
@@ -417,6 +442,10 @@ func gasCallCode(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memory
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
 	}
@@ -432,6 +461,10 @@ func gasDelegateCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, me
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	var overflow bool
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow
@@ -448,6 +481,10 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 	if err != nil {
 		return 0, err
 	}
+
+	// op-code base gas cost
+	evm.baseGasTemp = gas
+
 	var overflow bool
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, ErrGasUintOverflow

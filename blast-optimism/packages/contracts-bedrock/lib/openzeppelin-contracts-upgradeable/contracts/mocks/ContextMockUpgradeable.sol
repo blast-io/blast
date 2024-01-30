@@ -23,6 +23,12 @@ contract ContextMockUpgradeable is Initializable, ContextUpgradeable {
         emit Data(_msgData(), integerValue, stringValue);
     }
 
+    event DataShort(bytes data);
+
+    function msgDataShort() public {
+        emit DataShort(_msgData());
+    }
+
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
@@ -41,11 +47,7 @@ contract ContextMockCallerUpgradeable is Initializable {
         context.msgSender();
     }
 
-    function callData(
-        ContextMockUpgradeable context,
-        uint256 integerValue,
-        string memory stringValue
-    ) public {
+    function callData(ContextMockUpgradeable context, uint256 integerValue, string memory stringValue) public {
         context.msgData(integerValue, stringValue);
     }
 

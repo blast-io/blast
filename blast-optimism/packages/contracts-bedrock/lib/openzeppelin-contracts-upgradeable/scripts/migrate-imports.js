@@ -9,9 +9,9 @@ const pathUpdates = {
   'access/TimelockController.sol': 'governance/TimelockController.sol',
   'cryptography/ECDSA.sol': 'utils/cryptography/ECDSA.sol',
   'cryptography/MerkleProof.sol': 'utils/cryptography/MerkleProof.sol',
-  'drafts/EIP712.sol': 'utils/cryptography/draft-EIP712.sol',
-  'drafts/ERC20Permit.sol': 'token/ERC20/extensions/draft-ERC20Permit.sol',
-  'drafts/IERC20Permit.sol': 'token/ERC20/extensions/draft-IERC20Permit.sol',
+  'drafts/EIP712.sol': 'utils/cryptography/EIP712.sol',
+  'drafts/ERC20Permit.sol': 'token/ERC20/extensions/ERC20Permit.sol',
+  'drafts/IERC20Permit.sol': 'token/ERC20/extensions/IERC20Permit.sol',
   'GSN/Context.sol': 'utils/Context.sol',
   // 'GSN/GSNRecipientERC20Fee.sol': undefined,
   // 'GSN/GSNRecipientSignature.sol': undefined,
@@ -38,16 +38,16 @@ const pathUpdates = {
   'presets/ERC20PresetMinterPauser.sol': 'token/ERC20/presets/ERC20PresetMinterPauser.sol',
   'presets/ERC721PresetMinterPauserAutoId.sol': 'token/ERC721/presets/ERC721PresetMinterPauserAutoId.sol',
   'presets/ERC777PresetFixedSupply.sol': 'token/ERC777/presets/ERC777PresetFixedSupply.sol',
-  // 'proxy/BeaconProxy.sol': 'proxy/beacon/BeaconProxy.sol',
+  'proxy/BeaconProxy.sol': 'proxy/beacon/BeaconProxy.sol',
   // 'proxy/Clones.sol': undefined,
-  // 'proxy/IBeacon.sol': 'proxy/beacon/IBeacon.sol',
+  'proxy/IBeacon.sol': 'proxy/beacon/IBeacon.sol',
   'proxy/Initializable.sol': 'proxy/utils/Initializable.sol',
   'utils/Initializable.sol': 'proxy/utils/Initializable.sol',
-  // 'proxy/ProxyAdmin.sol': 'proxy/transparent/ProxyAdmin.sol',
+  'proxy/ProxyAdmin.sol': 'proxy/transparent/ProxyAdmin.sol',
   // 'proxy/Proxy.sol': undefined,
-  // 'proxy/TransparentUpgradeableProxy.sol': 'proxy/transparent/TransparentUpgradeableProxy.sol',
-  // 'proxy/UpgradeableBeacon.sol': 'proxy/beacon/UpgradeableBeacon.sol',
-  // 'proxy/UpgradeableProxy.sol': 'proxy/ERC1967/ERC1967Proxy.sol',
+  'proxy/TransparentUpgradeableProxy.sol': 'proxy/transparent/TransparentUpgradeableProxy.sol',
+  'proxy/UpgradeableBeacon.sol': 'proxy/beacon/UpgradeableBeacon.sol',
+  'proxy/UpgradeableProxy.sol': 'proxy/ERC1967/ERC1967Proxy.sol',
   'token/ERC1155/ERC1155Burnable.sol': 'token/ERC1155/extensions/ERC1155Burnable.sol',
   'token/ERC1155/ERC1155Holder.sol': 'token/ERC1155/utils/ERC1155Holder.sol',
   'token/ERC1155/ERC1155Pausable.sol': 'token/ERC1155/extensions/ERC1155Pausable.sol',
@@ -87,9 +87,12 @@ const pathUpdates = {
   'utils/ReentrancyGuard.sol': 'security/ReentrancyGuard.sol',
   'utils/SafeCast.sol': 'utils/math/SafeCast.sol',
   // 'utils/Strings.sol': undefined,
+  'utils/cryptography/draft-EIP712.sol': 'utils/cryptography/EIP712.sol',
+  'token/ERC20/extensions/draft-ERC20Permit.sol': 'token/ERC20/extensions/ERC20Permit.sol',
+  'token/ERC20/extensions/draft-IERC20Permit.sol': 'token/ERC20/extensions/IERC20Permit.sol',
 };
 
-async function main (paths = [ 'contracts' ]) {
+async function main(paths = ['contracts']) {
   const files = await listFilesRecursively(paths, /\.sol$/);
 
   const updatedFiles = [];
@@ -109,7 +112,7 @@ async function main (paths = [ 'contracts' ]) {
   }
 }
 
-async function listFilesRecursively (paths, filter) {
+async function listFilesRecursively(paths, filter) {
   const queue = paths;
   const files = [];
 
@@ -130,7 +133,7 @@ async function listFilesRecursively (paths, filter) {
   return files;
 }
 
-async function updateFile (file, update) {
+async function updateFile(file, update) {
   const content = await fs.readFile(file, 'utf8');
   const updatedContent = update(content);
   if (updatedContent !== content) {
@@ -141,8 +144,8 @@ async function updateFile (file, update) {
   }
 }
 
-function updateImportPaths (source) {
-  for (const [ oldPath, newPath ] of Object.entries(pathUpdates)) {
+function updateImportPaths(source) {
+  for (const [oldPath, newPath] of Object.entries(pathUpdates)) {
     source = source.replace(
       path.join('@openzeppelin/contracts', oldPath),
       path.join('@openzeppelin/contracts', newPath),
@@ -156,7 +159,7 @@ function updateImportPaths (source) {
   return source;
 }
 
-function getUpgradeablePath (file) {
+function getUpgradeablePath(file) {
   const { dir, name, ext } = path.parse(file);
   const upgradeableName = name + 'Upgradeable';
   return path.format({ dir, ext, name: upgradeableName });

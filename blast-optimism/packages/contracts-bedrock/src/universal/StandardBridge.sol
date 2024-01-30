@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -9,7 +9,7 @@ import { SafeCall } from "src/libraries/SafeCall.sol";
 import { IOptimismMintableERC20, ILegacyMintableERC20 } from "src/universal/IOptimismMintableERC20.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
-import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /// @custom:upgradeable
 /// @title StandardBridge
@@ -238,6 +238,7 @@ abstract contract StandardBridge is Initializable {
     )
         public
         payable
+        virtual
         onlyOtherBridge
     {
         require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");
@@ -271,6 +272,7 @@ abstract contract StandardBridge is Initializable {
         bytes calldata _extraData
     )
         public
+        virtual
         onlyOtherBridge
     {
         if (_isOptimismMintableERC20(_localToken)) {
@@ -339,6 +341,7 @@ abstract contract StandardBridge is Initializable {
         bytes memory _extraData
     )
         internal
+        virtual
     {
         if (_isOptimismMintableERC20(_localToken)) {
             require(

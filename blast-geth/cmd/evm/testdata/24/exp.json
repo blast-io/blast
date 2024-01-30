@@ -5,18 +5,17 @@
       "storage": {
         "0x0000000000000000000000000000000000000000000000000000000000000000": "0x00000000000000000000000000000000000000000000000000000000deadc0de"
       },
-      "balance": "0xfeedbeaf"
+      "balance": "0xfeedbeaf",
+      "flags": 1
     },
     "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
       "balance": "0x5ffd4878b803f972",
+      "flags": 1,
       "nonce": "0xae"
-    },
-    "0xc94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
-      "balance": "0x1030600"
     }
   },
   "result": {
-    "stateRoot": "0x9e4224c6bba343d5b0fdbe9200cc66a7ef2068240d901ae516e634c45a043c15",
+    "stateRoot": "0xada0a5547553d2ed3a731f96429fadfe393e78387709b9ee6873bb7944d80576",
     "txRoot": "0x16cd3a7daa6686ceebadf53b7af2bc6919eccb730907f0e74a95a4423c209593",
     "receiptsRoot": "0x22b85cda738345a9880260b2a71e144aab1ca9485f5db4fd251008350fc124c8",
     "logsHash": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",

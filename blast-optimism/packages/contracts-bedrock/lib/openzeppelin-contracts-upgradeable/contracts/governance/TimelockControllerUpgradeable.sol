@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (governance/TimelockController.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (governance/TimelockController.sol)
 
 pragma solidity ^0.8.0;
 
 import "../access/AccessControlUpgradeable.sol";
 import "../token/ERC721/IERC721ReceiverUpgradeable.sol";
 import "../token/ERC1155/IERC1155ReceiverUpgradeable.sol";
-import "../utils/AddressUpgradeable.sol";
 import "../proxy/utils/Initializable.sol";
 
 /**
@@ -53,6 +52,11 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
     event CallExecuted(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data);
 
     /**
+     * @dev Emitted when new proposal is scheduled with non-zero salt.
+     */
+    event CallSalt(bytes32 indexed id, bytes32 salt);
+
+    /**
      * @dev Emitted when operation `id` is cancelled.
      */
     event Cancelled(bytes32 indexed id);
@@ -63,38 +67,35 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
     event MinDelayChange(uint256 oldDuration, uint256 newDuration);
 
     /**
-     * @dev Initializes the contract with a given `minDelay`, and a list of
-     * initial proposers and executors. The proposers receive both the
-     * proposer and the canceller role (for backward compatibility). The
-     * executors receive the executor role.
+     * @dev Initializes the contract with the following parameters:
      *
-     * NOTE: At construction, both the deployer and the timelock itself are
-     * administrators. This helps further configuration of the timelock by the
-     * deployer. After configuration is done, it is recommended that the
-     * deployer renounces its admin position and relies on timelocked
-     * operations to perform future maintenance.
+     * - `minDelay`: initial minimum delay for operations
+     * - `proposers`: accounts to be granted proposer and canceller roles
+     * - `executors`: accounts to be granted executor role
+     * - `admin`: optional account to be granted admin role; disable with zero address
+     *
+     * IMPORTANT: The optional admin can aid with initial configuration of roles after deployment
+     * without being subject to delay, but this role should be subsequently renounced in favor of
+     * administration through timelocked proposals. Previous versions of this contract would assign
+     * this admin to the deployer automatically and should be renounced as well.
      */
-    function __TimelockController_init(
-        uint256 minDelay,
-        address[] memory proposers,
-        address[] memory executors
-    ) internal onlyInitializing {
-        __TimelockController_init_unchained(minDelay, proposers, executors);
+    function __TimelockController_init(uint256 minDelay, address[] memory proposers, address[] memory executors, address admin) internal onlyInitializing {
+        __TimelockController_init_unchained(minDelay, proposers, executors, admin);
     }
 
-    function __TimelockController_init_unchained(
-        uint256 minDelay,
-        address[] memory proposers,
-        address[] memory executors
-    ) internal onlyInitializing {
+    function __TimelockController_init_unchained(uint256 minDelay, address[] memory proposers, address[] memory executors, address admin) internal onlyInitializing {
         _setRoleAdmin(TIMELOCK_ADMIN_ROLE, TIMELOCK_ADMIN_ROLE);
         _setRoleAdmin(PROPOSER_ROLE, TIMELOCK_ADMIN_ROLE);
         _setRoleAdmin(EXECUTOR_ROLE, TIMELOCK_ADMIN_ROLE);
         _setRoleAdmin(CANCELLER_ROLE, TIMELOCK_ADMIN_ROLE);
 
-        // deployer + self administration
-        _setupRole(TIMELOCK_ADMIN_ROLE, _msgSender());
+        // self administration
         _setupRole(TIMELOCK_ADMIN_ROLE, address(this));
+
+        // optional admin
+        if (admin != address(0)) {
+            _setupRole(TIMELOCK_ADMIN_ROLE, admin);
+        }
 
         // register proposers and cancellers
         for (uint256 i = 0; i < proposers.length; ++i) {
@@ -140,21 +141,21 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
      * @dev Returns whether an id correspond to a registered operation. This
      * includes both Pending, Ready and Done operations.
      */
-    function isOperation(bytes32 id) public view virtual returns (bool registered) {
+    function isOperation(bytes32 id) public view virtual returns (bool) {
         return getTimestamp(id) > 0;
     }
 
     /**
-     * @dev Returns whether an operation is pending or not.
+     * @dev Returns whether an operation is pending or not. Note that a "pending" operation may also be "ready".
      */
-    function isOperationPending(bytes32 id) public view virtual returns (bool pending) {
+    function isOperationPending(bytes32 id) public view virtual returns (bool) {
         return getTimestamp(id) > _DONE_TIMESTAMP;
     }
 
     /**
-     * @dev Returns whether an operation is ready or not.
+     * @dev Returns whether an operation is ready for execution. Note that a "ready" operation is also "pending".
      */
-    function isOperationReady(bytes32 id) public view virtual returns (bool ready) {
+    function isOperationReady(bytes32 id) public view virtual returns (bool) {
         uint256 timestamp = getTimestamp(id);
         return timestamp > _DONE_TIMESTAMP && timestamp <= block.timestamp;
     }
@@ -162,15 +163,15 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
     /**
      * @dev Returns whether an operation is done or not.
      */
-    function isOperationDone(bytes32 id) public view virtual returns (bool done) {
+    function isOperationDone(bytes32 id) public view virtual returns (bool) {
         return getTimestamp(id) == _DONE_TIMESTAMP;
     }
 
     /**
-     * @dev Returns the timestamp at with an operation becomes ready (0 for
+     * @dev Returns the timestamp at which an operation becomes ready (0 for
      * unset operations, 1 for done operations).
      */
-    function getTimestamp(bytes32 id) public view virtual returns (uint256 timestamp) {
+    function getTimestamp(bytes32 id) public view virtual returns (uint256) {
         return _timestamps[id];
     }
 
@@ -179,7 +180,7 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
      *
      * This value can be changed by executing an operation that calls `updateDelay`.
      */
-    function getMinDelay() public view virtual returns (uint256 duration) {
+    function getMinDelay() public view virtual returns (uint256) {
         return _minDelay;
     }
 
@@ -193,7 +194,7 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
         bytes calldata data,
         bytes32 predecessor,
         bytes32 salt
-    ) public pure virtual returns (bytes32 hash) {
+    ) public pure virtual returns (bytes32) {
         return keccak256(abi.encode(target, value, data, predecessor, salt));
     }
 
@@ -207,14 +208,14 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
         bytes[] calldata payloads,
         bytes32 predecessor,
         bytes32 salt
-    ) public pure virtual returns (bytes32 hash) {
+    ) public pure virtual returns (bytes32) {
         return keccak256(abi.encode(targets, values, payloads, predecessor, salt));
     }
 
     /**
      * @dev Schedule an operation containing a single transaction.
      *
-     * Emits a {CallScheduled} event.
+     * Emits {CallSalt} if salt is nonzero, and {CallScheduled}.
      *
      * Requirements:
      *
@@ -231,12 +232,15 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
         bytes32 id = hashOperation(target, value, data, predecessor, salt);
         _schedule(id, delay);
         emit CallScheduled(id, 0, target, value, data, predecessor, delay);
+        if (salt != bytes32(0)) {
+            emit CallSalt(id, salt);
+        }
     }
 
     /**
      * @dev Schedule an operation containing a batch of transactions.
      *
-     * Emits one {CallScheduled} event per transaction in the batch.
+     * Emits {CallSalt} if salt is nonzero, and one {CallScheduled} event per transaction in the batch.
      *
      * Requirements:
      *
@@ -258,10 +262,13 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
         for (uint256 i = 0; i < targets.length; ++i) {
             emit CallScheduled(id, i, targets[i], values[i], payloads[i], predecessor, delay);
         }
+        if (salt != bytes32(0)) {
+            emit CallSalt(id, salt);
+        }
     }
 
     /**
-     * @dev Schedule an operation that is to becomes valid after a given delay.
+     * @dev Schedule an operation that is to become valid after a given delay.
      */
     function _schedule(bytes32 id, uint256 delay) private {
         require(!isOperation(id), "TimelockController: operation already scheduled");
@@ -319,6 +326,9 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
      *
      * - the caller must have the 'executor' role.
      */
+    // This function can reenter, but it doesn't pose a risk because _afterCall checks that the proposal is pending,
+    // thus any modifications to the operation during reentrancy should be caught.
+    // slither-disable-next-line reentrancy-eth
     function executeBatch(
         address[] calldata targets,
         uint256[] calldata values,
@@ -345,11 +355,7 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
     /**
      * @dev Execute an operation's call.
      */
-    function _execute(
-        address target,
-        uint256 value,
-        bytes calldata data
-    ) internal virtual {
+    function _execute(address target, uint256 value, bytes calldata data) internal virtual {
         (bool success, ) = target.call{value: value}(data);
         require(success, "TimelockController: underlying transaction reverted");
     }
@@ -389,12 +395,7 @@ contract TimelockControllerUpgradeable is Initializable, AccessControlUpgradeabl
     /**
      * @dev See {IERC721Receiver-onERC721Received}.
      */
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes memory
-    ) public virtual override returns (bytes4) {
+    function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
         return this.onERC721Received.selector;
     }
 

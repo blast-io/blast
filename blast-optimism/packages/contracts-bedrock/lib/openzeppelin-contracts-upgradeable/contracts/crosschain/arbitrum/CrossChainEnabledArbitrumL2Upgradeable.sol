@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (crosschain/arbitrum/CrossChainEnabledArbitrumL2.sol)
+// OpenZeppelin Contracts (last updated v4.8.0) (crosschain/arbitrum/CrossChainEnabledArbitrumL2.sol)
 
 pragma solidity ^0.8.4;
 
@@ -18,6 +18,11 @@ import "../../proxy/utils/Initializable.sol";
  * this specialization of {CrossChainEnabled} does not include a constructor.
  *
  * _Available since v4.6._
+ *
+ * WARNING: There is currently a bug in Arbitrum that causes this contract to
+ * fail to detect cross-chain calls when deployed behind a proxy. This will be
+ * fixed when the network is upgraded to Arbitrum Nitro, currently scheduled for
+ * August 31st 2022.
  */
 abstract contract CrossChainEnabledArbitrumL2Upgradeable is Initializable, CrossChainEnabledUpgradeable {
     function __CrossChainEnabledArbitrumL2_init() internal onlyInitializing {

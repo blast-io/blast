@@ -78,12 +78,16 @@ func (m *MIPSEVM) Step(t *testing.T, stepWitness *StepWitness) []byte {
 		t.Logf("reading preimage key %x at offset %d", stepWitness.PreimageKey, stepWitness.PreimageOffset)
 		poInput, err := stepWitness.EncodePreimageOracleInput(0)
 		require.NoError(t, err, "encode preimage oracle input")
-		_, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.Oracle, poInput, startingGas, big.NewInt(0))
+		gasTracker := vm.NewGasTracker()
+		_, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.Oracle, poInput, startingGas, big.NewInt(0), gasTracker)
 		require.NoErrorf(t, err, "evm should not fail, took %d gas", startingGas-leftOverGas)
 	}
 
 	input := stepWitness.EncodeStepInput(0)
-	ret, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.MIPS, input, startingGas, big.NewInt(0))
+	gasTracker := vm.NewGasTracker()
+	ret, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.MIPS, input, startingGas, big.NewInt(0), gasTracker)
+	gasUsed := startingGas - leftOverGas
+	require.Equal(t, gasUsed, gasTracker.GetGasUsed())
 	require.NoError(t, err, "evm should not fail")
 	require.Len(t, ret, 32, "expecting 32-byte state hash")
 	// remember state hash, to check it against state
@@ -243,8 +247,8 @@ func TestEVMFault(t *testing.T) {
 			}
 			input := stepWitness.EncodeStepInput(0)
 			startingGas := uint64(30_000_000)
-
-			_, _, err := env.Call(vm.AccountRef(sender), addrs.MIPS, input, startingGas, big.NewInt(0))
+			gasTracker := vm.NewGasTracker()
+			_, _, err := env.Call(vm.AccountRef(sender), addrs.MIPS, input, startingGas, big.NewInt(0), gasTracker)
 			require.EqualValues(t, err, vm.ErrExecutionReverted)
 			logs := evmState.Logs()
 			require.Equal(t, 0, len(logs))

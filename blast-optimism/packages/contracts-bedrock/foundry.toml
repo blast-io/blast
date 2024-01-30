@@ -9,7 +9,7 @@ src = 'src'
 out = 'forge-artifacts'
 script = 'scripts'
 optimizer = true
-optimizer_runs = 999999
+optimizer_runs = 200
 remappings = [
   '@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts',
   '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts',
@@ -28,6 +28,9 @@ build_info_path = 'artifacts/build-info'
 ffi = true
 fs_permissions = [
   { access='read-write', path='./.resource-metering.csv' },
+  { access='read-write', path='./l1state.json' },
+  { access='read-write', path='./l2state.json' },
+  { access='read-write', path='./step.json' },
   { access='read-write', path='./deployments/' },
   { access='read', path='./deploy-config/' },
   { access='read', path='./periphery-deploy-config/' },

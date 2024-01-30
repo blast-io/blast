@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (access/AccessControl.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (access/AccessControl.sol)
 
 pragma solidity ^0.8.0;
 
@@ -20,14 +20,14 @@ import "../proxy/utils/Initializable.sol";
  * in the external API and be unique. The best way to achieve this is by
  * using `public constant` hash digests:
  *
- * ```
+ * ```solidity
  * bytes32 public constant MY_ROLE = keccak256("MY_ROLE");
  * ```
  *
  * Roles can be used to represent a set of permissions. To restrict access to a
  * function call, use {hasRole}:
  *
- * ```
+ * ```solidity
  * function foo() public {
  *     require(hasRole(MY_ROLE, msg.sender));
  *     ...
@@ -45,7 +45,8 @@ import "../proxy/utils/Initializable.sol";
  *
  * WARNING: The `DEFAULT_ADMIN_ROLE` is also its own admin: it has permission to
  * grant and revoke this role. Extra precautions should be taken to secure
- * accounts that have been granted it.
+ * accounts that have been granted it. We recommend using {AccessControlDefaultAdminRules}
+ * to enforce additional security measures for this role.
  */
 abstract contract AccessControlUpgradeable is Initializable, ContextUpgradeable, IAccessControlUpgradeable, ERC165Upgradeable {
     function __AccessControl_init() internal onlyInitializing {
@@ -116,7 +117,7 @@ abstract contract AccessControlUpgradeable is Initializable, ContextUpgradeable,
                 string(
                     abi.encodePacked(
                         "AccessControl: account ",
-                        StringsUpgradeable.toHexString(uint160(account), 20),
+                        StringsUpgradeable.toHexString(account),
                         " is missing role ",
                         StringsUpgradeable.toHexString(uint256(role), 32)
                     )

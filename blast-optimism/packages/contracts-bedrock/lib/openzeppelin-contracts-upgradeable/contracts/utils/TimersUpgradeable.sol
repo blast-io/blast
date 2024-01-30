@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts v4.4.1 (utils/Timers.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (utils/Timers.sol)
 
 pragma solidity ^0.8.0;
 
 /**
  * @dev Tooling for timepoints, timers and delays
+ *
+ * CAUTION: This file is deprecated as of 4.9 and will be removed in the next major release.
  */
 library TimersUpgradeable {
     struct Timestamp {

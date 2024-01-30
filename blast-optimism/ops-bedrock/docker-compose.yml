@@ -14,6 +14,8 @@ services:
   op_stack_go_builder:  # Not an actual service, but builds the prerequisite go images
     build:
       context: ../
+      additional_contexts:
+        - blast-geth=../../blast-geth
       dockerfile: ops/docker/op-stack-go/Dockerfile
       args:
         GIT_COMMIT: "dev"

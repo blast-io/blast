@@ -95,8 +95,9 @@ func TestEIP2200(t *testing.T) {
 			Transfer:    func(StateDB, common.Address, common.Address, *big.Int) {},
 		}
 		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.AllEthashProtocolChanges, Config{ExtraEips: []int{2200}})
+		gasTracker := NewGasTracker()
 
-		_, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, tt.gaspool, new(big.Int))
+		_, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, tt.gaspool, new(big.Int), gasTracker)
 		if err != tt.failure {
 			t.Errorf("test %d: failure mismatch: have %v, want %v", i, err, tt.failure)
 		}
@@ -105,6 +106,9 @@ func TestEIP2200(t *testing.T) {
 		}
 		if refund := vmenv.StateDB.GetRefund(); refund != tt.refund {
 			t.Errorf("test %d: gas refund mismatch: have %v, want %v", i, refund, tt.refund)
+		}
+		if gasTracker.gasUsed != tt.used {
+			t.Errorf("gas tracker used doesnt match")
 		}
 	}
 }
@@ -151,12 +155,17 @@ func TestCreateGas(t *testing.T) {
 			}
 
 			vmenv := NewEVM(vmctx, TxContext{}, statedb, params.AllEthashProtocolChanges, config)
+			gasTracker := NewGasTracker()
+
 			var startGas = uint64(testGas)
-			ret, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, startGas, new(big.Int))
+			ret, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, startGas, new(big.Int), gasTracker)
 			if err != nil {
 				return false
 			}
 			gasUsed = startGas - gas
+			if gasTracker.gasUsed != gasUsed {
+				t.Errorf("gas tracker used doesnt match")
+			}
 			if len(ret) != 32 {
 				t.Fatalf("test %d: expected 32 bytes returned, have %d", i, len(ret))
 			}

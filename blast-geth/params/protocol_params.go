@@ -27,6 +27,11 @@ var (
 	OptimismBaseFeeRecipient = common.HexToAddress("0x4200000000000000000000000000000000000019")
 	// The L1 portion of the transaction fee accumulates at this predeploy
 	OptimismL1FeeRecipient = common.HexToAddress("0x420000000000000000000000000000000000001A")
+
+	// Blast specific addresses
+	BlastSharesAddress               = common.HexToAddress("0x4300000000000000000000000000000000000000")
+	BlastGasAddress                  = common.HexToAddress("0x4300000000000000000000000000000000000001")
+	BlastAccountConfigurationAddress = common.HexToAddress("0x4300000000000000000000000000000000000002")
 )
 
 const (
@@ -181,6 +186,10 @@ const (
 
 	BlobTxTargetBlobGasPerBlock = 3 * BlobTxBlobGasPerBlob // Target consumable blob gas for data blobs per block (for 1559-like pricing)
 	MaxBlobGasPerBlock          = 6 * BlobTxBlobGasPerBlob // Maximum consumable blob gas for data blobs per block
+
+	// Blast-specific gas parameters
+	BlastMaxFrameCount      int    = 5
+	BlastGasParamStorageGas uint64 = SstoreResetGasEIP2200 + ColdSloadCostEIP2929
 )
 
 // Gas discount table for BLS12-381 G1 and G2 multi exponentiation operations

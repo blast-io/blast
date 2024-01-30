@@ -3,10 +3,15 @@ pragma solidity >=0.6.2 <0.9.0;
 
 pragma experimental ABIEncoderV2;
 
-contract StdInvariant {
+abstract contract StdInvariant {
     struct FuzzSelector {
         address addr;
         bytes4[] selectors;
+    }
+
+    struct FuzzInterface {
+        address addr;
+        string[] artifacts;
     }
 
     address[] private _excludedContracts;
@@ -19,6 +24,8 @@ contract StdInvariant {
 
     FuzzSelector[] private _targetedArtifactSelectors;
     FuzzSelector[] private _targetedSelectors;
+
+    FuzzInterface[] private _targetedInterfaces;
 
     // Functions for users:
     // These are intended to be called in tests.
@@ -55,6 +62,10 @@ contract StdInvariant {
         _targetedSenders.push(newTargetedSender_);
     }
 
+    function targetInterface(FuzzInterface memory newTargetedInterface_) internal {
+        _targetedInterfaces.push(newTargetedInterface_);
+    }
+
     // Functions for forge:
     // These are called by forge to run invariant tests and don't need to be called in tests.
 
@@ -88,5 +99,9 @@ contract StdInvariant {
 
     function targetSenders() public view returns (address[] memory targetedSenders_) {
         targetedSenders_ = _targetedSenders;
+    }
+
+    function targetInterfaces() public view returns (FuzzInterface[] memory targetedInterfaces_) {
+        targetedInterfaces_ = _targetedInterfaces;
     }
 }

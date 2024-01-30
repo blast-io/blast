@@ -79,10 +79,6 @@
           "0x0000000000000000000000000000000000000000000000000000000000000000": "0x0000000000000000000000000000000000000000000000000000000000000000"
         }
       },
-      "0x52bc44d5378309ee2abf1539bf71de1b7d7be3b5": {
-        "balance": "0xbf681825be002ac452",
-        "nonce": 28922
-      },
       "0x82effbaaaf28614e55b2ba440fb198e0e5789b0f": {
         "balance": "0xb3d0ac5cb94df6f6b0",
         "nonce": 1
@@ -92,9 +88,6 @@
       "0x082d4cdf07f386ffa9258f52a5c49db4ac321ec6": {
         "balance": "0xc7d4d88af8b4c00",
         "nonce": 95
-      },
-      "0x52bc44d5378309ee2abf1539bf71de1b7d7be3b5": {
-        "balance": "0xbf681ce7c870aeb852"
       },
       "0x82effbaaaf28614e55b2ba440fb198e0e5789b0f": {
         "balance": "0x1d37f515017a8eef6b0"

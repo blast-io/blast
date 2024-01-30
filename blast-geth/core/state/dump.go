@@ -49,7 +49,11 @@ type DumpCollector interface {
 
 // DumpAccount represents an account in the state.
 type DumpAccount struct {
+	Flags     uint8                  `json:"flags"`
 	Balance   string                 `json:"balance"`
+	Fixed     string                 `json:"fixed"`
+	Shares    string                 `json:"shares"`
+	Remainder string                 `json:"remainder"`
 	Nonce     uint64                 `json:"nonce"`
 	Root      hexutil.Bytes          `json:"root"`
 	CodeHash  hexutil.Bytes          `json:"codeHash"`
@@ -97,6 +101,32 @@ func (d *IteratorDump) OnAccount(addr *common.Address, account DumpAccount) {
 	}
 }
 
+// IteratorDump is an implementation for iterating over data.
+type BlastDebugDump struct {
+	Root      string                    `json:"root"`
+	Accounts  map[common.Address]string `json:"accounts"`
+	Contracts map[common.Address]string `json:"contracts"`
+	Next      []byte                    `json:"next,omitempty"` // nil if no more accounts
+}
+
+// OnRoot implements DumpCollector interface
+func (d *BlastDebugDump) OnRoot(root common.Hash) {
+	d.Root = fmt.Sprintf("%x", root)
+}
+
+// OnAccount implements DumpCollector interface
+func (d *BlastDebugDump) OnAccount(addr *common.Address, account DumpAccount) {
+	if addr != nil {
+		if account.Balance != "0" {
+			if len(account.Code) > 0 {
+				d.Contracts[*addr] = account.Balance
+			} else {
+				d.Accounts[*addr] = account.Balance
+			}
+		}
+	}
+}
+
 // iterativeDump is a DumpCollector-implementation which dumps output line-by-line iteratively.
 type iterativeDump struct {
 	*json.Encoder
@@ -105,7 +135,10 @@ type iterativeDump struct {
 // OnAccount implements DumpCollector interface
 func (d iterativeDump) OnAccount(addr *common.Address, account DumpAccount) {
 	dumpAccount := &DumpAccount{
-		Balance:   account.Balance,
+		Flags:     account.Flags,
+		Fixed:     account.Fixed,
+		Shares:    account.Shares,
+		Remainder: account.Remainder,
 		Nonce:     account.Nonce,
 		Root:      account.Root,
 		CodeHash:  account.CodeHash,
@@ -151,7 +184,10 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 			panic(err)
 		}
 		account := DumpAccount{
-			Balance:   data.Balance.String(),
+			Flags:     data.Flags,
+			Fixed:     data.Fixed.String(),
+			Shares:    data.Shares.String(),
+			Remainder: data.Remainder.String(),
 			Nonce:     data.Nonce,
 			Root:      data.Root[:],
 			CodeHash:  data.CodeHash,
@@ -170,6 +206,7 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 			}
 		} else {
 			address = &addr
+			account.Balance = s.GetBalance(*address).String()
 		}
 		obj := newObject(s, addr, &data)
 		if !conf.SkipCode {
@@ -248,6 +285,16 @@ func (s *StateDB) IterativeDump(opts *DumpConfig, output *json.Encoder) {
 func (s *StateDB) IteratorDump(opts *DumpConfig) IteratorDump {
 	iterator := &IteratorDump{
 		Accounts: make(map[common.Address]DumpAccount),
+	}
+	iterator.Next = s.DumpToCollector(iterator, opts)
+	return *iterator
+}
+
+// IteratorDump dumps out a batch of accounts starts with the given start key
+func (s *StateDB) BlastDebugDump(opts *DumpConfig) BlastDebugDump {
+	iterator := &BlastDebugDump{
+		Contracts: make(map[common.Address]string),
+		Accounts:  make(map[common.Address]string),
 	}
 	iterator.Next = s.DumpToCollector(iterator, opts)
 	return *iterator

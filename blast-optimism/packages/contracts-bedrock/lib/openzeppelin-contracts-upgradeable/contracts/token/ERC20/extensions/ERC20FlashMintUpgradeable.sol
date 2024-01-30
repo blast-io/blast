@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (token/ERC20/extensions/ERC20FlashMint.sol)
+// OpenZeppelin Contracts (last updated v4.8.0) (token/ERC20/extensions/ERC20FlashMint.sol)
 
 pragma solidity ^0.8.0;
 
@@ -35,6 +35,19 @@ abstract contract ERC20FlashMintUpgradeable is Initializable, ERC20Upgradeable, 
     }
 
     /**
+     * @dev Returns the fee applied when doing flash loans. This function calls
+     * the {_flashFee} function which returns the fee applied when doing flash
+     * loans.
+     * @param token The token to be flash loaned.
+     * @param amount The amount of tokens to be loaned.
+     * @return The fees applied to the corresponding flash loan.
+     */
+    function flashFee(address token, uint256 amount) public view virtual override returns (uint256) {
+        require(token == address(this), "ERC20FlashMint: wrong token");
+        return _flashFee(token, amount);
+    }
+
+    /**
      * @dev Returns the fee applied when doing flash loans. By default this
      * implementation has 0 fees. This function can be overloaded to make
      * the flash loan mechanism deflationary.
@@ -42,9 +55,9 @@ abstract contract ERC20FlashMintUpgradeable is Initializable, ERC20Upgradeable, 
      * @param amount The amount of tokens to be loaned.
      * @return The fees applied to the corresponding flash loan.
      */
-    function flashFee(address token, uint256 amount) public view virtual override returns (uint256) {
-        require(token == address(this), "ERC20FlashMint: wrong token");
+    function _flashFee(address token, uint256 amount) internal view virtual returns (uint256) {
         // silence warning about unused variable without the addition of bytecode.
+        token;
         amount;
         return 0;
     }
@@ -66,7 +79,7 @@ abstract contract ERC20FlashMintUpgradeable is Initializable, ERC20Upgradeable, 
      * amount + fee tokens and have them approved back to the token contract itself so
      * they can be burned.
      * @param receiver The receiver of the flash loan. Should implement the
-     * {IERC3156FlashBorrower.onFlashLoan} interface.
+     * {IERC3156FlashBorrower-onFlashLoan} interface.
      * @param token The token to be flash loaned. Only `address(this)` is
      * supported.
      * @param amount The amount of tokens to be loaned.

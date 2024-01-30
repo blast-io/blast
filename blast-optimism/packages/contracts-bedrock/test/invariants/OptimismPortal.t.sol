@@ -11,7 +11,7 @@ import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { Constants } from "src/libraries/Constants.sol";
 
-import { Portal_Initializer } from "test/CommonTest.t.sol";
+import { Bridge_Initializer } from "test/CommonTest.t.sol";
 import { EIP1967Helper } from "test/CommonTest.t.sol";
 import { Types } from "src/libraries/Types.sol";
 
@@ -74,7 +74,7 @@ contract OptimismPortal_Depositor is StdUtils, ResourceMetering {
     }
 }
 
-contract OptimismPortal_Invariant_Harness is Portal_Initializer {
+contract OptimismPortal_Invariant_Harness is Bridge_Initializer {
     // Reusable default values for a test withdrawal
     Types.WithdrawalTransaction _defaultTx;
 
@@ -124,7 +124,7 @@ contract OptimismPortal_Invariant_Harness is Portal_Initializer {
     }
 }
 
-contract OptimismPortal_Deposit_Invariant is Portal_Initializer {
+contract OptimismPortal_Deposit_Invariant is Bridge_Initializer {
     OptimismPortal_Depositor internal actor;
 
     function setUp() public override {
@@ -170,7 +170,7 @@ contract OptimismPortal_CannotTimeTravel is OptimismPortal_Invariant_Harness {
     ///                   until after the finalization period has elapsed.
     function invariant_cannotFinalizeBeforePeriodHasPassed() external {
         vm.expectRevert("OptimismPortal: proven withdrawal finalization period has not elapsed");
-        op.finalizeWithdrawalTransaction(_defaultTx);
+        op.finalizeWithdrawalTransaction(1, _defaultTx);
     }
 }
 
@@ -183,9 +183,12 @@ contract OptimismPortal_CannotFinalizeTwice is OptimismPortal_Invariant_Harness 
 
         // Warp past the finalization period.
         vm.warp(block.timestamp + oracle.FINALIZATION_PERIOD_SECONDS() + 1);
+        vm.deal(address(ethYieldManager), _defaultTx.value);
+        vm.prank(address(multisig));
+        ethYieldManager.finalize(1);
 
         // Finalize the withdrawal transaction.
-        op.finalizeWithdrawalTransaction(_defaultTx);
+        op.finalizeWithdrawalTransaction(1, _defaultTx);
 
         // Set the target contract to the portal proxy
         targetContract(address(op));
@@ -200,7 +203,7 @@ contract OptimismPortal_CannotFinalizeTwice is OptimismPortal_Invariant_Harness 
     ///                   allows a withdrawal to be finalized twice.
     function invariant_cannotFinalizeTwice() external {
         vm.expectRevert("OptimismPortal: withdrawal has already been finalized");
-        op.finalizeWithdrawalTransaction(_defaultTx);
+        op.finalizeWithdrawalTransaction(1, _defaultTx);
     }
 }
 
@@ -213,6 +216,9 @@ contract OptimismPortal_CanAlwaysFinalizeAfterWindow is OptimismPortal_Invariant
 
         // Warp past the finalization period.
         vm.warp(block.timestamp + oracle.FINALIZATION_PERIOD_SECONDS() + 1);
+        vm.deal(address(ethYieldManager), _defaultTx.value);
+        vm.prank(address(multisig));
+        ethYieldManager.finalize(1);
 
         // Set the target contract to the portal proxy
         targetContract(address(op));
@@ -221,7 +227,8 @@ contract OptimismPortal_CanAlwaysFinalizeAfterWindow is OptimismPortal_Invariant
     }
 
     /// @custom:invariant A withdrawal should **always** be able to be finalized
-    ///                   `FINALIZATION_PERIOD_SECONDS` after it was successfully proven.
+    ///                   `FINALIZATION_PERIOD_SECONDS` after it was successfully proven
+    ///                   and ethYieldManager.finalize() has been called for the request.
     ///
     ///                   This invariant asserts that there is no chain of calls that can
     ///                   be made that will prevent a withdrawal from being finalized
@@ -230,7 +237,7 @@ contract OptimismPortal_CanAlwaysFinalizeAfterWindow is OptimismPortal_Invariant
     function invariant_canAlwaysFinalize() external {
         uint256 bobBalanceBefore = address(bob).balance;
 
-        op.finalizeWithdrawalTransaction(_defaultTx);
+        op.finalizeWithdrawalTransaction(1, _defaultTx);
 
         assertEq(address(bob).balance, bobBalanceBefore + _defaultTx.value);
     }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { Semver } from "../../universal/Semver.sol";
@@ -117,7 +117,7 @@ contract Optimist is ERC721BurnableUpgradeable, Semver {
     /// @notice Prevents transfers of the Optimist NFT (Soul Bound Token).
     /// @param _from Address of the token sender.
     /// @param _to   Address of the token recipient.
-    function _beforeTokenTransfer(address _from, address _to, uint256) internal virtual override {
+    function _beforeTokenTransfer(address _from, address _to, uint256, uint256) internal virtual override {
         require(_from == address(0) || _to == address(0), "Optimist: soul bound token");
     }
 }

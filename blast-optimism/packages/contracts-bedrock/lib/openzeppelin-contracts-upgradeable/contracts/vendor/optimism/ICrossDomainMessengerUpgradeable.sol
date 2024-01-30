@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.6.0) (vendor/optimism/ICrossDomainMessenger.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (vendor/optimism/ICrossDomainMessenger.sol)
 pragma solidity >0.5.0 <0.9.0;
 
 /**
@@ -30,9 +30,5 @@ interface ICrossDomainMessengerUpgradeable {
      * @param _message Message to send to the target.
      * @param _gasLimit Gas limit for the provided message.
      */
-    function sendMessage(
-        address _target,
-        bytes calldata _message,
-        uint32 _gasLimit
-    ) external;
+    function sendMessage(address _target, bytes calldata _message, uint32 _gasLimit) external;
 }

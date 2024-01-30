@@ -120,6 +120,16 @@ devnet-up: pre-devnet
 	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/main.py --monorepo-dir=.
 .PHONY: devnet-up
 
+devnet-up-fork: pre-devnet
+	if [ ! -d .devnet ]; then \
+		mkdir .devnet; \
+	fi
+	cp ./packages/contracts-bedrock/dump.json ./.devnet/fork-state.json
+	./ops/scripts/newer-file.sh .devnet/allocs-l1.json ./packages/contracts-bedrock \
+		|| make devnet-allocs-fork
+	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/fork.py --monorepo-dir=.
+.PHONY: devnet-up-fork
+
 # alias for devnet-up
 devnet-up-deploy: devnet-up
 
@@ -141,6 +151,9 @@ devnet-clean:
 
 devnet-allocs: pre-devnet
 	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/main.py --monorepo-dir=. --allocs
+
+devnet-allocs-fork: pre-devnet
+	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/fork.py --monorepo-dir=. --allocs
 
 devnet-logs:
 	@(cd ./ops-bedrock && docker compose logs -f)

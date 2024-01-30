@@ -3,6 +3,7 @@ package genesis
 import (
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -28,6 +29,9 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 
 	SetPrecompileBalances(db)
 
+	// Set the Blast precompile's balance
+	SetPrecompileBalance(db, common.BytesToAddress([]byte{1, 0}))
+
 	storage, err := NewL2StorageConfig(config, l1StartBlock)
 	if err != nil {
 		return nil, err
@@ -38,8 +42,13 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		return nil, err
 	}
 
-	// Set up the proxies
+	// Set up base optimism proxies
 	err = setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
+	if err != nil {
+		return nil, err
+	}
+	// set up blast proxies
+	err = setProxies(db, predeploys.ProxyAdminAddr, BlastBigL2PredeployNamespace, 2048)
 	if err != nil {
 		return nil, err
 	}
@@ -65,17 +74,24 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 			db.CreateAccount(codeAddr)
 			db.SetState(addr, ImplementationSlot, eth.AddressAsLeftPaddedHash(codeAddr))
 			log.Info("Set proxy", "name", name, "address", addr, "implementation", codeAddr)
-		} else {
+		} else if db.Exist(addr) {
 			db.DeleteState(addr, AdminSlot)
 		}
+
 		if err := setupPredeploy(db, deployResults, storage, name, addr, codeAddr); err != nil {
 			return nil, err
 		}
+
+		db.SetFlags(addr, 1)
+
 		code := db.GetCode(codeAddr)
 		if len(code) == 0 {
 			return nil, fmt.Errorf("code not set for %s", name)
 		}
 	}
+
+	// set flag for weth rebasing contract to automatic on genesis
+	db.SetFlags(predeploys.WETHRebasingAddr, 0)
 
 	return db.Genesis(), nil
 }

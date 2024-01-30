@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts v4.4.1 (governance/extensions/GovernorSettings.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (governance/extensions/GovernorSettings.sol)
 
 pragma solidity ^0.8.0;
 
@@ -23,19 +23,11 @@ abstract contract GovernorSettingsUpgradeable is Initializable, GovernorUpgradea
     /**
      * @dev Initialize the governance parameters.
      */
-    function __GovernorSettings_init(
-        uint256 initialVotingDelay,
-        uint256 initialVotingPeriod,
-        uint256 initialProposalThreshold
-    ) internal onlyInitializing {
+    function __GovernorSettings_init(uint256 initialVotingDelay, uint256 initialVotingPeriod, uint256 initialProposalThreshold) internal onlyInitializing {
         __GovernorSettings_init_unchained(initialVotingDelay, initialVotingPeriod, initialProposalThreshold);
     }
 
-    function __GovernorSettings_init_unchained(
-        uint256 initialVotingDelay,
-        uint256 initialVotingPeriod,
-        uint256 initialProposalThreshold
-    ) internal onlyInitializing {
+    function __GovernorSettings_init_unchained(uint256 initialVotingDelay, uint256 initialVotingPeriod, uint256 initialProposalThreshold) internal onlyInitializing {
         _setVotingDelay(initialVotingDelay);
         _setVotingPeriod(initialVotingPeriod);
         _setProposalThreshold(initialProposalThreshold);

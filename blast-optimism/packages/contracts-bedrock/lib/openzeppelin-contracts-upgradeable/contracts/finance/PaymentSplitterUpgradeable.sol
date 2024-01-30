@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (finance/PaymentSplitter.sol)
+// OpenZeppelin Contracts (last updated v4.8.0) (finance/PaymentSplitter.sol)
 
 pragma solidity ^0.8.0;
 
@@ -154,8 +154,12 @@ contract PaymentSplitterUpgradeable is Initializable, ContextUpgradeable {
 
         require(payment != 0, "PaymentSplitter: account is not due payment");
 
-        _released[account] += payment;
+        // _totalReleased is the sum of all values in _released.
+        // If "_totalReleased += payment" does not overflow, then "_released[account] += payment" cannot overflow.
         _totalReleased += payment;
+        unchecked {
+            _released[account] += payment;
+        }
 
         AddressUpgradeable.sendValue(account, payment);
         emit PaymentReleased(account, payment);
@@ -173,8 +177,13 @@ contract PaymentSplitterUpgradeable is Initializable, ContextUpgradeable {
 
         require(payment != 0, "PaymentSplitter: account is not due payment");
 
-        _erc20Released[token][account] += payment;
+        // _erc20TotalReleased[token] is the sum of all values in _erc20Released[token].
+        // If "_erc20TotalReleased[token] += payment" does not overflow, then "_erc20Released[token][account] += payment"
+        // cannot overflow.
         _erc20TotalReleased[token] += payment;
+        unchecked {
+            _erc20Released[token][account] += payment;
+        }
 
         SafeERC20Upgradeable.safeTransfer(token, account, payment);
         emit ERC20PaymentReleased(token, account, payment);

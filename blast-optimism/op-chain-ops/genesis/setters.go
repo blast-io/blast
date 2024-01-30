@@ -54,14 +54,18 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 	return nil
 }
 
+func SetPrecompileBalance(db vm.StateDB, addr common.Address) {
+	db.CreateAccount(addr)
+	db.AddBalance(addr, common.Big1)
+}
+
 // SetPrecompileBalances will set a single wei at each precompile address.
 // This is an optimization to make calling them cheaper. This should only
 // be used for devnets.
 func SetPrecompileBalances(db vm.StateDB) {
 	for i := 0; i < PrecompileCount; i++ {
 		addr := common.BytesToAddress([]byte{byte(i)})
-		db.CreateAccount(addr)
-		db.AddBalance(addr, common.Big1)
+		SetPrecompileBalance(db, addr)
 	}
 }
 

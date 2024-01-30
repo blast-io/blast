@@ -436,6 +436,7 @@ func (g Alloc) OnAccount(addr *common.Address, dumpAccount state.DumpAccount) {
 		Code:    dumpAccount.Code,
 		Storage: storage,
 		Balance: balance,
+		Flags:   1, // yield disabled
 		Nonce:   dumpAccount.Nonce,
 	}
 	g[*addr] = genesisAccount

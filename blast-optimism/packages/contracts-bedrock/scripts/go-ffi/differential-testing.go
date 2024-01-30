@@ -291,9 +291,11 @@ func DiffTestUtils() {
 
 		// Put the put the rlp encoded account in the world trie
 		account := types.StateAccount{
-			Nonce:   0,
-			Balance: big.NewInt(0),
-			Root:    state.Hash(),
+			Nonce:     0,
+			Fixed:     big.NewInt(0),
+			Shares:    big.NewInt(0),
+			Remainder: big.NewInt(0),
+			Root:      state.Hash(),
 		}
 		writer := new(bytes.Buffer)
 		checkErr(account.EncodeRLP(writer), "Error encoding account")

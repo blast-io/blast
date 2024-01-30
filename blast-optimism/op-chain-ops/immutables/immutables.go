@@ -56,6 +56,41 @@ func (i ImmutableConfig) Check() error {
 	if _, ok := i["BaseFeeVault"]["recipient"]; !ok {
 		return errors.New("BaseFeeVault recipient not set")
 	}
+	if _, ok := i["Gas"]["baseClaimRate"]; !ok {
+		return errors.New("Gas baseClaimRate not set")
+	}
+	if _, ok := i["L2BlastBridge"]["otherBridge"]; !ok {
+		return errors.New("L2BlastBridge otherBridge not set")
+	}
+
+	if _, ok := i["Shares"]["reporter"]; !ok {
+		return errors.New("Shares reporter not set")
+	}
+	if _, ok := i["Gas"]["admin"]; !ok {
+		return errors.New("Gas Admin not set")
+	}
+	if _, ok := i["Gas"]["zeroClaimRate"]; !ok {
+		return errors.New("Gas zeroClaimRate not set")
+	}
+	if _, ok := i["Gas"]["baseGasSeconds"]; !ok {
+		return errors.New("Gas baseGasSeconds not set")
+	}
+	if _, ok := i["Gas"]["ceilGasSeconds"]; !ok {
+		return errors.New("Gas ceilGasSeconds not set")
+	}
+	if _, ok := i["Gas"]["ceilClaimRate"]; !ok {
+		return errors.New("Gas ceilClaimRate not set")
+	}
+	if _, ok := i["Blast"]["yieldContract"]; !ok {
+		return errors.New("Blast yieldContract not set")
+	}
+	if _, ok := i["USDB"]["usdYieldManager"]; !ok {
+		return errors.New("USDB usdYieldManager not set")
+	}
+	if _, ok := i["USDB"]["remoteToken"]; !ok {
+		return errors.New("USDB remoteToken not set")
+	}
+
 	return nil
 }
 
@@ -149,6 +184,49 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 		},
 		{
 			Name: "SchemaRegistry",
+		},
+		{
+			Name: "Shares",
+			Args: []interface{}{
+				immutable["Shares"]["reporter"],
+			},
+		},
+		{
+			Name: "Gas",
+			Args: []interface{}{
+				immutable["Gas"]["admin"],
+				common.HexToAddress(predeploys.Blast),
+				common.HexToAddress(predeploys.BaseFeeVault),
+				immutable["Gas"]["zeroClaimRate"],
+				immutable["Gas"]["baseGasSeconds"],
+				immutable["Gas"]["baseClaimRate"],
+				immutable["Gas"]["ceilGasSeconds"],
+				immutable["Gas"]["ceilClaimRate"],
+			},
+		},
+		{
+			Name: "Blast",
+			Args: []interface{}{
+				common.HexToAddress(predeploys.Gas),
+				immutable["Blast"]["yieldContract"],
+			},
+		},
+		{
+			Name: "WETHRebasing",
+		},
+		{
+			Name: "L2BlastBridge",
+			Args: []interface{}{
+				immutable["L2BlastBridge"]["otherBridge"],
+			},
+		},
+		{
+			Name: "USDB",
+			Args: []interface{}{
+				immutable["USDB"]["usdYieldManager"],
+				common.HexToAddress(predeploys.L2BlastBridge),
+				immutable["USDB"]["remoteToken"],
+			},
 		},
 	}
 	return BuildL2(deployments)
@@ -245,6 +323,78 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeployEAS(opts, backend)
 	case "SchemaRegistry":
 		_, tx, _, err = bindings.DeploySchemaRegistry(opts, backend)
+	case "Shares":
+		reporter, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for reporter")
+		}
+		_, tx, _, err = bindings.DeployShares(opts, backend, reporter)
+	case "USDB":
+		usdYieldManager, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for usdYieldManager")
+		}
+		l2Bridge, ok := deployment.Args[1].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for l2Bridge")
+		}
+		remoteToken, ok := deployment.Args[2].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for remoteToken")
+		}
+		_, tx, _, err = bindings.DeployUSDB(opts, backend, usdYieldManager, l2Bridge, remoteToken)
+	case "WETHRebasing":
+		_, tx, _, err = bindings.DeployWETHRebasing(opts, backend)
+	case "L2BlastBridge":
+		otherBridge, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for otherBridge")
+		}
+		_, tx, _, err = bindings.DeployL2BlastBridge(opts, backend, otherBridge)
+	case "Gas":
+		gasAdmin, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for gasAdmin")
+		}
+		blastAddr, ok := deployment.Args[1].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for blast addr")
+		}
+		baseFeeVaultAddr, ok := deployment.Args[2].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for base fee vault addr")
+		}
+		zeroClaimRate, ok := deployment.Args[3].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for zero claim rate")
+		}
+		baseGasSeconds, ok := deployment.Args[4].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for base gas seconds")
+		}
+		baseClaimRate, ok := deployment.Args[5].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for base claim rate")
+		}
+		ceilGasSeconds, ok := deployment.Args[6].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for ceil gas seconds")
+		}
+		ceilClaimRate, ok := deployment.Args[7].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for ceil claim rate")
+		}
+		_, tx, _, err = bindings.DeployGas(opts, backend, gasAdmin, blastAddr, baseFeeVaultAddr, zeroClaimRate.ToInt(), baseGasSeconds.ToInt(), baseClaimRate.ToInt(), ceilGasSeconds.ToInt(), ceilClaimRate.ToInt())
+	case "Blast":
+		gasContractAddr, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for gasContract")
+		}
+		yieldContractAddr, ok := deployment.Args[1].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for yield contract")
+		}
+		_, tx, _, err = bindings.DeployBlast(opts, backend, gasContractAddr, yieldContractAddr)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -12,7 +12,8 @@ import { SecureMerkleTrie } from "src/libraries/trie/SecureMerkleTrie.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { ISemver } from "src/universal/ISemver.sol";
-import { Constants } from "src/libraries/Constants.sol";
+import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
+import { Predeploys } from "src/libraries/Predeploys.sol";
 
 /// @custom:proxied
 /// @title OptimismPortal
@@ -22,12 +23,13 @@ import { Constants } from "src/libraries/Constants.sol";
 contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @notice Represents a proven withdrawal.
     /// @custom:field outputRoot    Root of the L2 output this was proven against.
-    /// @custom:field timestamp     Timestamp at whcih the withdrawal was proven.
+    /// @custom:field timestamp     Timestamp at which the withdrawal was proven.
     /// @custom:field l2OutputIndex Index of the output this was proven against.
     struct ProvenWithdrawal {
         bytes32 outputRoot;
         uint128 timestamp;
         uint128 l2OutputIndex;
+        uint256 requestId;
     }
 
     /// @notice Version of the deposit event.
@@ -36,9 +38,12 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @notice The L2 gas limit set when eth is deposited using the receive() function.
     uint64 internal constant RECEIVE_DEFAULT_GAS_LIMIT = 100_000;
 
+    /// @notice The L1 gas limit set when sending eth to the YieldManager.
+    uint64 internal constant SEND_DEFAULT_GAS_LIMIT = 100_000;
+
     /// @notice Address of the L2 account which initiated a withdrawal in this transaction.
-    ///         If the of this variable is the default L2 sender address, then we are NOT inside of
-    ///         a call to finalizeWithdrawalTransaction.
+    ///         If the address of this variable is the default L2 sender address, then we
+    ///         are NOT inside of a call to finalizeWithdrawalTransaction.
     address public l2Sender;
 
     /// @notice A list of withdrawal hashes which have been successfully finalized.
@@ -64,6 +69,9 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @custom:network-specific
     address public guardian;
 
+    /// @notice Address of the ETH yield manager.
+    ETHYieldManager public yieldManager;
+
     /// @notice Emitted when a transaction is deposited from L1 to L2.
     ///         The parameters of this event are read by the rollup node and used to derive deposit
     ///         transactions on L2.
@@ -77,7 +85,8 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @param withdrawalHash Hash of the withdrawal transaction.
     /// @param from           Address that triggered the withdrawal transaction.
     /// @param to             Address that the withdrawal transaction is directed to.
-    event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to);
+    /// @param requestId      Id of the withdrawal request
+    event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to, uint256 requestId);
 
     /// @notice Emitted when a withdrawal transaction is finalized.
     /// @param withdrawalHash Hash of the withdrawal transaction.
@@ -108,7 +117,8 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
             _l2Oracle: L2OutputOracle(address(0)),
             _guardian: address(0),
             _systemConfig: SystemConfig(address(0)),
-            _paused: true
+            _paused: true,
+            _yieldManager: ETHYieldManager(payable(address(0)))
         });
     }
 
@@ -121,7 +131,8 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         L2OutputOracle _l2Oracle,
         address _guardian,
         SystemConfig _systemConfig,
-        bool _paused
+        bool _paused,
+        ETHYieldManager _yieldManager
     )
         public
         reinitializer(Constants.INITIALIZER)
@@ -131,6 +142,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         systemConfig = _systemConfig;
         guardian = _guardian;
         paused = _paused;
+        yieldManager = _yieldManager;
         __ResourceMetering_init();
     }
 
@@ -183,14 +195,9 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     ///         otherwise any deposited funds will be lost due to address aliasing.
     // solhint-disable-next-line ordering
     receive() external payable {
-        depositTransaction(msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, false, bytes(""));
-    }
-
-    /// @notice Accepts ETH value without triggering a deposit to L2.
-    ///         This function mainly exists for the sake of the migration between the legacy
-    ///         Optimism system and Bedrock.
-    function donateETH() external payable {
-        // Intentionally empty.
+        if (msg.sender != address(yieldManager)) {
+            depositTransaction(msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, false, bytes(""));
+        }
     }
 
     /// @notice Getter for the resource config.
@@ -266,22 +273,37 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
             "OptimismPortal: invalid withdrawal inclusion proof"
         );
 
+        // Blast: request ether withdrawal from the yield manager. Should not request a withdrawal
+        // when the withdrawal is being re-proven.
+        uint256 requestId;
+        if (_tx.value > 0 && provenWithdrawal.timestamp == 0) {
+            requestId = yieldManager.requestWithdrawal(_tx.value);
+        } else {
+            // If withdrawal is being re-proven, then set original requestId.
+            requestId = provenWithdrawal.requestId;
+        }
+
+        require(_tx.target != address(yieldManager), "OptimismPortal: unauthorized call to yield manager");
+
         // Designate the withdrawalHash as proven by storing the `outputRoot`, `timestamp`, and
         // `l2BlockNumber` in the `provenWithdrawals` mapping. A `withdrawalHash` can only be
         // proven once unless it is submitted again with a different outputRoot.
         provenWithdrawals[withdrawalHash] = ProvenWithdrawal({
             outputRoot: outputRoot,
             timestamp: uint128(block.timestamp),
-            l2OutputIndex: uint128(_l2OutputIndex)
+            l2OutputIndex: uint128(_l2OutputIndex),
+            requestId: requestId
         });
 
         // Emit a `WithdrawalProven` event.
-        emit WithdrawalProven(withdrawalHash, _tx.sender, _tx.target);
+        emit WithdrawalProven(withdrawalHash, _tx.sender, _tx.target, requestId);
     }
 
     /// @notice Finalizes a withdrawal transaction.
+    /// @param hintId Hint ID of the withdrawal transaction to finalize. The caller can find this
+    ///               value by calling ETHYieldManager.findCheckpointHint().
     /// @param _tx Withdrawal transaction to finalize.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) external whenNotPaused {
+    function finalizeWithdrawalTransaction(uint256 hintId, Types.WithdrawalTransaction memory _tx) external whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -342,6 +364,14 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         // Set the l2Sender so contracts know who triggered this withdrawal on L2.
         l2Sender = _tx.sender;
 
+        // Blast: claim withdrawal for ether
+        uint256 txValueWithDiscount;
+        if (_tx.value > 0) {
+            uint256 etherBalance = address(this).balance;
+            yieldManager.claimWithdrawal(provenWithdrawal.requestId, hintId);
+            txValueWithDiscount = address(this).balance - etherBalance;
+        }
+
         // Trigger the call to the target contract. We use a custom low level method
         // SafeCall.callWithMinGas to ensure two key properties
         //   1. Target contracts cannot force this call to run out of gas by returning a very large
@@ -349,7 +379,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         //   2. The amount of gas provided to the execution context of the target is at least the
         //      gas limit specified by the user. If there is not enough gas in the current context
         //      to accomplish this, `callWithMinGas` will revert.
-        bool success = SafeCall.callWithMinGas(_tx.target, _tx.gasLimit, _tx.value, _tx.data);
+        bool success = SafeCall.callWithMinGas(_tx.target, _tx.gasLimit, txValueWithDiscount, _tx.data);
 
         // Reset the l2Sender back to the default value.
         l2Sender = Constants.DEFAULT_L2_SENDER;
@@ -411,7 +441,27 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         // Compute the opaque data that will be emitted as part of the TransactionDeposited event.
         // We use opaque data so that we can update the TransactionDeposited event in the future
         // without breaking the current interface.
-        bytes memory opaqueData = abi.encodePacked(msg.value, _value, _gasLimit, _isCreation, _data);
+        bytes memory opaqueData;
+
+        // Blast: When receiving already staked funds (stETH) to be bridged for ether on L2, we
+        // have to request that `_value` is minted on L2 without an equivalent `msg.value` being
+        // sent in the call. This bypass allows the L1BlastBridge to request `_value` to be minted
+        // in exchange for a deposit of the equivalent amount of a staked ether asset.
+        if (_to == Predeploys.L2_BLAST_BRIDGE) {
+            if (msg.sender != yieldManager.blastBridge() || yieldManager.blastBridge() == address(0)) {
+                // second case is when the blast bridge address has not been set on the yield manager
+                revert("OptimismPortal: only the BlastBridge can deposit");
+            }
+            opaqueData = abi.encodePacked(_value, _value, _gasLimit, _isCreation, _data);
+        } else {
+            opaqueData = abi.encodePacked(msg.value, _value, _gasLimit, _isCreation, _data);
+        }
+
+        // Blast: Send the received ether to the yield manager to handle staking the funds.
+        if (msg.value > 0) {
+            (bool success) = SafeCall.send(address(yieldManager), SEND_DEFAULT_GAS_LIMIT, msg.value);
+            require(success, "OptimismPortal: ETH transfer to YieldManager failed");
+        }
 
         // Emit a TransactionDeposited event so that the rollup node can derive a deposit
         // transaction for this deposit.

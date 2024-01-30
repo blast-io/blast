@@ -9,6 +9,7 @@ import { L2ToL1MessagePasser } from "src/L2/L2ToL1MessagePasser.sol";
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { L2StandardBridge } from "src/L2/L2StandardBridge.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
+import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
 import { L2ERC721Bridge } from "src/L2/L2ERC721Bridge.sol";
 import { OptimismMintableERC20Factory } from "src/universal/OptimismMintableERC20Factory.sol";
@@ -17,6 +18,14 @@ import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
 import { L2CrossDomainMessenger } from "src/L2/L2CrossDomainMessenger.sol";
+import { USDB } from "src/L2/USDB.sol";
+import { WETHRebasing } from "src/L2/WETHRebasing.sol";
+import { Shares } from "src/L2/Shares.sol";
+import { L1BlastBridge } from "src/mainnet-bridge/L1BlastBridge.sol";
+import { L2BlastBridge } from "src/mainnet-bridge/L2BlastBridge.sol";
+import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
+import { Blast } from "src/L2/Blast.sol";
+import { Gas } from "src/L2/Gas.sol";
 import { SequencerFeeVault } from "src/L2/SequencerFeeVault.sol";
 import { FeeVault } from "src/universal/FeeVault.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
@@ -24,7 +33,10 @@ import { LegacyERC20ETH } from "src/legacy/LegacyERC20ETH.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Types } from "src/libraries/Types.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { Proxy } from "src/universal/Proxy.sol";
+import { ERC20Mock } from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { ResolvedDelegateProxy } from "src/legacy/ResolvedDelegateProxy.sol";
 import { AddressManager } from "src/legacy/AddressManager.sol";
@@ -36,11 +48,47 @@ import { LegacyMintableERC20 } from "src/legacy/LegacyMintableERC20.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { Constants } from "src/libraries/Constants.sol";
+import { LidoYieldProvider, ILido } from "src/mainnet-bridge/yield-providers/LidoYieldProvider.sol";
+import { DSRYieldProvider } from "src/mainnet-bridge/yield-providers/DSRYieldProvider.sol";
+import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
+import { DSRYieldProvider, IDsrManager } from "src/mainnet-bridge/yield-providers/DSRYieldProvider.sol";
+import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
+import { USDYieldManager } from "src/mainnet-bridge/USDYieldManager.sol";
+import { USDConversions, IDssPsm } from "src/mainnet-bridge/USDConversions.sol";
+import { Insurance } from "src/mainnet-bridge/Insurance.sol";
+import { YieldMode } from "src/L2/Blast.sol";
+import { GasMode } from "src/L2/Gas.sol";
+
+interface IPot {
+    function chi() external view returns (uint256);
+    function rho() external view returns (uint256);
+    function dsr() external view returns (uint256);
+    function drip() external;
+}
+
+contract MockGas is Gas {
+    constructor(
+        address _admin,
+        address _blastConfigurationContract,
+        address _blastFeeVault,
+        uint256 _zeroClaimRate,
+        uint256 _baseGasSeconds,
+        uint256 _baseClaimRate,
+        uint256 _ceilGasSeconds,
+        uint256 _ceilClaimRate
+    ) Gas(_admin, _blastConfigurationContract, _blastFeeVault, _zeroClaimRate, _baseGasSeconds, _baseClaimRate, _ceilGasSeconds, _ceilClaimRate) {
+    }
+
+    function updateGasParams(address contractAddress, uint256 etherSeconds, uint256 etherBalance, GasMode mode) external {
+        _updateGasParams(contractAddress, etherSeconds, etherBalance, mode);
+    }
+}
 
 contract CommonTest is Test {
     address alice = address(128);
-    address bob = address(256);
-    address multisig = address(512);
+    address bob = address(257);
+    address charlie = address(512);
+    address multisig = address(1024);
 
     address immutable ZERO_ADDRESS = address(0);
     address immutable NON_ZERO_ADDRESS = address(1);
@@ -61,10 +109,12 @@ contract CommonTest is Test {
         // Give alice and bob some ETH
         vm.deal(alice, 1 << 16);
         vm.deal(bob, 1 << 16);
+        vm.deal(charlie, 1 << 16);
         vm.deal(multisig, 1 << 16);
 
         vm.label(alice, "alice");
         vm.label(bob, "bob");
+        vm.label(charlie, "charlie");
         vm.label(multisig, "multisig");
 
         // Make sure we have a non-zero base fee
@@ -92,6 +142,9 @@ contract L2OutputOracle_Initializer is CommonTest {
     // Test target
     L2OutputOracle oracle;
     L2OutputOracle oracleImpl;
+
+    Blast blast;
+    MockGas gas;
 
     L2ToL1MessagePasser messagePasser = L2ToL1MessagePasser(payable(Predeploys.L2_TO_L1_MESSAGE_PASSER));
 
@@ -139,8 +192,21 @@ contract L2OutputOracle_Initializer is CommonTest {
         oracle.proposeL2Output(proposedOutput2, nextBlockNumber, 0, 0);
     }
 
+    function checkBlastConfig(
+        address contractAddress,
+        address governor,
+        YieldMode yieldMode,
+        GasMode gasMode
+    ) public {
+        assertEq(blast.governorMap(contractAddress), governor);
+        assertTrue(blast.readYieldConfiguration(contractAddress) == uint8(yieldMode));
+        (,,, GasMode _gasMode) = blast.readGasParams(contractAddress);
+        assertTrue(_gasMode == gasMode);
+    }
+
     function setUp() public virtual override {
         super.setUp();
+        vm.deal(address(messagePasser), 0);
         guardian = makeAddr("guardian");
 
         // By default the first block has timestamp and number zero, which will cause underflows in the
@@ -165,19 +231,55 @@ contract L2OutputOracle_Initializer is CommonTest {
 
         // Set the L2ToL1MessagePasser at the correct address
         vm.etch(Predeploys.L2_TO_L1_MESSAGE_PASSER, address(new L2ToL1MessagePasser()).code);
-
         vm.label(Predeploys.L2_TO_L1_MESSAGE_PASSER, "L2ToL1MessagePasser");
+
+        MockGas mockGas = new MockGas({ _admin: address(0x0), 
+                            _blastConfigurationContract: address(Predeploys.BLAST),
+                            _blastFeeVault: address(Predeploys.BASE_FEE_VAULT),
+                            _zeroClaimRate: 0x1F4, // 5000 = 5%
+                            _baseClaimRate: 0x7D0, // 20000 = 20%
+                            _ceilClaimRate: 0x2710, // 10_000 = 100%
+                            _baseGasSeconds: 0x1, // 1s
+                            _ceilGasSeconds: 0xC8 // 200s
+                            });
+        vm.etch(Predeploys.GAS, address(mockGas).code);
+        gas = MockGas(Predeploys.GAS);
+        vm.label(address(gas), "GAS");
+
+        MockYield mockYield = new MockYield();
+        Blast mockBlast = new Blast({ _gasContract: address(Predeploys.GAS), _yieldContract: address(mockYield) });
+        vm.etch(Predeploys.BLAST, address(mockBlast).code);
+        blast = Blast(Predeploys.BLAST);
+        vm.label(address(blast), "BLAST");
     }
+}
+
+contract MockYield {
+    mapping(address => uint8) internal configurations;
+
+    function getConfiguration(address x) external view returns (uint8) {
+        return configurations[x];
+    }
+    function configure(address x, uint8 mode) external returns (uint256) {
+        configurations[x] = mode;
+    }
+    function claim(address, address, uint256) external returns (uint256) {}
 }
 
 contract Portal_Initializer is L2OutputOracle_Initializer {
     // Test target
     OptimismPortal internal opImpl;
     OptimismPortal internal op;
+    ETHYieldManager internal ethYieldManager;
+    USDYieldManager internal usdYieldManager;
     SystemConfig systemConfig;
 
+    ERC20 USDC;
+    ERC20 USDT;
+    ERC20 DAI;
+
     event WithdrawalFinalized(bytes32 indexed withdrawalHash, bool success);
-    event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to);
+    event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to, uint256 requestId);
 
     function setUp() public virtual override {
         super.setUp();
@@ -217,13 +319,55 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
 
         opImpl = new OptimismPortal();
 
-        Proxy proxy = new Proxy(multisig);
+        Proxy portalProxy = new Proxy(multisig);
+
+        if (address(USDConversions.DAI).code.length == 0) {
+            vm.etch(address(USDConversions.DAI), address(new ERC20("DAI", "DAI")).code);
+        }
+        DAI = ERC20(address(USDConversions.DAI));
+        if (address(USDConversions.USDC).code.length == 0) {
+            vm.etch(address(USDConversions.USDC), address(new ERC20("USDC", "USDC")).code);
+        }
+        USDC = ERC20(address(USDConversions.USDC));
+        if (address(USDConversions.USDT).code.length == 0) {
+            vm.etch(address(USDConversions.USDT), address(new ERC20("USDT", "USDT")).code);
+        }
+        USDT = ERC20(address(USDConversions.USDT));
+
+        L1ChugSplashProxy eymProxy = new L1ChugSplashProxy(multisig);
+        vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
+
         vm.prank(multisig);
-        proxy.upgradeToAndCall(
-            address(opImpl), abi.encodeCall(OptimismPortal.initialize, (oracle, guardian, systemConfig, false))
+        portalProxy.upgradeToAndCall(
+            address(opImpl), abi.encodeCall(OptimismPortal.initialize, (oracle, guardian, systemConfig, false, ETHYieldManager(payable(address(eymProxy)))))
         );
-        op = OptimismPortal(payable(address(proxy)));
+        op = OptimismPortal(payable(address(portalProxy)));
         vm.label(address(op), "OptimismPortal");
+
+        vm.startPrank(multisig);
+        eymProxy.setCode(address(new ETHYieldManager()).code);
+        vm.clearMockedCalls();
+        address ETHYieldManager_Impl = eymProxy.getImplementation();
+        ethYieldManager = ETHYieldManager(payable(address(eymProxy)));
+        vm.stopPrank();
+        ethYieldManager.initialize(op, multisig);
+
+        L1ChugSplashProxy uymProxy = new L1ChugSplashProxy(multisig);
+        vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
+
+        vm.startPrank(multisig);
+        uymProxy.setCode(address(new USDYieldManager(address(DAI))).code); // TODO
+        vm.clearMockedCalls();
+        address USDYieldManager_Impl = uymProxy.getImplementation();
+        usdYieldManager = USDYieldManager(payable(address(uymProxy)));
+        vm.stopPrank();
+        usdYieldManager.initialize(op, multisig);
+
+        vm.label(address(eymProxy), "ETHYieldManager_Proxy");
+        vm.label(address(ETHYieldManager_Impl), "ETHYieldManager_Impl");
+
+        vm.label(address(uymProxy), "USDYieldManager_Proxy");
+        vm.label(address(USDYieldManager_Impl), "USDYieldManager_Impl");
     }
 }
 
@@ -299,12 +443,17 @@ contract Messenger_Initializer is Portal_Initializer {
 contract Bridge_Initializer is Messenger_Initializer {
     L1StandardBridge L1Bridge;
     L2StandardBridge L2Bridge;
+    L1BlastBridge l1BlastBridge;
+    L2BlastBridge l2BlastBridge;
     OptimismMintableERC20Factory L2TokenFactory;
     OptimismMintableERC20Factory L1TokenFactory;
     ERC20 L1Token;
     ERC20 BadL1Token;
     OptimismMintableERC20 L2Token;
     LegacyMintableERC20 LegacyL2Token;
+    USDB Usdb;
+    Shares SHARES;
+    WETHRebasing WETH;
     ERC20 NativeL2Token;
     ERC20 BadL2Token;
     OptimismMintableERC20 RemoteL1Token;
@@ -358,6 +507,8 @@ contract Bridge_Initializer is Messenger_Initializer {
     function setUp() public virtual override {
         super.setUp();
 
+        L1Token = new ERC20("Native L1 Token", "L1T");
+
         vm.label(Predeploys.L2_STANDARD_BRIDGE, "L2StandardBridge");
         vm.label(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY, "OptimismMintableERC20Factory");
 
@@ -384,6 +535,32 @@ contract Bridge_Initializer is Messenger_Initializer {
         L2Bridge = L2StandardBridge(payable(Predeploys.L2_STANDARD_BRIDGE));
         L2Bridge.initialize();
 
+        proxy = new L1ChugSplashProxy(multisig);
+        vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
+        vm.startPrank(multisig);
+        proxy.setCode(address(new L1BlastBridge()).code);
+        vm.clearMockedCalls();
+        address L1BlastBridge_Impl = proxy.getImplementation();
+        l1BlastBridge = L1BlastBridge(payable(address(proxy)));
+        l1BlastBridge.initialize({
+          _portal: op,
+          _messenger: L1Messenger,
+          _usdYieldManager: usdYieldManager,
+          _ethYieldManager: ethYieldManager
+        });
+        ethYieldManager.setBlastBridge(address(l1BlastBridge));
+        usdYieldManager.setBlastBridge(address(l1BlastBridge));
+        ethYieldManager.setAdmin(multisig);
+        usdYieldManager.setAdmin(multisig);
+        vm.stopPrank();
+
+        vm.label(address(proxy), "L1BlastBridge_Proxy");
+        vm.label(address(L1BlastBridge_Impl), "L1BlastBridge_Impl");
+
+        vm.etch(Predeploys.L2_BLAST_BRIDGE, address(new L2BlastBridge(StandardBridge(payable(proxy)))).code);
+        l2BlastBridge = L2BlastBridge(payable(Predeploys.L2_BLAST_BRIDGE));
+        l2BlastBridge.initialize();
+
         // Set up the L2 mintable token factory
         OptimismMintableERC20Factory factory = new OptimismMintableERC20Factory();
         vm.etch(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY, address(factory).code);
@@ -392,7 +569,38 @@ contract Bridge_Initializer is Messenger_Initializer {
 
         vm.etch(Predeploys.LEGACY_ERC20_ETH, address(new LegacyERC20ETH()).code);
 
-        L1Token = new ERC20("Native L1 Token", "L1T");
+        vm.startPrank(multisig);
+        l1BlastBridge.setUSDYieldToken(address(L1Token), true, 18, address(0), false);
+        vm.stopPrank();
+        vm.startPrank(multisig);
+        l1BlastBridge.setUSDYieldToken(address(USDC), true, 6, address(0), false);
+        l1BlastBridge.setUSDYieldToken(address(USDT), true, 6, address(0), false);
+        l1BlastBridge.setUSDYieldToken(address(DAI), true, 18, address(0), false);
+        vm.stopPrank();
+
+        USDB usdb = new USDB({
+            _usdYieldManager: address(usdYieldManager),
+            _l2Bridge: address(l2BlastBridge),
+            _remoteToken: address(DAI)
+        });
+        vm.etch(Predeploys.USDB, address(usdb).code);
+        Usdb = USDB(Predeploys.USDB);
+        Usdb.initialize();
+        vm.label(address(Usdb), "USDB");
+
+        Shares shares = new Shares({ _reporter: address(ethYieldManager) });
+        vm.etch(Predeploys.SHARES, address(shares).code);
+        SHARES = Shares(Predeploys.SHARES);
+        SHARES.initialize(1e9);
+        vm.label(address(SHARES), "SHARES");
+
+
+        vm.deal(address(this), 100 ether);
+        WETHRebasing weth = new WETHRebasing();
+        vm.etch(Predeploys.WETH_REBASING, address(weth).code);
+        WETH = WETHRebasing(payable(Predeploys.WETH_REBASING));
+        WETH.initialize();
+        vm.label(address(WETH), "WETH");
 
         LegacyL2Token = new LegacyMintableERC20({
             _l2Bridge: address(L2Bridge),
@@ -491,11 +699,123 @@ contract ERC721Bridge_Initializer is Bridge_Initializer {
 
 contract FeeVault_Initializer is Bridge_Initializer {
     SequencerFeeVault vault = SequencerFeeVault(payable(Predeploys.SEQUENCER_FEE_WALLET));
-    address constant recipient = address(1024);
+    address constant recipient = address(2048);
 
     event Withdrawal(uint256 value, address to, address from);
 
     event Withdrawal(uint256 value, address to, address from, FeeVault.WithdrawalNetwork withdrawalNetwork);
+}
+
+interface IWithdrawalQueue {
+    function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
+    function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestsIds);
+}
+
+contract LidoYieldProvider_Initializer is Bridge_Initializer {
+    LidoYieldProvider internal lidoProvider;
+    Insurance internal insurance;
+
+    ILido Lido = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    IWithdrawalQueue WithdrawalQueue = IWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+    function finalizeWithdrawals() internal {
+        uint256[] memory _requestIds = WithdrawalQueue.getWithdrawalRequests(address(ethYieldManager));
+        uint256 shareRate = Lido.getPooledEthByShares(1e27);
+        vm.prank(address(Lido));
+        WithdrawalQueue.finalize(_requestIds[_requestIds.length-1], shareRate);
+    }
+
+    function setUp() public virtual override {
+        vm.createSelectFork(vm.envString("ETH_RPC_URL")); // 2023-12-20
+        super.setUp();
+
+        lidoProvider = new LidoYieldProvider(YieldManager(address(ethYieldManager)));
+        vm.label(address(lidoProvider), "LidoYieldProvider");
+
+        vm.label(address(Lido), "Lido");
+        vm.label(address(WithdrawalQueue), "LidoWithdrawalQueue");
+
+        L1ChugSplashProxy proxy = new L1ChugSplashProxy(multisig);
+        vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
+        vm.startPrank(multisig);
+        proxy.setCode(address(new Insurance(ethYieldManager)).code);
+        vm.clearMockedCalls();
+        insurance = Insurance(payable(address(proxy)));
+        insurance.initialize();
+        vm.label(address(insurance), "Insurance");
+        vm.stopPrank();
+
+        vm.startPrank(multisig);
+        ethYieldManager.addProvider(address(lidoProvider));
+        ethYieldManager.setInsurance(address(insurance), 1000, 10); // rate = 10% and buffer = 10 wei
+        vm.stopPrank();
+
+        // faucet stETH
+        vm.deal(address(this), 100 ether);
+        Lido.submit{value: 100 ether}(address(0));
+    }
+}
+
+interface IDAI is IERC20 {
+    function mint(address, uint256) external;
+}
+
+interface IUSDC {
+    function configureMinter(address, uint256) external;
+    function mint(address, uint256) external;
+    function owner() external view returns (address);
+    function masterMinter() external view returns (address);
+    function balanceOf(address) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+}
+
+contract DSRYieldProvider_Initializer is Bridge_Initializer {
+    IDsrManager public constant DSR_MANAGER = IDsrManager(0x373238337Bfe1146fb49989fc222523f83081dDb);
+    IUSDC public constant RealUSDC = IUSDC(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    IDAI public constant RealDAI = IDAI(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+
+    DSRYieldProvider internal dsrProvider;
+    Insurance internal insurance;
+
+    function setUp() public virtual override {
+        vm.createSelectFork(vm.envString("ETH_RPC_URL"), 18878218);
+        bytes memory realUSDCImpl = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48).code;
+        bytes memory realDAIImpl = address(0x6B175474E89094C44Da98b954EedeAC495271d0F).code;
+
+        super.setUp();
+
+        vm.etch(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, realUSDCImpl);
+        vm.etch(0x6B175474E89094C44Da98b954EedeAC495271d0F, realDAIImpl);
+
+        // re-ran USDConversions._init() for RealUSDC and RealDAI
+        address CURVE_3POOL = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
+        address GEM_JOIN = 0x0A59649758aa4d66E25f08Dd01271e891fe52199;
+        vm.startPrank(address(l1BlastBridge));
+        RealUSDC.approve(address(CURVE_3POOL), type(uint256).max);
+        RealUSDC.approve(GEM_JOIN, type(uint256).max);
+        RealDAI.approve(address(CURVE_3POOL), type(uint256).max);
+        RealDAI.approve(GEM_JOIN, type(uint256).max);
+        vm.stopPrank();
+
+        dsrProvider = new DSRYieldProvider(usdYieldManager);
+        vm.label(address(dsrProvider), "DSRYieldProvider");
+
+        vm.prank(multisig);
+        insurance = new Insurance(usdYieldManager);
+        vm.label(address(insurance), "Insurance");
+
+        vm.startPrank(multisig);
+        usdYieldManager.addProvider(address(dsrProvider));
+        usdYieldManager.setInsurance(address(insurance), 1000, 0); // rate = 10% and buffer = 0 wei
+        vm.stopPrank();
+
+        IPot pot = IPot(DSR_MANAGER.pot());
+        uint256 rho = pot.rho();
+        if (rho > block.timestamp) {
+            skip(rho - block.timestamp);
+        }
+        pot.drip();
+    }
 }
 
 contract FFIInterface is Test {

@@ -490,7 +490,7 @@ contract OptimistTest is Optimist_Initializer {
         vm.prank(bob);
         optimist.mint(bob);
 
-        vm.expectRevert("ERC721: caller is not token owner nor approved");
+        vm.expectRevert("ERC721: caller is not token owner or approved");
         // burn as Sally
         vm.prank(sally);
         optimist.burn(_getTokenId(bob));

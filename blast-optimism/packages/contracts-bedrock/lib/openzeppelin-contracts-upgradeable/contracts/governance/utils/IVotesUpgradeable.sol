@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.5.0) (governance/utils/IVotes.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (governance/utils/IVotes.sol)
 pragma solidity ^0.8.0;
 
 /**
@@ -24,18 +24,20 @@ interface IVotesUpgradeable {
     function getVotes(address account) external view returns (uint256);
 
     /**
-     * @dev Returns the amount of votes that `account` had at the end of a past block (`blockNumber`).
+     * @dev Returns the amount of votes that `account` had at a specific moment in the past. If the `clock()` is
+     * configured to use block numbers, this will return the value at the end of the corresponding block.
      */
-    function getPastVotes(address account, uint256 blockNumber) external view returns (uint256);
+    function getPastVotes(address account, uint256 timepoint) external view returns (uint256);
 
     /**
-     * @dev Returns the total supply of votes available at the end of a past block (`blockNumber`).
+     * @dev Returns the total supply of votes available at a specific moment in the past. If the `clock()` is
+     * configured to use block numbers, this will return the value at the end of the corresponding block.
      *
      * NOTE: This value is the sum of all available votes, which is not necessarily the sum of all delegated votes.
      * Votes that have not been delegated are still part of total supply, even though they would not participate in a
      * vote.
      */
-    function getPastTotalSupply(uint256 blockNumber) external view returns (uint256);
+    function getPastTotalSupply(uint256 timepoint) external view returns (uint256);
 
     /**
      * @dev Returns the delegate that `account` has chosen.
@@ -50,12 +52,5 @@ interface IVotesUpgradeable {
     /**
      * @dev Delegates votes from signer to `delegatee`.
      */
-    function delegateBySig(
-        address delegatee,
-        uint256 nonce,
-        uint256 expiry,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
+    function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external;
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts v4.4.1 (utils/introspection/ERC1820Implementer.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (utils/introspection/ERC1820Implementer.sol)
 
 pragma solidity ^0.8.0;
 
@@ -13,6 +13,8 @@ import "../../proxy/utils/Initializable.sol";
  * declare their willingness to be implementers.
  * {IERC1820Registry-setInterfaceImplementer} should then be called for the
  * registration to be complete.
+ *
+ * CAUTION: This file is deprecated as of v4.9 and will be removed in the next major release.
  */
 contract ERC1820ImplementerUpgradeable is Initializable, IERC1820ImplementerUpgradeable {
     function __ERC1820Implementer_init() internal onlyInitializing {
@@ -27,13 +29,10 @@ contract ERC1820ImplementerUpgradeable is Initializable, IERC1820ImplementerUpgr
     /**
      * @dev See {IERC1820Implementer-canImplementInterfaceForAddress}.
      */
-    function canImplementInterfaceForAddress(bytes32 interfaceHash, address account)
-        public
-        view
-        virtual
-        override
-        returns (bytes32)
-    {
+    function canImplementInterfaceForAddress(
+        bytes32 interfaceHash,
+        address account
+    ) public view virtual override returns (bytes32) {
         return _supportedInterfaces[interfaceHash][account] ? _ERC1820_ACCEPT_MAGIC : bytes32(0x00);
     }
 

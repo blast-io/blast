@@ -8,6 +8,7 @@ import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
+import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
 
 /// @title Initializer_Test
 /// @dev Ensures that the `initialize()` function on contracts cannot be called more than
@@ -25,7 +26,7 @@ contract Initializer_Test is ERC721Bridge_Initializer {
         oracle.initialize(0, 0, address(0), address(0));
 
         vm.expectRevert("Initializable: contract is already initialized");
-        op.initialize(L2OutputOracle(address(0)), address(0), SystemConfig(address(0)), false);
+        op.initialize(L2OutputOracle(address(0)), address(0), SystemConfig(address(0)), false, ETHYieldManager(payable(address(0))));
 
         vm.expectRevert("Initializable: contract is already initialized");
         systemConfig.initialize({

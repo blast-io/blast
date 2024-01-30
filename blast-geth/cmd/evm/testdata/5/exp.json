@@ -1,17 +1,20 @@
 {
   "alloc": {
     "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
-      "balance": "0x88"
+      "balance": "0x88",
+      "flags": 1
     },
     "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
-      "balance": "0x70"
+      "balance": "0x70",
+      "flags": 1
     },
     "0xcccccccccccccccccccccccccccccccccccccccc": {
-      "balance": "0x60"
+      "balance": "0x60",
+      "flags": 1
     }
   },
   "result": {
-    "stateRoot": "0xa7312add33811645c6aa65d928a1a4f49d65d448801912c069a0aa8fe9c1f393",
+    "stateRoot": "0x6b24a06c0b1d45823b0db877bf9689a538dd3f511ff27019499016a9b2284650",
     "txRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
     "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
     "logsHash": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",

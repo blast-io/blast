@@ -568,7 +568,10 @@ func dumpState(ctx *cli.Context) error {
 			return err
 		}
 		da := &state.DumpAccount{
-			Balance:   account.Balance.String(),
+			Flags:     account.Flags,
+			Shares:    account.Shares.String(),
+			Remainder: account.Remainder.String(),
+			Fixed:     account.Fixed.String(),
 			Nonce:     account.Nonce,
 			Root:      account.Root.Bytes(),
 			CodeHash:  account.CodeHash,

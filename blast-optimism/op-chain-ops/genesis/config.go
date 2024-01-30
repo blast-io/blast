@@ -217,6 +217,32 @@ type DeployConfig struct {
 	// RequiredProtocolVersion indicates the protocol version that
 	// nodes are recommended to adopt, to stay in sync with the network.
 	RecommendedProtocolVersion params.ProtocolVersion `json:"recommendedProtocolVersion"`
+
+	// Shares Predeploy
+	SharesPrice    *hexutil.Big   `json:"sharesPrice"`
+
+	// Gas Predeploy
+	GasAdmin       common.Address `json:"gasAdmin"`
+	ZeroClaimRate  *hexutil.Big   `json:"zeroClaimRate"`
+	BaseClaimRate  *hexutil.Big   `json:"baseClaimRate"`
+	CeilClaimRate  *hexutil.Big   `json:"ceilClaimRate"`
+	BaseGasSeconds *hexutil.Big   `json:"baseGasSeconds"`
+	CeilGasSeconds *hexutil.Big   `json:"ceilGasSeconds"`
+
+	// Account Configuration Predeploy
+	YieldContract common.Address `json:"yieldContract"`
+
+	L1BlastBridgeProxy common.Address `json:"l1BlastBridgeProxy"`
+	ETHYieldManagerProxy common.Address `json:"ethYieldManagerProxy"`
+	USDYieldManagerProxy common.Address `json:"usdYieldManagerProxy"`
+
+	YieldManagerAdmin common.Address `json:"yieldManagerAdmin"`
+	USDBRemoteToken common.Address `json:"usdbRemoteToken"`
+
+	ETHInsuranceFee     *hexutil.Big `json:"ethInsuranceFee"`
+	ETHWithdrawalBuffer *hexutil.Big `json:"ethWithdrawalBuffer"`
+	USDInsuranceFee     *hexutil.Big `json:"usdInsuranceFee"`
+	USDWithdrawalBuffer *hexutil.Big `json:"usdWithdrawalBuffer"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -256,6 +282,9 @@ func (d *DeployConfig) Check() error {
 	}
 	if d.PortalGuardian == (common.Address{}) {
 		return fmt.Errorf("%w: PortalGuardian cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.YieldManagerAdmin == (common.Address{}) {
+		return fmt.Errorf("%w: YieldManagerAdmin cannot be address(0)", ErrInvalidDeployConfig)
 	}
 	if d.MaxSequencerDrift == 0 {
 		return fmt.Errorf("%w: MaxSequencerDrift cannot be 0", ErrInvalidDeployConfig)
@@ -352,6 +381,34 @@ func (d *DeployConfig) Check() error {
 	if d.L1BlockTime < d.L2BlockTime {
 		return fmt.Errorf("L2 block time (%d) is larger than L1 block time (%d)", d.L2BlockTime, d.L1BlockTime)
 	}
+	if d.SharesPrice == nil {
+		return fmt.Errorf("%w: SharesPrice cannot be nil", ErrInvalidDeployConfig)
+	}
+
+	// Account Configuratoin Contract
+	if d.YieldContract == (common.Address{}) {
+		return fmt.Errorf("%w: Yield Contract cannot be nil", ErrInvalidDeployConfig)
+	}
+	// Gas Contract
+	if d.GasAdmin == (common.Address{}) {
+		return fmt.Errorf("%w: Gas Admin cannot be nil", ErrInvalidDeployConfig)
+	}
+	if d.BaseGasSeconds == nil {
+		return fmt.Errorf("%w: Base Gas Seconds cannot be nil", ErrInvalidDeployConfig)
+	}
+	if d.BaseClaimRate == nil {
+		return fmt.Errorf("%w: Base Claim Rate cannot be nil", ErrInvalidDeployConfig)
+	}
+	if d.CeilGasSeconds == nil {
+		return fmt.Errorf("%w: Ceil Gas Seconds cannot be nil", ErrInvalidDeployConfig)
+	}
+	if d.CeilClaimRate == nil {
+		return fmt.Errorf("%w: Ceil Claim Rate cannot be nil", ErrInvalidDeployConfig)
+	}
+	if d.ZeroClaimRate == nil {
+		return fmt.Errorf("%w: Zero Claim Rate cannot be nil", ErrInvalidDeployConfig)
+	}
+
 	return nil
 }
 
@@ -375,6 +432,21 @@ func (d *DeployConfig) CheckAddresses() error {
 	if d.OptimismPortalProxy == (common.Address{}) {
 		return fmt.Errorf("%w: OptimismPortalProxy cannot be address(0)", ErrInvalidDeployConfig)
 	}
+	if d.L1BlastBridgeProxy == (common.Address{}) {
+		return fmt.Errorf("%w: L1BlastBridgeProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.USDYieldManagerProxy == (common.Address{}) {
+		return fmt.Errorf("%w: USDYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.ETHYieldManagerProxy == (common.Address{}) {
+		return fmt.Errorf("%w: ETHYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.YieldManagerAdmin == (common.Address{}) {
+		return fmt.Errorf("%w: YieldManagerAdmin cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.USDBRemoteToken == (common.Address{}) {
+		return fmt.Errorf("%w: USDBRemoteToken cannot be address(0)", ErrInvalidDeployConfig)
+	}
 	return nil
 }
 
@@ -385,6 +457,10 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 	d.L1ERC721BridgeProxy = deployments.L1ERC721BridgeProxy
 	d.SystemConfigProxy = deployments.SystemConfigProxy
 	d.OptimismPortalProxy = deployments.OptimismPortalProxy
+	d.L1BlastBridgeProxy = deployments.L1BlastBridgeProxy
+	d.USDYieldManagerProxy = deployments.USDYieldManagerProxy
+	d.ETHYieldManagerProxy = deployments.ETHYieldManagerProxy
+	d.USDBRemoteToken = deployments.USDBRemoteToken
 }
 
 // GetDeployedAddresses will get the deployed addresses of deployed L1 contracts
@@ -441,6 +517,42 @@ func (d *DeployConfig) GetDeployedAddresses(hh *hardhat.Hardhat) error {
 			return err
 		}
 		d.OptimismPortalProxy = optimismPortalProxyDeployment.Address
+	}
+
+	if d.L1BlastBridgeProxy == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		l1BlastBridgeProxyDeployment, err := hh.GetDeployment("L1BlastBridgeProxy")
+		if err != nil {
+			return err
+		}
+		d.L1BlastBridgeProxy = l1BlastBridgeProxyDeployment.Address
+	}
+
+	if d.USDYieldManagerProxy == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		usdYieldManagerProxyDeployment, err := hh.GetDeployment("USDYieldManagerProxy")
+		if err != nil {
+			return err
+		}
+		d.USDYieldManagerProxy = usdYieldManagerProxyDeployment.Address
+	}
+
+	if d.ETHYieldManagerProxy == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		ethYieldManagerProxyDeployment, err := hh.GetDeployment("ETHYieldManagerProxy")
+		if err != nil {
+			return err
+		}
+		d.ETHYieldManagerProxy = ethYieldManagerProxyDeployment.Address
+	}
+
+	if d.USDBRemoteToken == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		usdbRemoteTokenDeployment, err := hh.GetDeployment("USDBRemoteToken")
+		if err != nil {
+			return err
+		}
+		d.USDBRemoteToken = usdbRemoteTokenDeployment.Address
 	}
 
 	return nil
@@ -559,6 +671,10 @@ type L1Deployments struct {
 	L1ERC721BridgeProxy               common.Address `json:"L1ERC721BridgeProxy"`
 	L1StandardBridge                  common.Address `json:"L1StandardBridge"`
 	L1StandardBridgeProxy             common.Address `json:"L1StandardBridgeProxy"`
+	L1BlastBridgeProxy                common.Address `json:"L1BlastBridgeProxy"`
+	USDYieldManagerProxy              common.Address `json:"USDYieldManagerProxy"`
+	ETHYieldManagerProxy              common.Address `json:"ETHYieldManagerProxy"`
+	USDBRemoteToken                   common.Address `json:"USDBRemoteToken"`
 	L2OutputOracle                    common.Address `json:"L2OutputOracle"`
 	L2OutputOracleProxy               common.Address `json:"L2OutputOracleProxy"`
 	OptimismMintableERC20Factory      common.Address `json:"OptimismMintableERC20Factory"`
@@ -668,6 +784,18 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	if config.L1StandardBridgeProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1StandardBridgeProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
+	if config.L1BlastBridgeProxy == (common.Address{}) {
+		return immutable, fmt.Errorf("L1BlastBridgeProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+	if config.USDYieldManagerProxy == (common.Address{}) {
+		return immutable, fmt.Errorf("USDYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+	if config.ETHYieldManagerProxy == (common.Address{}) {
+		return immutable, fmt.Errorf("ETHYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+	if config.USDBRemoteToken == (common.Address{}) {
+		return immutable, fmt.Errorf("USDBRemoteToken cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
 	if config.L1CrossDomainMessengerProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1CrossDomainMessengerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
@@ -712,6 +840,32 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 		"recipient":               config.BaseFeeVaultRecipient,
 		"minimumWithdrawalAmount": config.BaseFeeVaultMinimumWithdrawalAmount,
 		"withdrawalNetwork":       config.BaseFeeVaultWithdrawalNetwork.ToUint8(),
+	}
+	immutable["Shares"] = immutables.ImmutableValues{
+		"price":    config.SharesPrice,
+		"reporter": config.ETHYieldManagerProxy,
+	}
+
+	immutable["Gas"] = immutables.ImmutableValues{
+		"admin":          config.GasAdmin,
+		"zeroClaimRate":  config.ZeroClaimRate,
+		"baseGasSeconds": config.BaseGasSeconds,
+		"baseClaimRate":  config.BaseClaimRate,
+		"ceilGasSeconds": config.CeilGasSeconds,
+		"ceilClaimRate":  config.CeilClaimRate,
+	}
+
+	immutable["Blast"] = immutables.ImmutableValues{
+		"yieldContract": config.YieldContract,
+	}
+
+	immutable["USDB"] = immutables.ImmutableValues{
+		"usdYieldManager": config.USDYieldManagerProxy,
+		"remoteToken":	   config.USDBRemoteToken,
+	}
+
+	immutable["L2BlastBridge"] = immutables.ImmutableValues{
+		"otherBridge": config.L1BlastBridgeProxy,
 	}
 
 	return immutable, nil
@@ -781,6 +935,38 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"bridge":        predeploys.L2StandardBridgeAddr,
 		"_initialized":  initializedValue,
 		"_initializing": false,
+	}
+	storage["Shares"] = state.StorageValues{
+		"price": config.SharesPrice.ToInt(),
+	}
+
+	storage["Gas"] = state.StorageValues{
+		"zeroClaimRate":  config.ZeroClaimRate.ToInt(),
+		"baseGasSeconds": config.BaseGasSeconds.ToInt(),
+		"baseClaimRate":  config.BaseClaimRate.ToInt(),
+		"ceilGasSeconds": config.CeilGasSeconds.ToInt(),
+		"ceilClaimRate":  config.CeilClaimRate.ToInt(),
+	}
+	governorMap := make(map[any]any)
+	governorMap[predeploys.USDBAddr.String()] = "0xdead"
+	governorMap[predeploys.WETHRebasingAddr.String()] = "0xdead"
+	governorMap[predeploys.L2ToL1MessagePasserAddr.String()] = "0xdead"
+	storage["Blast"] = state.StorageValues{
+		"governorMap": governorMap,
+	}
+	storage["WETHRebasing"] = state.StorageValues{
+		"_initialized":  1,
+		"_initializing": false,
+	}
+	storage["USDB"] = state.StorageValues{
+		"_initialized":  1,
+		"_initializing": false,
+		"price": config.SharesPrice.ToInt(),
+	}
+	storage["L2BlastBridge"] = state.StorageValues{
+		"_initialized":  1,
+		"_initializing": false,
+		"messenger":     predeploys.L2CrossDomainMessengerAddr,
 	}
 	return storage, nil
 }

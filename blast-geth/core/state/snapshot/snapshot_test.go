@@ -44,7 +44,8 @@ func randomHash() common.Hash {
 // randomAccount generates a random account and returns it RLP encoded.
 func randomAccount() []byte {
 	a := &types.StateAccount{
-		Balance:  big.NewInt(rand.Int63()),
+		Fixed:    big.NewInt(rand.Int63()),
+		Flags:    1,
 		Nonce:    rand.Uint64(),
 		Root:     randomHash(),
 		CodeHash: types.EmptyCodeHash[:],

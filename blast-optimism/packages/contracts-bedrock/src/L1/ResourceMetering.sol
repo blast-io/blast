@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -155,6 +155,8 @@ abstract contract ResourceMetering is Initializable {
     ///         child contract.
     // solhint-disable-next-line func-name-mixedcase
     function __ResourceMetering_init() internal onlyInitializing {
-        params = ResourceParams({ prevBaseFee: 1 gwei, prevBoughtGas: 0, prevBlockNum: uint64(block.number) });
+        if (params.prevBlockNum == 0) {
+            params = ResourceParams({ prevBaseFee: 1 gwei, prevBoughtGas: 0, prevBlockNum: uint64(block.number) });
+        }
     }
 }

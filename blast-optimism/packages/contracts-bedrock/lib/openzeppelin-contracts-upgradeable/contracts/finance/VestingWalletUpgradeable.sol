@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (finance/VestingWallet.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (finance/VestingWallet.sol)
 pragma solidity ^0.8.0;
 
 import "../token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "../utils/AddressUpgradeable.sol";
 import "../utils/ContextUpgradeable.sol";
-import "../utils/math/MathUpgradeable.sol";
 import "../proxy/utils/Initializable.sol";
 
 /**
@@ -33,19 +32,11 @@ contract VestingWalletUpgradeable is Initializable, ContextUpgradeable {
     /**
      * @dev Set the beneficiary, start timestamp and vesting duration of the vesting wallet.
      */
-    function __VestingWallet_init(
-        address beneficiaryAddress,
-        uint64 startTimestamp,
-        uint64 durationSeconds
-    ) internal onlyInitializing {
+    function __VestingWallet_init(address beneficiaryAddress, uint64 startTimestamp, uint64 durationSeconds) internal onlyInitializing {
         __VestingWallet_init_unchained(beneficiaryAddress, startTimestamp, durationSeconds);
     }
 
-    function __VestingWallet_init_unchained(
-        address beneficiaryAddress,
-        uint64 startTimestamp,
-        uint64 durationSeconds
-    ) internal onlyInitializing {
+    function __VestingWallet_init_unchained(address beneficiaryAddress, uint64 startTimestamp, uint64 durationSeconds) internal onlyInitializing {
         require(beneficiaryAddress != address(0), "VestingWallet: beneficiary is zero address");
         _beneficiary = beneficiaryAddress;
         _start = startTimestamp;
@@ -93,15 +84,30 @@ contract VestingWalletUpgradeable is Initializable, ContextUpgradeable {
     }
 
     /**
+     * @dev Getter for the amount of releasable eth.
+     */
+    function releasable() public view virtual returns (uint256) {
+        return vestedAmount(uint64(block.timestamp)) - released();
+    }
+
+    /**
+     * @dev Getter for the amount of releasable `token` tokens. `token` should be the address of an
+     * IERC20 contract.
+     */
+    function releasable(address token) public view virtual returns (uint256) {
+        return vestedAmount(token, uint64(block.timestamp)) - released(token);
+    }
+
+    /**
      * @dev Release the native token (ether) that have already vested.
      *
      * Emits a {EtherReleased} event.
      */
     function release() public virtual {
-        uint256 releasable = vestedAmount(uint64(block.timestamp)) - released();
-        _released += releasable;
-        emit EtherReleased(releasable);
-        AddressUpgradeable.sendValue(payable(beneficiary()), releasable);
+        uint256 amount = releasable();
+        _released += amount;
+        emit EtherReleased(amount);
+        AddressUpgradeable.sendValue(payable(beneficiary()), amount);
     }
 
     /**
@@ -110,10 +116,10 @@ contract VestingWalletUpgradeable is Initializable, ContextUpgradeable {
      * Emits a {ERC20Released} event.
      */
     function release(address token) public virtual {
-        uint256 releasable = vestedAmount(token, uint64(block.timestamp)) - released(token);
-        _erc20Released[token] += releasable;
-        emit ERC20Released(token, releasable);
-        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(token), beneficiary(), releasable);
+        uint256 amount = releasable(token);
+        _erc20Released[token] += amount;
+        emit ERC20Released(token, amount);
+        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(token), beneficiary(), amount);
     }
 
     /**

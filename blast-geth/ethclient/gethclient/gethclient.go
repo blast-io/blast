@@ -62,11 +62,14 @@ func (ec *Client) CreateAccessList(ctx context.Context, msg ethereum.CallMsg) (*
 
 // AccountResult is the result of a GetProof operation.
 type AccountResult struct {
-	Address      common.Address  `json:"address"`
 	AccountProof []string        `json:"accountProof"`
-	Balance      *big.Int        `json:"balance"`
+	Address      common.Address  `json:"address"`
 	CodeHash     common.Hash     `json:"codeHash"`
+	Fixed        *big.Int        `json:"fixed"`
+	Flags        uint8           `json:"flags"`
 	Nonce        uint64          `json:"nonce"`
+	Remainder    *big.Int        `json:"remainder"`
+	Shares       *big.Int        `json:"shares"`
 	StorageHash  common.Hash     `json:"storageHash"`
 	StorageProof []StorageResult `json:"storageProof"`
 }
@@ -88,11 +91,14 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 	}
 
 	type accountResult struct {
-		Address      common.Address  `json:"address"`
 		AccountProof []string        `json:"accountProof"`
-		Balance      *hexutil.Big    `json:"balance"`
+		Address      common.Address  `json:"address"`
 		CodeHash     common.Hash     `json:"codeHash"`
+		Fixed        *hexutil.Big    `json:"fixed"`
+		Flags        hexutil.Uint64  `json:"flags"`
 		Nonce        hexutil.Uint64  `json:"nonce"`
+		Remainder    *hexutil.Big    `json:"remainder"`
+		Shares       *hexutil.Big    `json:"shares"`
 		StorageHash  common.Hash     `json:"storageHash"`
 		StorageProof []storageResult `json:"storageProof"`
 	}
@@ -114,11 +120,14 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 		})
 	}
 	result := AccountResult{
-		Address:      res.Address,
 		AccountProof: res.AccountProof,
-		Balance:      res.Balance.ToInt(),
-		Nonce:        uint64(res.Nonce),
+		Address:      res.Address,
 		CodeHash:     res.CodeHash,
+		Fixed:        res.Fixed.ToInt(),
+		Flags:        uint8(res.Flags),
+		Nonce:        uint64(res.Nonce),
+		Remainder:    res.Remainder.ToInt(),
+		Shares:       res.Shares.ToInt(),
 		StorageHash:  res.StorageHash,
 		StorageProof: storageResults,
 	}

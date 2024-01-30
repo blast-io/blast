@@ -67,6 +67,12 @@ export interface OEL2Contracts {
   OVM_SequencerFeeVault: Contract
   WETH: Contract
   BedrockMessagePasser: Contract
+  Blast: Contract
+  Shares: Contract
+  Gas: Contract
+  USDB: Contract
+  WETHRebasing: Contract
+  L2BlastBridge: Contract
 }
 
 /**

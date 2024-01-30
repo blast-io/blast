@@ -165,11 +165,22 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		// The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant cost, so
 		// the cost to charge for cold access, if any, is Cold - Warm
 		coldCost := params.ColdAccountAccessCostEIP2929 - params.WarmStorageReadCostEIP2929
+
+		// set cold cost temp variable to 0 to reset
+		evm.coldCostTemp = 0
 		if !warmAccess {
 			evm.StateDB.AddAddressToAccessList(addr)
 			// Charge the remaining difference here already, to correctly calculate available
 			// gas for call
-			if !contract.UseGas(coldCost) {
+			if !contract.UseGasNatively(coldCost) {
+				return 0, ErrOutOfGas
+			}
+		}
+
+		var blastGasCost uint64
+		if evm.frameCount > params.BlastMaxFrameCount && contract.gasTracker.GetGasUsedByContract(addr) == 0 {
+			blastGasCost = params.BlastGasParamStorageGas
+			if !contract.UseGasNatively(blastGasCost) {
 				return 0, ErrOutOfGas
 			}
 		}
@@ -179,15 +190,24 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		// - memory expansion
 		// - 63/64ths rule
 		gas, err := oldCalculator(evm, contract, stack, mem, memorySize)
-		if warmAccess || err != nil {
+		if err != nil {
 			return gas, err
 		}
 		// In case of a cold access, we temporarily add the cold charge back, and also
 		// add it to the returned gas. By adding it to the return, it will be charged
 		// outside of this function, as part of the dynamic gas, and that will make it
 		// also become correctly reported to tracers.
-		contract.Gas += coldCost
-		return gas + coldCost, nil
+		additionalGasCost := blastGasCost
+		if !warmAccess {
+			additionalGasCost += coldCost
+		}
+		if additionalGasCost == 0 {
+			return gas, nil
+		}
+		contract.Gas += additionalGasCost
+		contract.gasTracker.RefundGas(contract.Address(), additionalGasCost)
+		evm.coldCostTemp = additionalGasCost
+		return gas + additionalGasCost, nil
 	}
 }
 

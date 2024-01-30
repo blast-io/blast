@@ -131,6 +131,29 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func applyGenesisAccount(statedb *state.StateDB, addr common.Address, account GenesisAccount) {
+	if account.Balance != nil {
+		statedb.AddBalance(addr, account.Balance)
+	}
+	statedb.SetCode(addr, account.Code)
+	statedb.SetNonce(addr, account.Nonce)
+	statedb.SetFlags(addr, account.Flags)
+	for key, value := range account.Storage {
+		statedb.SetState(addr, key, value)
+	}
+}
+
+func applyGenesisAllocs(statedb *state.StateDB, ga *GenesisAlloc) {
+	if account, ok := (*ga)[params.BlastSharesAddress]; ok {
+		applyGenesisAccount(statedb, params.BlastSharesAddress, account)
+	}
+	for addr, account := range *ga {
+		if addr.Cmp(params.BlastSharesAddress) != 0 {
+			applyGenesisAccount(statedb, addr, account)
+		}
+	}
+}
+
 // hash computes the state root according to the genesis specification.
 func (ga *GenesisAlloc) hash() (common.Hash, error) {
 	// Create an ephemeral in-memory database for computing hash,
@@ -140,16 +163,7 @@ func (ga *GenesisAlloc) hash() (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
-	for addr, account := range *ga {
-		if account.Balance != nil {
-			statedb.AddBalance(addr, account.Balance)
-		}
-		statedb.SetCode(addr, account.Code)
-		statedb.SetNonce(addr, account.Nonce)
-		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value)
-		}
-	}
+	applyGenesisAllocs(statedb, ga)
 	return statedb.Commit(0, false)
 }
 
@@ -161,16 +175,7 @@ func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhas
 	if err != nil {
 		return err
 	}
-	for addr, account := range *ga {
-		if account.Balance != nil {
-			statedb.AddBalance(addr, account.Balance)
-		}
-		statedb.SetCode(addr, account.Code)
-		statedb.SetNonce(addr, account.Nonce)
-		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value)
-		}
-	}
+	applyGenesisAllocs(statedb, ga)
 	root, err := statedb.Commit(0, false)
 	if err != nil {
 		return err
@@ -196,6 +201,7 @@ type GenesisAccount struct {
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
 	Balance    *big.Int                    `json:"balance" gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
+	Flags      uint8                       `json:"flags,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 

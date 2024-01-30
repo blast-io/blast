@@ -14,6 +14,12 @@ import l2ERC721Bridge from '@eth-optimism/contracts-bedrock/forge-artifacts/L2ER
 import l1Block from '@eth-optimism/contracts-bedrock/forge-artifacts/L1Block.sol/L1Block.json'
 import l2ToL1MessagePasser from '@eth-optimism/contracts-bedrock/forge-artifacts/L2ToL1MessagePasser.sol/L2ToL1MessagePasser.json'
 import gasPriceOracle from '@eth-optimism/contracts-bedrock/forge-artifacts/GasPriceOracle.sol/GasPriceOracle.json'
+import blast from '@eth-optimism/contracts-bedrock/forge-artifacts/Blast.sol/Blast.json'
+import shares from '@eth-optimism/contracts-bedrock/forge-artifacts/Shares.sol/Shares.json'
+import gas from '@eth-optimism/contracts-bedrock/forge-artifacts/Gas.sol/Gas.json'
+import usdb from '@eth-optimism/contracts-bedrock/forge-artifacts/USDB.sol/USDB.json'
+import wethRebasing from '@eth-optimism/contracts-bedrock/forge-artifacts/WETHRebasing.sol/WETHRebasing.json'
+import l2BlastBridge from '@eth-optimism/contracts-bedrock/forge-artifacts/L2BlastBridge.sol/L2BlastBridge.json'
 
 import { toAddress } from './coercion'
 import { DeepPartial } from './type-utils'
@@ -93,6 +99,24 @@ const getContractInterfaceBedrock = (name: string): ethers.utils.Interface => {
       break
     case 'GasPriceOracle':
       artifact = gasPriceOracle
+      break
+    case 'Blast':
+      artifact = blast
+      break
+    case 'Gas':
+      artifact = gas
+      break
+    case 'Shares':
+      artifact = shares
+      break
+    case 'USDB':
+      artifact = usdb
+      break
+    case 'WETHRebasing':
+      artifact = wethRebasing
+      break
+    case 'L2BlastBridge':
+      artifact = l2BlastBridge
       break
   }
   return new ethers.utils.Interface(artifact.abi)

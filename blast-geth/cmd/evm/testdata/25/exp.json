@@ -1,18 +1,17 @@
 {
   "alloc": {
     "0x8a8eafb1cf62bfbeb1741769dae1a9dd47996192": {
-      "balance": "0x1"
+      "balance": "0x1",
+      "flags": 1
     },
     "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
       "balance": "0x5ffd4878bc29ed73",
+      "flags": 1,
       "nonce": "0xad"
-    },
-    "0xc94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
-      "balance": "0x854d00"
     }
   },
   "result": {
-    "stateRoot": "0x5139609e39f4d158a7d1ad1800908eb0349cea9b500a8273a6cf0a7e4392639b",
+    "stateRoot": "0xa3cad47da2392dc44e3612149316defd05e8a915306a95f659bcc4cbc795b99d",
     "txRoot": "0x572690baf4898c2972446e56ecf0aa2a027c08a863927d2dce34472f0c5496fe",
     "receiptsRoot": "0x056b23fbba480696b65fe5a59b8f2148a1299103c4f57df839233af2cf4ca2d2",
     "logsHash": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",

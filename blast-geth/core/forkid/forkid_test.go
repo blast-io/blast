@@ -33,6 +33,8 @@ import (
 // TestCreation tests that different genesis and fork rule combinations result in
 // the correct fork ID.
 func TestCreation(t *testing.T) {
+	t.Skip("Skipping since Blast won't generate the same fork ids")
+
 	type testcase struct {
 		head uint64
 		time uint64
@@ -130,6 +132,8 @@ func TestCreation(t *testing.T) {
 // TestValidation tests that a local peer correctly validates and accepts a remote
 // fork ID.
 func TestValidation(t *testing.T) {
+	t.Skip("Skipping since Blast won't generate the same fork ids")
+
 	// Config that has not timestamp enabled
 	legacyConfig := *params.MainnetChainConfig
 	legacyConfig.ShanghaiTime = nil

@@ -659,11 +659,38 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 	return (*hexutil.Big)(state.GetBalance(address)), state.Error()
 }
 
+type BalanceValuesResult struct {
+	Flags     hexutil.Uint64 `json:"flags"`
+	Fixed     *hexutil.Big   `json:"fixed"`
+	Shares    *hexutil.Big   `json:"shares"`
+	Remainder *hexutil.Big   `json:"remainder"`
+}
+
+func (s *BlockChainAPI) GetBalanceValues(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*BalanceValuesResult, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	values := state.GetBalanceValues(address)
+	result := &BalanceValuesResult{
+		Flags:     hexutil.Uint64(values.Flags),
+		Fixed:     (*hexutil.Big)(values.Fixed),
+		Shares:    (*hexutil.Big)(values.Shares),
+		Remainder: (*hexutil.Big)(values.Remainder),
+	}
+
+	return result, state.Error()
+}
+
 // Result structs for GetProof
 type AccountResult struct {
 	Address      common.Address  `json:"address"`
 	AccountProof []string        `json:"accountProof"`
-	Balance      *hexutil.Big    `json:"balance"`
+	Flags        hexutil.Uint64  `json:"flags"`
+	Fixed        *hexutil.Big    `json:"fixed"`
+	Shares       *hexutil.Big    `json:"shares"`
+	Remainder    *hexutil.Big    `json:"remainder"`
 	CodeHash     common.Hash     `json:"codeHash"`
 	Nonce        hexutil.Uint64  `json:"nonce"`
 	StorageHash  common.Hash     `json:"storageHash"`
@@ -770,10 +797,14 @@ func (s *BlockChainAPI) GetProof(ctx context.Context, address common.Address, st
 	if err := tr.Prove(crypto.Keccak256(address.Bytes()), &accountProof); err != nil {
 		return nil, err
 	}
+	balanceValues := statedb.GetBalanceValues(address)
 	return &AccountResult{
 		Address:      address,
 		AccountProof: accountProof,
-		Balance:      (*hexutil.Big)(statedb.GetBalance(address)),
+		Flags:        hexutil.Uint64(balanceValues.Flags),
+		Fixed:        (*hexutil.Big)(balanceValues.Fixed),
+		Shares:       (*hexutil.Big)(balanceValues.Shares),
+		Remainder:    (*hexutil.Big)(balanceValues.Remainder),
 		CodeHash:     codeHash,
 		Nonce:        hexutil.Uint64(statedb.GetNonce(address)),
 		StorageHash:  storageRoot,

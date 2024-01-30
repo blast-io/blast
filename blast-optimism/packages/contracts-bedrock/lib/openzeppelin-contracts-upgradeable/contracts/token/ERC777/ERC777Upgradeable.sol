@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (token/ERC777/ERC777.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC777/ERC777.sol)
 
 pragma solidity ^0.8.0;
 
@@ -26,6 +26,8 @@ import "../../proxy/utils/Initializable.sol";
  * Additionally, the {IERC777-granularity} value is hard-coded to `1`, meaning that there
  * are no special restrictions in the amount of tokens that created, moved, or
  * destroyed. This makes integration with ERC20 applications seamless.
+ *
+ * CAUTION: This file is deprecated as of v4.9 and will be removed in the next major release.
  */
 contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradeable, IERC20Upgradeable {
     using AddressUpgradeable for address;
@@ -58,19 +60,11 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
     /**
      * @dev `defaultOperators` may be an empty array.
      */
-    function __ERC777_init(
-        string memory name_,
-        string memory symbol_,
-        address[] memory defaultOperators_
-    ) internal onlyInitializing {
+    function __ERC777_init(string memory name_, string memory symbol_, address[] memory defaultOperators_) internal onlyInitializing {
         __ERC777_init_unchained(name_, symbol_, defaultOperators_);
     }
 
-    function __ERC777_init_unchained(
-        string memory name_,
-        string memory symbol_,
-        address[] memory defaultOperators_
-    ) internal onlyInitializing {
+    function __ERC777_init_unchained(string memory name_, string memory symbol_, address[] memory defaultOperators_) internal onlyInitializing {
         _name = name_;
         _symbol = symbol_;
 
@@ -136,11 +130,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      *
      * Also emits a {IERC20-Transfer} event for ERC20 compatibility.
      */
-    function send(
-        address recipient,
-        uint256 amount,
-        bytes memory data
-    ) public virtual override {
+    function send(address recipient, uint256 amount, bytes memory data) public virtual override {
         _send(_msgSender(), recipient, amount, data, "", true);
     }
 
@@ -281,11 +271,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      *
      * Emits {Sent}, {IERC20-Transfer} and {IERC20-Approval} events.
      */
-    function transferFrom(
-        address holder,
-        address recipient,
-        uint256 amount
-    ) public virtual override returns (bool) {
+    function transferFrom(address holder, address recipient, uint256 amount) public virtual override returns (bool) {
         address spender = _msgSender();
         _spendAllowance(holder, spender, amount);
         _send(holder, recipient, amount, "", "", false);
@@ -310,12 +296,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      * - if `account` is a contract, it must implement the {IERC777Recipient}
      * interface.
      */
-    function _mint(
-        address account,
-        uint256 amount,
-        bytes memory userData,
-        bytes memory operatorData
-    ) internal virtual {
+    function _mint(address account, uint256 amount, bytes memory userData, bytes memory operatorData) internal virtual {
         _mint(account, amount, userData, operatorData, true);
     }
 
@@ -396,12 +377,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      * @param data bytes extra information provided by the token holder
      * @param operatorData bytes extra information provided by the operator (if any)
      */
-    function _burn(
-        address from,
-        uint256 amount,
-        bytes memory data,
-        bytes memory operatorData
-    ) internal virtual {
+    function _burn(address from, uint256 amount, bytes memory data, bytes memory operatorData) internal virtual {
         require(from != address(0), "ERC777: burn from the zero address");
 
         address operator = _msgSender();
@@ -448,11 +424,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      *
      * Note that accounts cannot have allowance issued by their operators.
      */
-    function _approve(
-        address holder,
-        address spender,
-        uint256 value
-    ) internal virtual {
+    function _approve(address holder, address spender, uint256 value) internal virtual {
         require(holder != address(0), "ERC777: approve from the zero address");
         require(spender != address(0), "ERC777: approve to the zero address");
 
@@ -517,13 +489,9 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      * Does not update the allowance amount in case of infinite allowance.
      * Revert if not enough allowance is available.
      *
-     * Might emit an {Approval} event.
+     * Might emit an {IERC20-Approval} event.
      */
-    function _spendAllowance(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
             require(currentAllowance >= amount, "ERC777: insufficient allowance");
@@ -535,7 +503,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
 
     /**
      * @dev Hook that is called before any token transfer. This includes
-     * calls to {send}, {transfer}, {operatorSend}, minting and burning.
+     * calls to {send}, {transfer}, {operatorSend}, {transferFrom}, minting and burning.
      *
      * Calling conditions:
      *
@@ -547,12 +515,7 @@ contract ERC777Upgradeable is Initializable, ContextUpgradeable, IERC777Upgradea
      *
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
-    function _beforeTokenTransfer(
-        address operator,
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
+    function _beforeTokenTransfer(address operator, address from, address to, uint256 amount) internal virtual {}
 
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
