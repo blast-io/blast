@@ -6,7 +6,7 @@ This repo contains Blast's fork of optimism and op-geth. This initial release is
 ## Running Blast locally (against a local L1)
 
 ### Prereqs
-`docker`, `git`, `go1.20`, `node`, `pnpm`, `foundry`, `make`, `yarn`, `direnv`
+`docker`, `git`, `go1.20`, `node`, `pnpm`, `foundry`, `make`, `yarn`, `direnv`, `jq`
 
 ### Steps
 
