@@ -80,7 +80,6 @@ def main():
       sdk_dir=sdk_dir,
       genesis_l1_path=pjoin(devnet_dir, 'genesis-l1.json'),
       genesis_l2_path=pjoin(devnet_dir, 'genesis-l2.json'),
-      fork_state=pjoin(devnet_dir, 'fork-state.json'),
       allocs_path=pjoin(devnet_dir, 'allocs-l1.json'),
       addresses_json_path=pjoin(devnet_dir, 'addresses.json'),
       sdk_addresses_json_path=pjoin(devnet_dir, 'sdk-addresses.json'),
@@ -146,7 +145,7 @@ def deploy_contracts(paths):
     run_command([
         'forge', 'script', fqn, '--sender', account,
         '--rpc-url', 'http://127.0.0.1:8545', '--broadcast',
-        '--unlocked', '--keystore', '~/.foundry/keystores'
+        '--unlocked', '--slow', '-vvv'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     shutil.copy(paths.l1_deployments_path, paths.addresses_json_path)
@@ -156,30 +155,6 @@ def deploy_contracts(paths):
         'forge', 'script', fqn, '--sig', 'sync()',
         '--rpc-url', 'http://127.0.0.1:8545'
     ], env={}, cwd=paths.contracts_bedrock_dir)
-
-    fqn = 'scripts/Deploy.s.sol:Deploy'
-    run_command([
-        'forge', 'script', fqn, '--sender', account,
-        '--sig', 'setupExternalContracts()',
-        '--rpc-url', 'http://127.0.0.1:8545', '--broadcast',
-        '--unlocked', '--slow'
-    ], env={}, cwd=paths.contracts_bedrock_dir)
-
-    log.info('Patching malformatted JSON')
-    cdmp_filename = f"{paths.contracts_bedrock_dir}/deployments/devnetL1/L1CrossDomainMessengerProxy.json"
-    data = None
-    with open(cdmp_filename, "r") as f:
-        data = json.load(f)
-
-    if 'args' in data and isinstance(data['args'], str):
-        # Remove unnecessary backslashes and decode the JSON string
-        cleaned_args = data['args'].replace("\\", "")
-        try:
-            data['args'] = json.loads(cleaned_args)
-            with open(cdmp_filename, "w") as f:
-                json.dump(data, f)
-        except json.JSONDecodeError:
-            print(f"Warning: Failed to parse 'args' as JSON in {cdmp_filename}")
 
 def init_devnet_l1_deploy_config(paths, update_timestamp=False):
     deploy_config = read_json(paths.devnet_config_template_path)
@@ -192,7 +167,7 @@ def devnet_l1_genesis(paths):
     init_devnet_l1_deploy_config(paths)
 
     anvil = subprocess.Popen([
-      'anvil', '--state', paths.fork_state, '--gas-limit', '9000000', '--chain-id', '900', '--auto-impersonate'
+      'anvil', '--fork-url', os.getenv('ETH_RPC_URL'), '--fork-block-number', '18892744', '--gas-limit', '3000000', '--chain-id', '1337', '--dump-state', paths.allocs_path
     ])
 
     try:
@@ -204,7 +179,6 @@ def devnet_l1_genesis(paths):
             raise Exception(f"Exception occurred in child process: {err}")
     finally:
         anvil.terminate()
-        run_command(['cp', paths.fork_state, paths.allocs_path])
 
 
 # Bring up the devnet where the contracts are deployed to L1

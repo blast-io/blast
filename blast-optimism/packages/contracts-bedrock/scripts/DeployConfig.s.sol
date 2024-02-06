@@ -16,6 +16,7 @@ contract DeployConfig is Script {
 
     address public finalSystemOwner;
     address public portalGuardian;
+    address public yieldManagerAdmin;
     uint256 public l1ChainID;
     uint256 public l2ChainID;
     uint256 public l2BlockTime;
@@ -50,12 +51,6 @@ contract DeployConfig is Script {
     uint256 public systemConfigStartBlock;
     uint256 public requiredProtocolVersion;
     uint256 public recommendedProtocolVersion;
-    uint256 public ethInsuranceFee;
-    uint256 public ethWithdrawalBuffer;
-    uint256 public usdInsuranceFee;
-    uint256 public usdWithdrawalBuffer;
-    address public yieldManagerAdmin;
-    address public usdbRemoteToken;
 
     constructor(string memory _path) {
         console.log("DeployConfig: reading file %s", _path);
@@ -68,6 +63,7 @@ contract DeployConfig is Script {
 
         finalSystemOwner = stdJson.readAddress(_json, "$.finalSystemOwner");
         portalGuardian = stdJson.readAddress(_json, "$.portalGuardian");
+        yieldManagerAdmin = stdJson.readAddress(_json, "$.yieldManagerAdmin");
         l1ChainID = stdJson.readUint(_json, "$.l1ChainID");
         l2ChainID = stdJson.readUint(_json, "$.l2ChainID");
         l2BlockTime = stdJson.readUint(_json, "$.l2BlockTime");
@@ -99,11 +95,6 @@ contract DeployConfig is Script {
         systemConfigStartBlock = stdJson.readUint(_json, "$.systemConfigStartBlock");
         requiredProtocolVersion = stdJson.readUint(_json, "$.requiredProtocolVersion");
         recommendedProtocolVersion = stdJson.readUint(_json, "$.recommendedProtocolVersion");
-        ethInsuranceFee = stdJson.readUint(_json, "$.ethInsuranceFee");
-        ethWithdrawalBuffer = stdJson.readUint(_json, "$.ethWithdrawalBuffer");
-        usdInsuranceFee = stdJson.readUint(_json, "$.usdInsuranceFee");
-        usdWithdrawalBuffer = stdJson.readUint(_json, "$.usdWithdrawalBuffer");
-        yieldManagerAdmin = stdJson.readAddress(_json, "$.yieldManagerAdmin");
 
         if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
             faultGameAbsolutePrestate = stdJson.readUint(_json, "$.faultGameAbsolutePrestate");

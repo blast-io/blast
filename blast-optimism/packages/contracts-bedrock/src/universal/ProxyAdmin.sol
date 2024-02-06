@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -199,5 +199,19 @@ contract ProxyAdmin is Ownable {
             (bool success,) = _proxy.call{ value: msg.value }(_data);
             require(success, "ProxyAdmin: call to proxy after upgrade failed");
         }
+    }
+
+    /// temporary addition for testing
+    function call(
+        address payable _proxy,
+        bytes memory _data
+    )
+        external
+        payable
+        onlyOwner
+    {
+        // reverts if proxy type is unknown
+        (bool success,) = _proxy.call{ value: msg.value }(_data);
+        require(success, "ProxyAdmin: call to proxy failed");
     }
 }

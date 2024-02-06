@@ -1,9 +1,7 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
-
-import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
 
 interface IUSDT {
     function approve(address spender, uint256 amount) external;
@@ -43,22 +41,20 @@ library USDConversions {
 
     error InsufficientBalance();
     error MinimumAmountNotMet();
-    error MaximumAmountExceeded();
     error UnsupportedToken();
     error InvalidExtraData();
     error InvalidTokenIndex();
 
     /// @notice Initializer
     function _init() internal {
-        USDC.approve(address(CURVE_3POOL), type(uint256).max);
-        USDC.approve(GEM_JOIN, type(uint256).max);
-        USDT.approve(address(CURVE_3POOL), type(uint256).max);
-        DAI.approve(address(CURVE_3POOL), type(uint256).max);
-        DAI.approve(GEM_JOIN, type(uint256).max);
-        DAI.approve(address(PSM), type(uint256).max);
+        // USDC.approve(address(CURVE_3POOL), type(uint256).max);
+        // USDC.approve(GEM_JOIN, type(uint256).max);
+        // USDT.approve(address(CURVE_3POOL), type(uint256).max);
+        // DAI.approve(address(CURVE_3POOL), type(uint256).max);
+        // DAI.approve(GEM_JOIN, type(uint256).max);
     }
 
-    /// @notice Convert between the 3 stablecoin tokens using Curve's 3Pool and Maker's
+    /// @notice Convert between the 3 stablcoin tokens using Curve's 3Pool and Maker's
     ///         Peg Stability Mechanism.
     /// @param inputToken         Input token index.
     /// @param outputToken        Output token index.
@@ -79,12 +75,7 @@ library USDConversions {
             if (inputToken == USDC_INDEX && outputToken == DAI_INDEX) {
                 PSM.sellGem(address(this), inputAmount);
             } else if (inputToken == DAI_INDEX && outputToken == USDC_INDEX) {
-                uint256 beforeInputBalance = _tokenBalance(inputToken);
-                PSM.buyGem(address(this), _wadToUSD(minOutputAmountWad)); // buyGem expects the input amount in USDC
-                uint256 amountSent = beforeInputBalance - _tokenBalance(inputToken);
-                if (amountSent > inputAmountWad) {
-                    revert MaximumAmountExceeded();
-                }
+                PSM.buyGem(address(this), _wadToUSD(inputAmount)); // buyGem expects the input amount in USDC
             } else {
                 CURVE_3POOL.exchange(
                     inputToken,
@@ -97,29 +88,6 @@ library USDConversions {
             if (amountReceived < minOutputAmount) {
                 revert MinimumAmountNotMet();
             }
-        }
-    }
-
-    /// @notice Convert between supported token pairs, reverting if not supported.
-    /// @param inputTokenAddress  Address of the input token.
-    /// @param outputTokenAddress Address of the output token.
-    /// @param inputAmountWad     Amount of input token to convert in WAD.
-    /// @param _extraData         Extra data containing the minimum amount of output token to receive in WAD.
-    /// @return amountReceived Amount of output token received in WAD.
-    function _convertTo(
-        address inputTokenAddress,
-        address outputTokenAddress,
-        uint256 inputAmountWad,
-        bytes memory _extraData
-    ) internal returns (uint256 amountReceived) {
-        if (inputTokenAddress == outputTokenAddress) {
-            return inputAmountWad;
-        }
-
-        if (outputTokenAddress == address(DAI)) {
-            return _convertToDAI(inputTokenAddress, inputAmountWad, _extraData);
-        } else {
-            revert UnsupportedToken();
         }
     }
 
@@ -169,14 +137,10 @@ library USDConversions {
     /// @param index Curve token index.
     /// @return Token balance.
     function _tokenBalance(int128 index) internal view returns (uint256) {
-        if (_token(index) == YieldManager(address(this)).TOKEN()) {
-            return YieldManager(address(this)).availableBalance();
-        } else {
-            return IERC20(_token(index)).balanceOf(address(this));
-        }
+        return IERC20(_token(index)).balanceOf(address(this));
     }
 
-    /// @notice Convert WAD representation to the token's native decimal representation.
+    /// @notice Convert WAD representation to the token's native decimal repsentation.
     ///         USDT and USDC are both 6 decimals and are converted.
     /// @param wad   Amount in WAD.
     /// @param index Curve 3Pool index of the token.

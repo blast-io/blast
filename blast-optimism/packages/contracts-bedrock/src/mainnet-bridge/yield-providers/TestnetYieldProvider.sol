@@ -9,18 +9,13 @@ import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.
 
 /// @title TestnetYieldProvider
 /// @notice Provider for simulating a yield source on testnet.
-abstract contract TestnetYieldProvider is YieldProvider, Ownable {
-    IERC20 immutable TOKEN;
-    address immutable THIS;
-
-    int256 internal _reportedYield;
+contract TestnetYieldProvider is YieldProvider, Ownable {
+    uint256 internal _reportedYield;
 
     /// @param _yieldManager Address of the yield manager for the underlying
     ///        yield asset of this provider.
-    constructor(YieldManager _yieldManager, address _owner, address _token) YieldProvider(_yieldManager) {
+    constructor(YieldManager _yieldManager, address _owner) YieldProvider(_yieldManager) {
         _transferOwnership(_owner);
-        TOKEN = IERC20(_token);
-        THIS = address(this);
     }
 
     /// @inheritdoc YieldProvider
@@ -33,31 +28,36 @@ abstract contract TestnetYieldProvider is YieldProvider, Ownable {
 
     /// @inheritdoc YieldProvider
     function isStakingEnabled(address token) public view override returns (bool) {
-        return token == address(TOKEN);
+        return false;
     }
 
     /// @inheritdoc YieldProvider
-    function stakedBalance() public view virtual override returns (uint256) {
-        return TOKEN.balanceOf(address(YIELD_MANAGER));
+    function stakedValue() public view override returns (uint256) {
+        return address(YIELD_MANAGER).balance;
     }
 
     /// @inheritdoc YieldProvider
     function yield() public view override returns (int256) {
-        return _reportedYield;
+        return int256(_reportedYield);
     }
 
     /// @inheritdoc YieldProvider
-    function supportsInsurancePayment() public pure override returns (bool) {
-        return true;
+    function supportsInsurancePayment() public view override returns (bool) {
+        return false;
     }
 
     /// @inheritdoc YieldProvider
-    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256, uint256) {
-        TestnetYieldProvider(THIS).sendAsset(amount);
-        return (0, 0);
-    }
+    function stake(uint256 amount) external override onlyDelegateCall {}
 
-    function sendAsset(uint256 amount) external virtual;
+    /// @inheritdoc YieldProvider
+    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256 pending) {}
+
+    function recordYield(uint256 amount) external payable onlyOwner {
+        require(msg.value == amount);
+        (bool success,) = address(YIELD_MANAGER).call{value: amount}("");
+        require(success);
+        _reportedYield = amount;
+    }
 
     function _afterCommitYield() internal override {
         _reportedYield = 0;

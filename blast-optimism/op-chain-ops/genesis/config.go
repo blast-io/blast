@@ -129,6 +129,9 @@ type DeployConfig struct {
 	FinalSystemOwner common.Address `json:"finalSystemOwner"`
 	// PortalGuardian represents the GUARDIAN account in the OptimismPortal. Has the ability to pause withdrawals.
 	PortalGuardian common.Address `json:"portalGuardian"`
+	// Blast: YieldManagerAdmin represents the admin of the YieldManager contract, which is responsible for
+	// performing certain admin functions such as staking/unstaking funds and committing yield reports.
+	YieldManagerAdmin common.Address `json:"yieldManagerAdmin"`
 	// BaseFeeVaultRecipient represents the recipient of fees accumulated in the BaseFeeVault.
 	// Can be an account on L1 or L2, depending on the BaseFeeVaultWithdrawalNetwork value.
 	BaseFeeVaultRecipient common.Address `json:"baseFeeVaultRecipient"`
@@ -220,6 +223,7 @@ type DeployConfig struct {
 
 	// Shares Predeploy
 	SharesPrice    *hexutil.Big   `json:"sharesPrice"`
+	SharesReporter common.Address `json:"sharesReporter"`
 
 	// Gas Predeploy
 	GasAdmin       common.Address `json:"gasAdmin"`
@@ -233,16 +237,6 @@ type DeployConfig struct {
 	YieldContract common.Address `json:"yieldContract"`
 
 	L1BlastBridgeProxy common.Address `json:"l1BlastBridgeProxy"`
-	ETHYieldManagerProxy common.Address `json:"ethYieldManagerProxy"`
-	USDYieldManagerProxy common.Address `json:"usdYieldManagerProxy"`
-
-	YieldManagerAdmin common.Address `json:"yieldManagerAdmin"`
-	USDBRemoteToken common.Address `json:"usdbRemoteToken"`
-
-	ETHInsuranceFee     *hexutil.Big `json:"ethInsuranceFee"`
-	ETHWithdrawalBuffer *hexutil.Big `json:"ethWithdrawalBuffer"`
-	USDInsuranceFee     *hexutil.Big `json:"usdInsuranceFee"`
-	USDWithdrawalBuffer *hexutil.Big `json:"usdWithdrawalBuffer"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -384,6 +378,9 @@ func (d *DeployConfig) Check() error {
 	if d.SharesPrice == nil {
 		return fmt.Errorf("%w: SharesPrice cannot be nil", ErrInvalidDeployConfig)
 	}
+	if d.SharesReporter == (common.Address{}) {
+		return fmt.Errorf("%w: SharesReporter cannot be nil", ErrInvalidDeployConfig)
+	}
 
 	// Account Configuratoin Contract
 	if d.YieldContract == (common.Address{}) {
@@ -405,10 +402,6 @@ func (d *DeployConfig) Check() error {
 	if d.CeilClaimRate == nil {
 		return fmt.Errorf("%w: Ceil Claim Rate cannot be nil", ErrInvalidDeployConfig)
 	}
-	if d.ZeroClaimRate == nil {
-		return fmt.Errorf("%w: Zero Claim Rate cannot be nil", ErrInvalidDeployConfig)
-	}
-
 	return nil
 }
 
@@ -435,18 +428,6 @@ func (d *DeployConfig) CheckAddresses() error {
 	if d.L1BlastBridgeProxy == (common.Address{}) {
 		return fmt.Errorf("%w: L1BlastBridgeProxy cannot be address(0)", ErrInvalidDeployConfig)
 	}
-	if d.USDYieldManagerProxy == (common.Address{}) {
-		return fmt.Errorf("%w: USDYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
-	}
-	if d.ETHYieldManagerProxy == (common.Address{}) {
-		return fmt.Errorf("%w: ETHYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
-	}
-	if d.YieldManagerAdmin == (common.Address{}) {
-		return fmt.Errorf("%w: YieldManagerAdmin cannot be address(0)", ErrInvalidDeployConfig)
-	}
-	if d.USDBRemoteToken == (common.Address{}) {
-		return fmt.Errorf("%w: USDBRemoteToken cannot be address(0)", ErrInvalidDeployConfig)
-	}
 	return nil
 }
 
@@ -458,9 +439,6 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 	d.SystemConfigProxy = deployments.SystemConfigProxy
 	d.OptimismPortalProxy = deployments.OptimismPortalProxy
 	d.L1BlastBridgeProxy = deployments.L1BlastBridgeProxy
-	d.USDYieldManagerProxy = deployments.USDYieldManagerProxy
-	d.ETHYieldManagerProxy = deployments.ETHYieldManagerProxy
-	d.USDBRemoteToken = deployments.USDBRemoteToken
 }
 
 // GetDeployedAddresses will get the deployed addresses of deployed L1 contracts
@@ -526,33 +504,6 @@ func (d *DeployConfig) GetDeployedAddresses(hh *hardhat.Hardhat) error {
 			return err
 		}
 		d.L1BlastBridgeProxy = l1BlastBridgeProxyDeployment.Address
-	}
-
-	if d.USDYieldManagerProxy == (common.Address{}) {
-		// There is no legacy deployment of this contract
-		usdYieldManagerProxyDeployment, err := hh.GetDeployment("USDYieldManagerProxy")
-		if err != nil {
-			return err
-		}
-		d.USDYieldManagerProxy = usdYieldManagerProxyDeployment.Address
-	}
-
-	if d.ETHYieldManagerProxy == (common.Address{}) {
-		// There is no legacy deployment of this contract
-		ethYieldManagerProxyDeployment, err := hh.GetDeployment("ETHYieldManagerProxy")
-		if err != nil {
-			return err
-		}
-		d.ETHYieldManagerProxy = ethYieldManagerProxyDeployment.Address
-	}
-
-	if d.USDBRemoteToken == (common.Address{}) {
-		// There is no legacy deployment of this contract
-		usdbRemoteTokenDeployment, err := hh.GetDeployment("USDBRemoteToken")
-		if err != nil {
-			return err
-		}
-		d.USDBRemoteToken = usdbRemoteTokenDeployment.Address
 	}
 
 	return nil
@@ -672,9 +623,6 @@ type L1Deployments struct {
 	L1StandardBridge                  common.Address `json:"L1StandardBridge"`
 	L1StandardBridgeProxy             common.Address `json:"L1StandardBridgeProxy"`
 	L1BlastBridgeProxy                common.Address `json:"L1BlastBridgeProxy"`
-	USDYieldManagerProxy              common.Address `json:"USDYieldManagerProxy"`
-	ETHYieldManagerProxy              common.Address `json:"ETHYieldManagerProxy"`
-	USDBRemoteToken                   common.Address `json:"USDBRemoteToken"`
 	L2OutputOracle                    common.Address `json:"L2OutputOracle"`
 	L2OutputOracleProxy               common.Address `json:"L2OutputOracleProxy"`
 	OptimismMintableERC20Factory      common.Address `json:"OptimismMintableERC20Factory"`
@@ -787,15 +735,6 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	if config.L1BlastBridgeProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1BlastBridgeProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
-	if config.USDYieldManagerProxy == (common.Address{}) {
-		return immutable, fmt.Errorf("USDYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
-	}
-	if config.ETHYieldManagerProxy == (common.Address{}) {
-		return immutable, fmt.Errorf("ETHYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
-	}
-	if config.USDBRemoteToken == (common.Address{}) {
-		return immutable, fmt.Errorf("USDBRemoteToken cannot be address(0): %w", ErrInvalidImmutablesConfig)
-	}
 	if config.L1CrossDomainMessengerProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1CrossDomainMessengerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
@@ -843,7 +782,7 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	}
 	immutable["Shares"] = immutables.ImmutableValues{
 		"price":    config.SharesPrice,
-		"reporter": config.ETHYieldManagerProxy,
+		"reporter": config.SharesReporter,
 	}
 
 	immutable["Gas"] = immutables.ImmutableValues{
@@ -860,8 +799,8 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	}
 
 	immutable["USDB"] = immutables.ImmutableValues{
-		"usdYieldManager": config.USDYieldManagerProxy,
-		"remoteToken":	   config.USDBRemoteToken,
+		"bridge":      config.L1BlastBridgeProxy,
+		"remoteToken": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
 	}
 
 	immutable["L2BlastBridge"] = immutables.ImmutableValues{
@@ -947,27 +886,10 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"ceilGasSeconds": config.CeilGasSeconds.ToInt(),
 		"ceilClaimRate":  config.CeilClaimRate.ToInt(),
 	}
-	governorMap := make(map[any]any)
-	governorMap[predeploys.USDBAddr.String()] = "0xdead"
-	governorMap[predeploys.WETHRebasingAddr.String()] = "0xdead"
-	governorMap[predeploys.L2ToL1MessagePasserAddr.String()] = "0xdead"
-	storage["Blast"] = state.StorageValues{
-		"governorMap": governorMap,
-	}
-	storage["WETHRebasing"] = state.StorageValues{
-		"_initialized":  1,
-		"_initializing": false,
-	}
-	storage["USDB"] = state.StorageValues{
-		"_initialized":  1,
-		"_initializing": false,
-		"price": config.SharesPrice.ToInt(),
-	}
-	storage["L2BlastBridge"] = state.StorageValues{
-		"_initialized":  1,
-		"_initializing": false,
-		"messenger":     predeploys.L2CrossDomainMessengerAddr,
-	}
+	storage["Blast"] = state.StorageValues{}
+	storage["WETHRebasing"] = state.StorageValues{}
+	storage["USDB"] = state.StorageValues{}
+	storage["L2BlastBridge"] = state.StorageValues{}
 	return storage, nil
 }
 

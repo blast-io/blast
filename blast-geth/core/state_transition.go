@@ -500,6 +500,10 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	}
 	// check if blast gas accounting == ethereum gas accounting
 	isGasAccountingCorrect := st.gasUsed() == gasTracker.GetGasUsed()
+	if !isGasAccountingCorrect {
+		// TODO(blast): remove panic?
+		panic(fmt.Sprintf("Gas used mismatch: st.gasUsed() = %d, gasTracker.GetGasUsed() = %d", st.gasUsed(), gasTracker.GetGasUsed()))
+	}
 
 	// Note for deposit tx there is no ETH refunded for unused gas, but that's taken care of by the fact that gasPrice
 	// is always 0 for deposit tx. So calling refundGas will ensure the gasUsed accounting is correct without actually

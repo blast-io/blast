@@ -6,11 +6,9 @@ import { StandardBridge } from "src/universal/StandardBridge.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { SafeCall } from "src/libraries/SafeCall.sol";
-import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
 
 /// @custom:proxied
-/// @custom:predeploy 0x4300000000000000000000000000000000000005
+/// @custom:predeploy 0x4200000000000000000000000000000000000024
 /// @title L2BlastBridge
 /// @notice The L2BlastBridge is responsible for transfering ETH and USDB tokens between L1 and
 ///         L2. In the case that an ERC20 token is native to L2, it will be escrowed within this
@@ -22,18 +20,12 @@ contract L2BlastBridge is StandardBridge, ISemver {
     /// @notice Constructs the L2BlastBridge contract.
     /// @param _otherBridge Address of the L1BlastBridge.
     constructor(StandardBridge _otherBridge) StandardBridge(_otherBridge) {
-        _disableInitializers();
+        initialize();
     }
 
     /// @notice Initializer
     function initialize() public initializer {
         __StandardBridge_init({ _messenger: CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER) });
-        Blast(Predeploys.BLAST).configureContract(
-            address(this),
-            YieldMode.VOID,
-            GasMode.VOID,
-            address(0xdead) /// don't set a governor
-        );
     }
 
     /// @notice Allows EOAs to bridge ETH by sending directly to the bridge.
@@ -53,17 +45,17 @@ contract L2BlastBridge is StandardBridge, ISemver {
         public
         payable
     {
-        require(AddressAliasHelper.undoL1ToL2Alias(msg.sender) == address(OTHER_BRIDGE), "L2BlastBridge: function can only be called from the other bridge");
-        require(msg.value == _amount, "L2BlastBridge: amount sent does not match amount required");
-        require(_to != address(this), "L2BlastBridge: cannot send to self");
-        require(_to != address(messenger), "L2BlastBridge: cannot send to messenger");
+        require(msg.sender == address(OTHER_BRIDGE), "StandardBridge: function can only be called from the other bridge");
+        require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");
+        require(_to != address(this), "StandardBridge: cannot send to self");
+        require(_to != address(messenger), "StandardBridge: cannot send to messenger");
 
         // Emit the correct events. By default this will be _amount, but child
         // contracts may override this function in order to emit legacy events as well.
         _emitETHBridgeFinalized(_from, _to, _amount, _extraData);
 
         bool success = SafeCall.call(_to, gasleft(), _amount, hex"");
-        require(success, "L2BlastBridge: ETH transfer failed");
+        require(success, "StandardBridge: ETH transfer failed");
     }
 
     /// @notice Wrapper to only accept USDB withdrawals.
@@ -81,7 +73,7 @@ contract L2BlastBridge is StandardBridge, ISemver {
         override
     {
         require(_localToken == Predeploys.USDB, "L2BlastBridge: only USDB can be withdrawn from this bridge.");
-        require(_isCorrectTokenPair(Predeploys.USDB, _remoteToken), "L2BlastBridge: wrong remote token for USDB.");
+        require(_remoteToken == 0x6B175474E89094C44Da98b954EedeAC495271d0F, "L2BlastBridge: only DAI can be received from this bridge.");
         super._initiateBridgeERC20(_localToken, _remoteToken, _from, _to, _amount, _minGasLimit, _extraData);
     }
 }

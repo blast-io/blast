@@ -1,27 +1,23 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
 import { Semver } from "src/mainnet-bridge/YieldManager.sol";
 
 /// @custom:proxied
-/// @title Insurance
+/// @title Insurace
 /// @notice Holds the yield insurance funds and allows yield managers to
 ///         withdraw to cover losses.
 contract Insurance is Initializable, Semver {
-    using SafeERC20 for IERC20;
-
     address public admin;
     YieldManager immutable YIELD_MANAGER;
 
     error OnlyAdmin();
     error OnlyAdminOrYieldManager();
     error InsufficientBalance();
-    error CannotSetAdminAsZeroAddress();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) {
@@ -42,16 +38,9 @@ contract Insurance is Initializable, Semver {
         initialize();
     }
 
-    receive() external payable {}
-
-    function initialize() public initializer {
-        admin = msg.sender;
-    }
+    function initialize() public initializer {}
 
     function setAdmin(address _admin) external onlyAdmin {
-        if (_admin == address(0)) {
-            revert CannotSetAdminAsZeroAddress();
-        }
         admin = _admin;
     }
 
@@ -60,6 +49,6 @@ contract Insurance is Initializable, Semver {
             revert InsufficientBalance();
         }
 
-        IERC20(token).safeTransfer(address(YIELD_MANAGER), amount);
+        IERC20(token).transfer(address(YIELD_MANAGER), amount);
     }
 }

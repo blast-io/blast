@@ -6,7 +6,7 @@ import '@nomiclabs/hardhat-ethers'
 import 'hardhat-deploy'
 import { Deployment } from 'hardhat-deploy/types'
 import { predeploys } from '@eth-optimism/core-utils'
-import { providers, utils, ethers, BigNumber, Wallet } from 'ethers'
+import { providers, utils, ethers } from 'ethers'
 import Artifact__L2ToL1MessagePasser from '@eth-optimism/contracts-bedrock/forge-artifacts/L2ToL1MessagePasser.sol/L2ToL1MessagePasser.json'
 import Artifact__L2CrossDomainMessenger from '@eth-optimism/contracts-bedrock/forge-artifacts/L2CrossDomainMessenger.sol/L2CrossDomainMessenger.json'
 import Artifact__L2StandardBridge from '@eth-optimism/contracts-bedrock/forge-artifacts/L2StandardBridge.sol/L2StandardBridge.json'
@@ -14,9 +14,6 @@ import Artifact__OptimismPortal from '@eth-optimism/contracts-bedrock/forge-arti
 import Artifact__L1CrossDomainMessenger from '@eth-optimism/contracts-bedrock/forge-artifacts/L1CrossDomainMessenger.sol/L1CrossDomainMessenger.json'
 import Artifact__L1StandardBridge from '@eth-optimism/contracts-bedrock/forge-artifacts/L1StandardBridge.sol/L1StandardBridge.json'
 import Artifact__L2OutputOracle from '@eth-optimism/contracts-bedrock/forge-artifacts/L2OutputOracle.sol/L2OutputOracle.json'
-import Artifact__ETHYieldManager from '@eth-optimism/contracts-bedrock/forge-artifacts/ETHYieldManager.sol/ETHYieldManager.json'
-import Artifact__L2BlastBridge from '@eth-optimism/contracts-bedrock/forge-artifacts/L2BlastBridge.sol/L2BlastBridge.json'
-
 
 import {
   CrossChainMessenger,
@@ -26,18 +23,17 @@ import {
   DEFAULT_L2_CONTRACT_ADDRESSES,
 } from '../src'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import { get, request } from 'http'
 
 const { formatEther } = utils
 task('withdraw-eth-2', 'withdraw ether from L2.')
   .addParam(
-    'l2providerurl',
+    'l2ProviderUrl',
     'L2 provider URL.',
     'http://localhost:9545',
     types.string
   )
   .addParam(
-    'l1providerurl',
+    'l1ProviderUrl',
     'L1 provider URL.',
     'http://localhost:8545',
     types.string
@@ -48,35 +44,17 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
     'http://localhost:8545',
     types.string
   )
-  .addParam(
-    'book',
-    'contract address book',
-    '',
-    types.string
-  )
-  .addParam(
-    'bridge',
-    'bridge',
-    'blast',
-    types.string
-  )
   .addOptionalParam('userkey', 'user calling withdraw', '', types.string)
   .addOptionalParam('amount', 'Amount to withdraw', '', types.string)
   .addOptionalParam(
     'l1ContractsJsonPath',
     'Path to a JSON with L1 contract addresses in it',
-    'TODO_FILL_THIS_IN',
+    '',
     types.string
   )
-  .addOptionalParam('to', 'recipient of ETH', '', types.string)
   .setAction(async (args, hre) => {
-    const book: Record<string, string> = reverseObject(JSON.parse(args.book));
-    const l2Provider = new providers.StaticJsonRpcProvider(args.l2providerurl)
-    const l1Provider = new providers.StaticJsonRpcProvider(args.l1providerurl)
-    const adminSigner = new hre.ethers.Wallet(
-      args.adminkey,
-     l1Provider
-    )
+    const l2Provider = new providers.StaticJsonRpcProvider(args.l2ProviderUrl)
+    const l1Provider = new providers.StaticJsonRpcProvider(args.l1ProviderUrl)
     const l1Signer = new hre.ethers.Wallet(
       args.userkey,
      l1Provider
@@ -86,7 +64,9 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
       l2Provider
     )
     // Use the first configured signer for simplicity
+    console.log('network', hre.network)
     const address = await l1Signer.getAddress()
+    console.log(`Using signer ${address}`)
 
     // Ensure that the signer has a balance before trying to
     // do anything
@@ -97,10 +77,9 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
 
     const l2ChainId = await l2Signer.getChainId()
     let contractAddrs = CONTRACT_ADDRESSES[l2ChainId]
-    if (book) {
-      // const data = await fs.readFile(args.l1ContractsJsonPath)
-      const json  = book as any
-      // const json = JSON.parse(data.toString())
+    if (args.l1ContractsJsonPath) {
+      const data = await fs.readFile(args.l1ContractsJsonPath)
+      const json = JSON.parse(data.toString())
       contractAddrs = {
         l1: {
           AddressManager: json.AddressManager,
@@ -111,11 +90,9 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
           BondManager: ethers.constants.AddressZero,
           OptimismPortal: json.OptimismPortalProxy,
           L2OutputOracle: json.L2OutputOracleProxy,
-          ETHYieldManager: json.ETHYieldManagerProxy
         },
         l2: DEFAULT_L2_CONTRACT_ADDRESSES,
       } as OEContractsLike
-      console.log(contractAddrs)
     } else if (!contractAddrs) {
       // If the contract addresses have not been hardcoded,
       // attempt to read them from deployment artifacts
@@ -169,6 +146,7 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
       }
     }
 
+    console.log(`OptimismPortal: ${contractAddrs.l1.OptimismPortal}`)
     const OptimismPortal = new hre.ethers.Contract(
       contractAddrs.l1.OptimismPortal,
       Artifact__OptimismPortal.abi,
@@ -193,17 +171,12 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
      l1Signer
     )
 
-    const ETHYieldManager = new hre.ethers.Contract(
-      contractAddrs.l1.ETHYieldManager,
-      Artifact__ETHYieldManager.abi,
-     adminSigner
-    )
-
     const L2ToL1MessagePasser = new hre.ethers.Contract(
       predeploys.L2ToL1MessagePasser,
       Artifact__L2ToL1MessagePasser.abi
     )
 
+    console.log(predeploys.L2CrossDomainMessenger)
     const L2CrossDomainMessenger = new hre.ethers.Contract(
       predeploys.L2CrossDomainMessenger,
       Artifact__L2CrossDomainMessenger.abi
@@ -212,11 +185,6 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
     const L2StandardBridge = new hre.ethers.Contract(
       predeploys.L2StandardBridge,
       Artifact__L2StandardBridge.abi
-    )
-
-    const L2BlastBridge = new hre.ethers.Contract(
-      predeploys.L2BlastBridge,
-      Artifact__L2BlastBridge.abi
     )
 
     const messenger = new CrossChainMessenger({
@@ -228,202 +196,201 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
       contracts: contractAddrs,
     })
 
-    const opBalance = await l1Signer!.provider!.getBalance(
-      ETHYieldManager.address
+    const opBalance= await l1Signer!.provider!.getBalance(
+      OptimismPortal.address
     )
 
+    const l1BridgeBalance= await l1Signer!.provider!.getBalance(
+      L1StandardBridge.address
+    )
 
-    let ethWithdrawReceipt: providers.TransactionReceipt;
+    console.log(`L1StandardBridge balance: ${formatEther(l1BridgeBalance)}`)
+
+    console.log(`Optimism Portal balance: ${formatEther(opBalance)}`)
+
     console.log('Withdrawing ETH')
-    if (args.bridge === 'blast') {
-      const tx = await l2Signer.sendTransaction({
-        to: L2BlastBridge.address,
-        value: withdrawAmount 
-      });
-      console.log(`Transaction hash: ${tx.hash}`)
-      ethWithdrawReceipt = await tx.wait();
+    const ethWithdraw = await messenger.withdrawETH(withdrawAmount)
+    console.log(`Transaction hash: ${ethWithdraw.hash}`)
+    const ethWithdrawReceipt = await ethWithdraw.wait()
+    console.log(
+      `ETH withdrawn on L2 - included in block ${ethWithdrawReceipt.blockNumber}`
+    )
 
-    } else if (args.bridge === 'standard'){
-      const tx = await l2Signer.sendTransaction({
-        to: L2StandardBridge.address,
-        value: withdrawAmount 
-      });
-      console.log(`Transaction hash: ${tx.hash}`)
-      ethWithdrawReceipt = await tx.wait();
-    } else {
-     const ethWithdraw = await messenger.withdrawETH(withdrawAmount)
-     console.log(`Transaction hash: ${ethWithdraw.hash}`)
-     ethWithdrawReceipt = await ethWithdraw.wait()
+    {
+      // check the logs
+      for (const log of ethWithdrawReceipt.logs) {
+        switch (log.address) {
+          case L2ToL1MessagePasser.address: {
+            const parsed = L2ToL1MessagePasser.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            break
+          }
+          case L2StandardBridge.address: {
+            const parsed = L2StandardBridge.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            break
+          }
+          case L2CrossDomainMessenger.address: {
+            const parsed = L2CrossDomainMessenger.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            break
+          }
+          default: {
+            console.log(`Unknown log from ${log.address} - ${log.topics[0]}`)
+          }
+        }
+      }
     }
 
+    console.log('Waiting to be able to prove withdrawal')
 
+    const proveInterval = setInterval(async () => {
+      const currentStatus = await messenger.getMessageStatus(ethWithdrawReceipt)
+      console.log(`Message status: ${MessageStatus[currentStatus]}`)
+      const latest = await L2OutputOracle.latestBlockNumber()
+      console.log(
+        `Latest L2OutputOracle commitment number: ${latest.toString()}`
+      )
+      const tip = await l1Signer.provider!.getBlockNumber()
+      console.log(`L1 chain tip: ${tip.toString()}`)
+    }, 3000)
 
-     console.log(
-       `ETH withdrawn on L2 - included in block ${ethWithdrawReceipt.blockNumber}`
-     )
+    try {
+      await messenger.waitForMessageStatus(
+        ethWithdrawReceipt,
+        MessageStatus.READY_TO_PROVE
+      )
+    } finally {
+      clearInterval(proveInterval)
+    }
 
-       type WithdrawalTransaction =  {nonce: BigNumber, sender: string, target: string, value: BigNumber, gasLimit: BigNumber, data: string }
-       let wt: null | WithdrawalTransaction = null
-     {
-       // check the logs
+    console.log('Proving eth withdrawal...')
+    const ethProve = await messenger.proveMessage(ethWithdrawReceipt)
+    console.log(`Transaction hash: ${ethProve.hash}`)
+    const ethProveReceipt = await ethProve.wait()
+    if (ethProveReceipt.status !== 1) {
+      throw new Error('Prove withdrawal transaction reverted')
+    }
+    console.log('Successfully proved withdrawal')
 
-       for (const log of ethWithdrawReceipt.logs) {
-         switch (log.address) {
-           case L2ToL1MessagePasser.address: {
-             const parsed = L2ToL1MessagePasser.interface.parseLog(log)
-             // console.log(parsed.name)
-             // console.log(parsed.args)
-             // console.log()
-             if (parsed.name == 'MessagePassed') {
-               wt = parsed.args as any
-             }
-             break
-           }
-           case L2StandardBridge.address: {
-             const parsed = L2StandardBridge.interface.parseLog(log)
-             // console.log(parsed.name)
-             // console.log(parsed.args)
-             // console.log()
-             break
-           }
-           case L2CrossDomainMessenger.address: {
-             const parsed = L2CrossDomainMessenger.interface.parseLog(log)
-             // console.log(parsed.name)
-             // console.log(parsed.args)
-             // console.log()
-             break
-           }
-           default: {
-             console.log(`Unknown log from ${log.address} - ${log.topics[0]}`)
-           }
-         }
-       }
-     }
-     if (wt === null) {
-       console.log('couldnt find log')
-       throw new Error()
-     }
-     console.log("withdrawal transaction parameters", JSON.stringify(wt))
+    console.log('Waiting to be able to finalize withdrawal')
 
+    const finalizeInterval = setInterval(async () => {
+      const currentStatus = await messenger.getMessageStatus(ethWithdrawReceipt)
+      console.log(`Message status: ${MessageStatus[currentStatus]}`)
+    }, 3000)
 
-     console.log('Waiting to be able to prove withdrawal')
-     let latestNumber = 0
+    try {
+      await messenger.waitForMessageStatus(
+        ethWithdrawReceipt,
+        MessageStatus.READY_FOR_RELAY
+      )
+    } finally {
+      clearInterval(finalizeInterval)
+    }
 
-     const proveInterval = setInterval(async () => {
-       const currentStatus = await messenger.getMessageStatus(ethWithdrawReceipt)
-       const latest = await L2OutputOracle.latestBlockNumber()
-       if (latestNumber != latest.toNumber()) {
-       console.log(`Message status: ${MessageStatus[currentStatus]}`)
-        console.log(
-          `Latest L2OutputOracle commitment number: ${latest.toString()}`
-        )
-        latestNumber = latest.toNumber()
-       }
-
-       // const tip = await l1Signer.provider!.getBlockNumber()
-       // console.log(`L1 chain tip: ${tip.toString()}`)
-     }, 3000)
-
-     try {
-       await messenger.waitForMessageStatus(
-         ethWithdrawReceipt,
-         MessageStatus.READY_TO_PROVE
-       )
-     } finally {
-       clearInterval(proveInterval)
-     }
-
-     console.log('Proving eth withdrawal...')
-     const ethProve = await messenger.proveMessage(ethWithdrawReceipt)
-     console.log(`Transaction hash: ${ethProve.hash}`)
-     const ethProveReceipt = await ethProve.wait()
-     // console.log({ethProve})
-     // console.log({ethProveReceipt})
-
-     if (ethProveReceipt.status !== 1) {
-       throw new Error('Prove withdrawal transaction reverted')
-     }
-     console.log('Successfully proved withdrawal')
-
-     console.log('Waiting to be able to finalize withdrawal')
-
-     const finalizeInterval = setInterval(async () => {
-       const currentStatus = await messenger.getMessageStatus(ethWithdrawReceipt)
-       // console.log(`Message status: ${MessageStatus[currentStatus]}`)
-     }, 3000)
-
-     try {
-       await messenger.waitForMessageStatus(
-         ethWithdrawReceipt,
-         MessageStatus.READY_FOR_RELAY
-       )
-     } finally {
-       clearInterval(finalizeInterval)
-     }
-
-     let requestId
-     for (const log of ethProveReceipt.logs) {
-      console.log(log)
-       switch (log.address.toLowerCase()) {
-         case OptimismPortal.address.toLowerCase(): {
-           const parsed = OptimismPortal.interface.parseLog(log)
-           console.log(parsed)
-           if (parsed.name === 'WithdrawalProven') {
-             requestId = parsed.args.requestId
-           }
-         }
-       }
-     }
-
-     console.log('eth yield manager finalizing requests')
-     console.log(requestId)
-     const gasLimit = 600000 // Set your desired gas limit here
-     const response = await ETHYieldManager.finalize(BigNumber.from(requestId), {gasLimit})
-     const finalizeResonseLogs = await response.wait()
-     console.log('get hint from eth yield manager')
-    const hint = await getHintRecursively(ETHYieldManager, requestId, adminSigner, 1)
-    console.log({hint, requestId})
+    let requestId
+    for (const log of ethProveReceipt.logs) {
+      switch (log.address) {
+        case OptimismPortal.address: {
+          const parsed = OptimismPortal.interface.parseLog(log)
+          if (parsed.name === 'WithdrawalProven') {
+            requestId = parsed.args.requestId
+          }
+        }
+      }
+    }
 
     console.log('Fulfilling withdrawal request...')
-     const ethFulfill = await OptimismPortal.connect(adminSigner).finalizeWithdrawalTransaction(
-       hint, 
-       {nonce: wt.nonce, sender: wt.sender, target: wt.target, value: wt.value, gasLimit: wt.gasLimit, data: wt.data}
+    const adminSigner = new hre.ethers.Wallet(args.adminkey, l1Provider)
+    const ethFulfill = await OptimismPortal.connect(adminSigner).finalize(
+      requestId
     )
-     console.log(`Transaction hash: ${ethFulfill.hash}`)
-     const ethFulfillReceipt = await ethFulfill.wait()
-     if (ethFulfillReceipt.status !== 1) {
-       throw new Error('Fulfill withdrawal reverted')
-     }
+    console.log(`Transaction hash: ${ethFulfill.hash}`)
+    const ethFulfillReceipt = await ethFulfill.wait()
+    if (ethFulfillReceipt.status !== 1) {
+      throw new Error('Fulfill withdrawal reverted')
+    }
+
+    console.log('Finalizing eth withdrawal...')
+    const ethFinalize = await messenger.finalizeMessage(ethWithdrawReceipt)
+    console.log(`Transaction hash: ${ethFinalize.hash}`)
+    const ethFinalizeReceipt = await ethFinalize.wait()
+    if (ethFinalizeReceipt.status !== 1) {
+      throw new Error('Finalize withdrawal reverted')
+    }
+
+    console.log(
+      `ETH withdrawal complete - included in block ${ethFinalizeReceipt.blockNumber}`
+    )
+    {
+      // Check that the logs are correct
+      for (const log of ethFinalizeReceipt.logs) {
+        switch (log.address) {
+          case L1StandardBridge.address: {
+            const parsed = L1StandardBridge.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            if (
+              parsed.name !== 'ETHBridgeFinalized' &&
+              parsed.name !== 'ETHWithdrawalFinalized'
+            ) {
+              throw new Error('Wrong event name from L1StandardBridge')
+            }
+            if (!parsed.args.amount.eq(withdrawAmount)) {
+              throw new Error('Wrong amount in event')
+            }
+            if (parsed.args.from !== address) {
+              throw new Error('Wrong to in event')
+            }
+            if (parsed.args.to !== address) {
+              throw new Error('Wrong from in event')
+            }
+            break
+          }
+          case L1CrossDomainMessenger.address: {
+            const parsed = L1CrossDomainMessenger.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            if (parsed.name !== 'RelayedMessage') {
+              throw new Error('Wrong event from L1CrossDomainMessenger')
+            }
+            break
+          }
+          case OptimismPortal.address: {
+            const parsed = OptimismPortal.interface.parseLog(log)
+            console.log(parsed.name)
+            console.log(parsed.args)
+            console.log()
+            // TODO: remove this if check
+            if (parsed.name === 'WithdrawalFinalized') {
+              if (parsed.args.success !== true) {
+                throw new Error('Unsuccessful withdrawal call')
+              }
+            }
+            break
+          }
+          default: {
+            console.log(`Unknown log from ${log.address} - ${log.topics[0]}`)
+          }
+        }
+      }
+    }
+
+    const opBalanceFinally = await l1Signer!.provider!.getBalance(
+      OptimismPortal.address
+    )
+
+    if (!opBalanceFinally.eq(opBalance)) {
+      throw new Error('OptimismPortal balance mismatch')
+    }
     console.log('Withdraw success')
   })
-
-function reverseObject(obj: Record<string, string>) {
-    const reversed = {};
-    for (let key in obj) {
-        if (obj.hasOwnProperty(key)) {
-            reversed[obj[key]] = key;
-        }
-    }
-    return reversed;
-}
-async function getHint(yieldManager: ethers.Contract, requestId: number, signer: Wallet) {
-    const lastCheckpointId: BigNumber = await yieldManager.connect(signer).getLastCheckpointId()
-    console.log({lastCheckpointId})
-    const hint: BigNumber = await yieldManager.connect(signer).findCheckpointHint(requestId, 1, lastCheckpointId)
-    if (hint.eq(BigNumber.from(0))) {
-      throw new Error("cound not find hint")
-    }
-    return hint
-  }
-
-async function getHintRecursively(yieldManager: ethers.Contract, requestId: number, signer: Wallet, lastCheckpointId: number) {
-  try {
-    const hint: BigNumber = await yieldManager.connect(signer).findCheckpointHint(requestId, 1, lastCheckpointId)
-    if (hint.eq(BigNumber.from(0))) {
-      return await getHintRecursively(yieldManager, requestId, signer, lastCheckpointId+1)
-    }
-    return hint
-  } catch (err) {
-    throw new Error(err)
-  }
-}

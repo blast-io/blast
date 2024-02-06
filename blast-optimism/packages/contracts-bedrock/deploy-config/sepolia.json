@@ -1,7 +1,6 @@
 {
   "finalSystemOwner": "0xfd1D2e729aE8eEe2E146c033bf4400fE75284301",
   "portalGuardian": "0xfd1D2e729aE8eEe2E146c033bf4400fE75284301",
-  "yieldManagerAdmin": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
   "l1StartingBlockTag": "0x48f520cf4ddaf34c8336e6e490632ea3cf1e5e93b0b2bc6e917557e31845371b",
   "l1ChainID": 11155111,
   "l2ChainID": 11155420,
@@ -42,21 +41,5 @@
   "l2GenesisRegolithTimeOffset": "0x0",
   "systemConfigStartBlock": 0,
   "requiredProtocolVersion": "0x0000000000000000000000000000000000000003000000010000000000000001",
-  "recommendedProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
-
-  "sharesPrice": "0x3B9ACA00",
-
-  "gasAdmin": "0xa6b8cfd7588f6d52b3913c520894facd3fbc1a1e",
-  "yieldContract": "0x0000000000000000000000000000000000000100",
-
-  "zeroClaimRate": "0x1F4",
-  "baseClaimRate": "0x7D0",
-  "ceilClaimRate": "0x2710",
-  "baseGasSeconds": "0x93A80",
-  "ceilGasSeconds": "0x375F00",
-
-  "ethInsuranceFee": "0x3e8",
-  "ethWithdrawalBuffer": "0xa",
-  "usdInsuranceFee": "0x3e8",
-  "usdWithdrawalBuffer": "0x0"
+  "recommendedProtocolVersion": "0x0000000000000000000000000000000000000003000000010000000000000001"
 }

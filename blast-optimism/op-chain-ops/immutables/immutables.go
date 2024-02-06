@@ -56,41 +56,15 @@ func (i ImmutableConfig) Check() error {
 	if _, ok := i["BaseFeeVault"]["recipient"]; !ok {
 		return errors.New("BaseFeeVault recipient not set")
 	}
+	if _, ok := i["Shares"]["price"]; !ok {
+		return errors.New("Shares price not set")
+	}
 	if _, ok := i["Gas"]["baseClaimRate"]; !ok {
 		return errors.New("Gas baseClaimRate not set")
 	}
 	if _, ok := i["L2BlastBridge"]["otherBridge"]; !ok {
 		return errors.New("L2BlastBridge otherBridge not set")
 	}
-
-	if _, ok := i["Shares"]["reporter"]; !ok {
-		return errors.New("Shares reporter not set")
-	}
-	if _, ok := i["Gas"]["admin"]; !ok {
-		return errors.New("Gas Admin not set")
-	}
-	if _, ok := i["Gas"]["zeroClaimRate"]; !ok {
-		return errors.New("Gas zeroClaimRate not set")
-	}
-	if _, ok := i["Gas"]["baseGasSeconds"]; !ok {
-		return errors.New("Gas baseGasSeconds not set")
-	}
-	if _, ok := i["Gas"]["ceilGasSeconds"]; !ok {
-		return errors.New("Gas ceilGasSeconds not set")
-	}
-	if _, ok := i["Gas"]["ceilClaimRate"]; !ok {
-		return errors.New("Gas ceilClaimRate not set")
-	}
-	if _, ok := i["Blast"]["yieldContract"]; !ok {
-		return errors.New("Blast yieldContract not set")
-	}
-	if _, ok := i["USDB"]["usdYieldManager"]; !ok {
-		return errors.New("USDB usdYieldManager not set")
-	}
-	if _, ok := i["USDB"]["remoteToken"]; !ok {
-		return errors.New("USDB remoteToken not set")
-	}
-
 	return nil
 }
 
@@ -188,6 +162,7 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 		{
 			Name: "Shares",
 			Args: []interface{}{
+				immutable["Shares"]["price"],
 				immutable["Shares"]["reporter"],
 			},
 		},
@@ -223,9 +198,8 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 		{
 			Name: "USDB",
 			Args: []interface{}{
-				immutable["USDB"]["usdYieldManager"],
 				common.HexToAddress(predeploys.L2BlastBridge),
-				immutable["USDB"]["remoteToken"],
+				common.HexToAddress("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
 			},
 		},
 	}
@@ -324,25 +298,25 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 	case "SchemaRegistry":
 		_, tx, _, err = bindings.DeploySchemaRegistry(opts, backend)
 	case "Shares":
-		reporter, ok := deployment.Args[0].(common.Address)
+		sharePrice, ok := deployment.Args[0].(*hexutil.Big)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for sharePrice")
+		}
+		reporter, ok := deployment.Args[1].(common.Address)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for reporter")
 		}
-		_, tx, _, err = bindings.DeployShares(opts, backend, reporter)
+		_, tx, _, err = bindings.DeployShares(opts, backend, sharePrice.ToInt(), reporter)
 	case "USDB":
-		usdYieldManager, ok := deployment.Args[0].(common.Address)
+		bridge, ok := deployment.Args[0].(common.Address)
 		if !ok {
-			return nil, fmt.Errorf("invalid type for usdYieldManager")
+			return nil, fmt.Errorf("invalid type for bridge")
 		}
-		l2Bridge, ok := deployment.Args[1].(common.Address)
-		if !ok {
-			return nil, fmt.Errorf("invalid type for l2Bridge")
-		}
-		remoteToken, ok := deployment.Args[2].(common.Address)
+		remoteToken, ok := deployment.Args[1].(common.Address)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for remoteToken")
 		}
-		_, tx, _, err = bindings.DeployUSDB(opts, backend, usdYieldManager, l2Bridge, remoteToken)
+		_, tx, _, err = bindings.DeployUSDB(opts, backend, bridge, remoteToken)
 	case "WETHRebasing":
 		_, tx, _, err = bindings.DeployWETHRebasing(opts, backend)
 	case "L2BlastBridge":

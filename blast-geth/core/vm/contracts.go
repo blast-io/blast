@@ -1214,11 +1214,6 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 	}
 
 	if bytes.Equal(selector, claimSelector) {
-		// authorize contract
-		if caller != params.BlastAccountConfigurationAddress {
-			return nil, ErrExecutionReverted
-		}
-
 		contract, err := solidityInput.readAddress()
 		if err != nil {
 			return nil, err
@@ -1227,7 +1222,7 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 		if err != nil {
 			return nil, err
 		}
-		amount, err := solidityInput.readU256()
+		desiredAmount, err := solidityInput.readU256()
 		if err != nil {
 			return nil, err
 		}
@@ -1236,7 +1231,12 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 		}
 
 		// validate that desired amount is > 0
-		if amount.Sign() < 0 {
+		if desiredAmount.Sign() < 0 {
+			return nil, ErrExecutionReverted
+		}
+
+		// authorize contract
+		if caller != params.BlastAccountConfigurationAddress {
 			return nil, ErrExecutionReverted
 		}
 
@@ -1247,8 +1247,12 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 
 		claimableAmount := db.GetClaimableAmount(contract)
 
-		if claimableAmount.Cmp(amount) < 0 {
-			return nil, ErrExecutionReverted
+		var amount *big.Int
+
+		if claimableAmount.Cmp(desiredAmount) < 0 {
+			amount = claimableAmount
+		} else {
+			amount = desiredAmount
 		}
 
 		if amount.Sign() > 0 {
@@ -1258,11 +1262,6 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 
 		return common.BigToHash(amount).Bytes(), nil
 	} else if bytes.Equal(selector, configureSelector) {
-		// authorize contract
-		if caller != params.BlastAccountConfigurationAddress {
-			return nil, ErrExecutionReverted
-		}
-
 		contract, err := solidityInput.readAddress()
 		if err != nil {
 			return nil, err
@@ -1272,6 +1271,11 @@ func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bo
 			return nil, err
 		}
 		if readOnly || flags > 2 {
+			return nil, ErrExecutionReverted
+		}
+
+		// authorize contract
+		if caller != params.BlastAccountConfigurationAddress {
 			return nil, ErrExecutionReverted
 		}
 

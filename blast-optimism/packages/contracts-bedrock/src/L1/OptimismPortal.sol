@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -12,6 +12,7 @@ import { SecureMerkleTrie } from "src/libraries/trie/SecureMerkleTrie.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { ISemver } from "src/universal/ISemver.sol";
+import { Constants } from "src/libraries/Constants.sol";
 import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 
@@ -23,7 +24,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @notice Represents a proven withdrawal.
     /// @custom:field outputRoot    Root of the L2 output this was proven against.
-    /// @custom:field timestamp     Timestamp at which the withdrawal was proven.
+    /// @custom:field timestamp     Timestamp at whcih the withdrawal was proven.
     /// @custom:field l2OutputIndex Index of the output this was proven against.
     struct ProvenWithdrawal {
         bytes32 outputRoot;
@@ -42,8 +43,8 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     uint64 internal constant SEND_DEFAULT_GAS_LIMIT = 100_000;
 
     /// @notice Address of the L2 account which initiated a withdrawal in this transaction.
-    ///         If the address of this variable is the default L2 sender address, then we
-    ///         are NOT inside of a call to finalizeWithdrawalTransaction.
+    ///         If the of this variable is the default L2 sender address, then we are NOT inside of
+    ///         a call to finalizeWithdrawalTransaction.
     address public l2Sender;
 
     /// @notice A list of withdrawal hashes which have been successfully finalized.
@@ -85,7 +86,6 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @param withdrawalHash Hash of the withdrawal transaction.
     /// @param from           Address that triggered the withdrawal transaction.
     /// @param to             Address that the withdrawal transaction is directed to.
-    /// @param requestId      Id of the withdrawal request
     event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to, uint256 requestId);
 
     /// @notice Emitted when a withdrawal transaction is finalized.
@@ -200,6 +200,13 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         }
     }
 
+    /// @notice Accepts ETH value without triggering a deposit to L2.
+    ///         This function mainly exists for the sake of the migration between the legacy
+    ///         Optimism system and Bedrock.
+    function donateETH() external payable {
+        // Intentionally empty.
+    }
+
     /// @notice Getter for the resource config.
     ///         Used internally by the ResourceMetering contract.
     ///         The SystemConfig is the source of truth for the resource config.
@@ -282,8 +289,6 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
             // If withdrawal is being re-proven, then set original requestId.
             requestId = provenWithdrawal.requestId;
         }
-
-        require(_tx.target != address(yieldManager), "OptimismPortal: unauthorized call to yield manager");
 
         // Designate the withdrawalHash as proven by storing the `outputRoot`, `timestamp`, and
         // `l2BlockNumber` in the `provenWithdrawals` mapping. A `withdrawalHash` can only be
@@ -457,7 +462,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
             opaqueData = abi.encodePacked(msg.value, _value, _gasLimit, _isCreation, _data);
         }
 
-        // Blast: Send the received ether to the yield manager to handle staking the funds.
+        // Blast: Send the recieved ether to the yield manager to handle staking the funds.
         if (msg.value > 0) {
             (bool success) = SafeCall.send(address(yieldManager), SEND_DEFAULT_GAS_LIMIT, msg.value);
             require(success, "OptimismPortal: ETH transfer to YieldManager failed");

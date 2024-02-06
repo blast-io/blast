@@ -121,10 +121,6 @@ devnet-up: pre-devnet
 .PHONY: devnet-up
 
 devnet-up-fork: pre-devnet
-	if [ ! -d .devnet ]; then \
-		mkdir .devnet; \
-	fi
-	cp ./packages/contracts-bedrock/dump.json ./.devnet/fork-state.json
 	./ops/scripts/newer-file.sh .devnet/allocs-l1.json ./packages/contracts-bedrock \
 		|| make devnet-allocs-fork
 	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/fork.py --monorepo-dir=.

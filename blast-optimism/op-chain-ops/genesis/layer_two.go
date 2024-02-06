@@ -42,13 +42,8 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		return nil, err
 	}
 
-	// Set up base optimism proxies
+	// Set up the proxies
 	err = setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
-	if err != nil {
-		return nil, err
-	}
-	// set up blast proxies
-	err = setProxies(db, predeploys.ProxyAdminAddr, BlastBigL2PredeployNamespace, 2048)
 	if err != nil {
 		return nil, err
 	}
@@ -76,8 +71,9 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 			log.Info("Set proxy", "name", name, "address", addr, "implementation", codeAddr)
 		} else if db.Exist(addr) {
 			db.DeleteState(addr, AdminSlot)
+		} else {
+			db.CreateAccount(addr)
 		}
-
 		if err := setupPredeploy(db, deployResults, storage, name, addr, codeAddr); err != nil {
 			return nil, err
 		}
@@ -89,9 +85,6 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 			return nil, fmt.Errorf("code not set for %s", name)
 		}
 	}
-
-	// set flag for weth rebasing contract to automatic on genesis
-	db.SetFlags(predeploys.WETHRebasingAddr, 0)
 
 	return db.Genesis(), nil
 }

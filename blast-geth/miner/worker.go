@@ -1073,6 +1073,7 @@ func (w *worker) generateWork(genParams *generateParams) *newPayloadResult {
 	}
 
 	misc.EnsureCreate2Deployer(w.chainConfig, work.header.Time, work.state)
+	misc.EnsureUpdateGas(w.chainConfig, work.header.Time, work.state)
 
 	for _, tx := range genParams.txs {
 		from, _ := types.Sender(work.signer, tx)

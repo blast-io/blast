@@ -5,6 +5,7 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { Ownable2StepUpgradeable } from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import { SignedMath } from "@openzeppelin/contracts/utils/math/SignedMath.sol";
+import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
@@ -17,10 +18,6 @@ import { USDConversions } from "src/mainnet-bridge/USDConversions.sol";
 import { Semver } from "src/universal/Semver.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
-
-interface IInsurance {
-    function coverLoss(address token, uint256 amount) external;
-}
 
 /// @title YieldManager
 /// @notice Base contract to centralize accounting, asset management and
@@ -76,9 +73,9 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
     struct ProviderInfo {
         bytes32 id;
         address providerAddress;
-        uint256 stakedBalance;
+        uint256 stakedValue;
         uint256 pendingBalance;
-        uint256 stakedPrincipal;
+        uint256 stakedBalance;
         uint256 totalValue;
         int256 yield;
     }
@@ -103,19 +100,11 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
     error CallerIsNotBlastBridge();
     error ProviderNotFound();
     error YieldProviderIsNotMeantForThisManager();
-    error NegativeYieldIncrease();
+    error UnsupportedToken();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) {
             revert CallerIsNotAdmin();
-        }
-        _;
-    }
-
-    /// @notice Modifier only allowing the L1BlastBridge to call a function.
-    modifier onlyBlastBridge() {
-        if (msg.sender != blastBridge) {
-            revert CallerIsNotBlastBridge();
         }
         _;
     }
@@ -125,13 +114,12 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
 
     /// @notice initializer
     /// @param _portal Address of the OptimismPortal.
-    /// @param _owner  Address of the YieldManager owner.
-    function __YieldManager_init(OptimismPortal _portal, address _owner) internal onlyInitializing {
+    function __YieldManager_init(OptimismPortal _portal) internal onlyInitializing {
         __Ownable2Step_init();
         __WithdrawalQueue_init();
-        _transferOwnership(_owner);
 
         portal = _portal;
+        admin = msg.sender;
     }
 
     /* ========== OWNER FUNCTIONS ========== */
@@ -195,7 +183,7 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
         if (_providers.at(idx) != providerAddress) {
             revert ProviderAddressDoesNotMatchIndex();
         }
-        _delegatecall_stake(providerAddress, amount);
+        _delegatecall_uint256_arg(providerAddress, stake_signature, amount);
         YieldProvider(providerAddress).recordStakedDeposit(amount);
     }
 
@@ -210,8 +198,26 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
         if (_providers.at(idx) != providerAddress) {
             revert ProviderAddressDoesNotMatchIndex();
         }
-        (uint256 pending, uint256 claimed) = _delegatecall_unstake(providerAddress, amount);
-        YieldProvider(providerAddress).recordUnstaked(pending, claimed, amount);
+        uint256 pending = _delegatecall_uint256_arg_returns_uint256(providerAddress, unstake_signature, amount);
+        YieldProvider(providerAddress).recordStakedWithdraw(amount);
+        if (pending > 0) {
+            YieldProvider(providerAddress).recordPending(pending);
+        } else {
+            YieldProvider(providerAddress).recordClaimed(amount);
+        }
+    }
+
+    /// @notice Claim pending funds. Needed only for some yield providers that require two-step
+    ///         withdrawal (e.g. Lido).
+    /// @param idx             Index of the provider.
+    /// @param providerAddress Address of the provider at index 'idx'.
+    /// @param requestIds Array of the request ids to claim.
+    function claimPending(uint256 idx, address providerAddress, uint256[] calldata requestIds) external onlyAdmin {
+        if (_providers.at(idx) != providerAddress) {
+            revert ProviderAddressDoesNotMatchIndex();
+        }
+        uint256 claimed = _delegatecall_uint256_arr_arg_returns_uint256(providerAddress, claim_signature, requestIds);
+        YieldProvider(providerAddress).recordClaimed(claimed);
     }
 
     /// @notice Commit yield report.
@@ -219,20 +225,15 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
     ///        and paid out for negative yields. If false, negative yields will
     ///        accumulate and withdrawals will be discounted. If true (and insurance
     ///        is supported by the provider), it will guarantee that committed yield
-    ///        is always non-negative, or else revert. It also guarantees that
-    ///        accumulated negative yields never increase.
-    function commitYieldReport(bool enableInsurance) public onlyAdmin {
+    ///        is always non-negative, or else revert.
+    function commitYieldReport(bool enableInsurance) external onlyAdmin {
         uint256 providersLength = _providers.length();
-        uint256 negativeYieldBefore = accumulatedNegativeYields;
         uint256 totalInsurancePremiumPaid;
         uint256 totalInsuranceWithdrawal;
         int256 totalYield;
 
         // For each provider, commit yield after paying to/from the insurance as necessary
         for (uint256 i; i < providersLength; i++) {
-            // run the pre-commit yield report hook
-            _delegatecall_preCommitYieldReportDelegateCallHook(_providers.at(i));
-
             // read the current yield from the provider
             int256 yield = YieldProvider(_providers.at(i)).yield();
             uint256 insurancePayment;
@@ -246,7 +247,7 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
                 if (yield > 0) {
                     // pay the insurance premium
                     insurancePayment = uint256(yield) * insuranceFeeBips / BASIS_POINTS;
-                    _delegatecall_payInsurancePremium(_providers.at(i), insurancePayment);
+                    _delegatecall_uint256_arg(_providers.at(i), payInsurancePremium_signature, insurancePayment);
                     totalInsurancePremiumPaid += insurancePayment;
                 } else if (yield < 0) {
                     // withdraw from the insurance to cover the loss
@@ -255,7 +256,7 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
                     if (insuranceBalance < insuranceWithdrawal) {
                         revert InsufficientInsuranceBalance();
                     }
-                    _delegatecall_withdrawFromInsurance(_providers.at(i), insuranceWithdrawal);
+                    _delegatecall_uint256_arg(_providers.at(i), withdrawFromInsurance_signature, insuranceWithdrawal);
                     totalInsuranceWithdrawal += insuranceWithdrawal;
                 }
             }
@@ -298,48 +299,28 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
                 );
             }
         }
-
-        if (enableInsurance && accumulatedNegativeYields > negativeYieldBefore) {
-            revert NegativeYieldIncrease();
-        }
-    }
-
-    /// @notice Helper function to atomically withdraw from insurance and commit yield report.
-    ///         This function can be used to maintain share price = 1e27 when yield from
-    ///         the registered providers is not sufficient to cover negative yield from
-    ///         LidoYieldProvider._claim().
-    function commitYieldReportAfterInsuranceWithdrawal(
-        address token,
-        uint256 amount
-    ) external onlyAdmin {
-        require(insurance != address(0));
-        IInsurance(insurance).coverLoss(token, amount);
-        commitYieldReport(true);
-    }
-
-    /// @notice Report realized negative yield. This is meant to be called inside a YieldProvider
-    ///         method that is executed via 'delegatecall' by the YieldManager.
-    function recordNegativeYield(uint256 amount) external {
-        require(msg.sender == address(this), "Caller is not this contract");
-        accumulatedNegativeYields += amount;
     }
 
     /// @notice Finalize withdrawal requests up to 'requestId'.
     /// @param requestId Last request id to finalize in this batch.
     function finalize(uint256 requestId) external onlyAdmin returns (uint256 checkpointId) {
         uint256 nominalAmount; uint256 realAmount;
-        (nominalAmount, realAmount, checkpointId) = _finalize(requestId, availableBalance(), sharePrice());
+        (nominalAmount, realAmount, checkpointId) = _finalize(requestId, getTokenBalance(), sharePrice());
         // nominalAmount - realAmount is the share of the accumulated negative yield
         // that should be paid by the current withdrawal
-        if (nominalAmount > realAmount) {
-            accumulatedNegativeYields = _subClamped(accumulatedNegativeYields, nominalAmount - realAmount);
+        if (accumulatedNegativeYields > 0) {
+            accumulatedNegativeYields -= (nominalAmount - realAmount);
         }
     }
 
     /* ========== VIRTUAL FUNCTIONS ========== */
 
+    /// @notice Get the balance of the withdrawal token held by the yield manager
+    ///         minus the amount that is locked in the withdrawal queue.
+    function getTokenBalance() public view virtual returns (uint256);
+
     /// @notice Get the amount of the withdrawal token that is held by the yield manager.
-    function tokenBalance() public view virtual returns (uint256);
+    function lockedValue() public view virtual returns (uint256);
 
     /// @notice Send the yield report to the L2 contract that is responsible for
     ///         updating the L2 share price.
@@ -348,22 +329,17 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
 
     /* ========== VIEW FUNCTIONS ========== */
 
-    /// @notice Available balance.
-    function availableBalance() public view returns (uint256) {
-        return tokenBalance() - getLockedBalance();
-    }
-
     /// @notice Get the total value of all yield providers denominated in the withdrawal token.
     function totalProviderValue() public view returns (uint256 sum) {
         uint256 providersLength = _providers.length();
         for (uint256 i; i < providersLength; i++) {
-            sum += YieldProvider(_providers.at(i)).totalValue();
+            sum += YieldProvider(_providers.at(i)).totalProviderValue();
         }
     }
 
-    /// @notice Get the total value of all yield providers plus the available balance value.
+    /// @notice Get the total value of all yield providers plus the locked value.
     function totalValue() public view returns (uint256) {
-        return availableBalance() + totalProviderValue();
+        return lockedValue() + totalProviderValue();
     }
 
     /// @notice Get the share price of the withdrawal token with 1e27 precision.
@@ -388,10 +364,10 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
 
         info.id = provider.id();
         info.providerAddress = address(provider);
-        info.stakedBalance = provider.stakedBalance();
+        info.stakedValue = provider.stakedValue();
         info.pendingBalance = provider.pendingBalance();
-        info.stakedPrincipal = provider.stakedPrincipal();
-        info.totalValue = provider.totalValue();
+        info.stakedBalance = provider.stakedBalance();
+        info.totalValue = provider.totalProviderValue();
         info.yield = provider.yield();
     }
 
@@ -399,17 +375,47 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
     ///         by the provider.
     /// @param providerAddress Address of yield provider.
     /// @param amount          Amount of additional staked funds.
-    function recordStakedDeposit(address providerAddress, uint256 amount) external onlyBlastBridge {
+    function _recordStakedDeposit(address providerAddress, uint256 amount) internal {
         if (!_providers.contains(providerAddress)) {
             revert ProviderNotFound();
         }
         YieldProvider(providerAddress).recordStakedDeposit(amount);
     }
+}
 
-    /// @notice Returns max(0, x - y) without reverting on underflow.
-    function _subClamped(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        unchecked {
-            z = x > y ? x - y : 0;
-        }
+/// @title USDYieldManager
+/// @notice Coordinates the accounting, asset management and
+///         yield reporting from USD yield providers.
+abstract contract USDYieldManager is YieldManager {
+    constructor() YieldManager(0x6B175474E89094C44Da98b954EedeAC495271d0F) {} /// DAI address
+
+    /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
+    ///         A gap size of 41 was chosen here, so that the first slot used in a child contract
+    ///         would be a multiple of 50.
+    uint256[41] private __gap;
+
+    /// @inheritdoc YieldManager
+    function getTokenBalance() public view override returns (uint256) {
+        return IERC20(TOKEN).balanceOf(address(this)) - getLockedAmount();
+    }
+
+    /// @inheritdoc YieldManager
+    function lockedValue() public view override returns (uint256) {
+        return IERC20(TOKEN).balanceOf(address(this));
+    }
+
+    /// @notice Convert between USDC, USDT, and DAI through Curve's 3Pool and Maker's
+    ///         Peg Stability Mechanism.
+    /// @param inputToken  Curve 3Pool token index.
+    /// @param outputToken Curve 3Pool token index.
+    /// @return amountReceived Amount of output token received.
+    function convert(int128 inputToken, int128 outputToken, uint256 inputAmountWad, uint256 minOutputAmountWad) external onlyAdmin returns (uint256 amountReceived) {
+        return USDConversions._convert(inputToken, outputToken, inputAmountWad, minOutputAmountWad);
+    }
+
+    /// @notice Sends the yield report to the USDB contract.
+    /// @param data Calldata to send in the message.
+    function _reportYield(bytes memory data) internal override {
+        portal.depositTransaction(Predeploys.USDB, 0, REPORT_YIELD_DEFAULT_GAS_LIMIT, false, data);
     }
 }

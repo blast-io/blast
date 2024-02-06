@@ -28,9 +28,9 @@ const (
 	Shares                        = "0x4300000000000000000000000000000000000000"
 	Gas                           = "0x4300000000000000000000000000000000000001"
 	Blast                         = "0x4300000000000000000000000000000000000002"
-	USDB                          = "0x4300000000000000000000000000000000000003"
-	WETHRebasing                  = "0x4300000000000000000000000000000000000004"
-	L2BlastBridge                 = "0x4300000000000000000000000000000000000005"
+	USDB                          = "0x4200000000000000000000000000000000000022"
+	WETHRebasing                  = "0x4200000000000000000000000000000000000023"
+	L2BlastBridge                 = "0x4200000000000000000000000000000000000024"
 )
 
 var (
@@ -68,6 +68,9 @@ func IsProxied(predeployAddr common.Address) bool {
 	switch predeployAddr {
 	case WETH9Addr:
 	case GovernanceTokenAddr:
+	case SharesAddr:
+	case GasAddr:
+	case BlastAddr:
 	default:
 		return true
 	}

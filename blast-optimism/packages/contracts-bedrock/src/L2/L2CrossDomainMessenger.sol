@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
@@ -7,7 +7,6 @@ import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { L2ToL1MessagePasser } from "src/L2/L2ToL1MessagePasser.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
 
 /// @custom:proxied
 /// @custom:predeploy 0x4200000000000000000000000000000000000007
@@ -22,18 +21,12 @@ contract L2CrossDomainMessenger is CrossDomainMessenger, ISemver {
     /// @notice Constructs the L2CrossDomainMessenger contract.
     /// @param _l1CrossDomainMessenger Address of the L1CrossDomainMessenger contract.
     constructor(address _l1CrossDomainMessenger) CrossDomainMessenger(_l1CrossDomainMessenger) {
-        _disableInitializers();
+        initialize();
     }
 
     /// @notice Initializer.
     function initialize() public reinitializer(Constants.INITIALIZER) {
         __CrossDomainMessenger_init();
-        Blast(Predeploys.BLAST).configureContract(
-            address(this),
-            YieldMode.VOID,
-            GasMode.VOID,
-            address(0xdead) /// don't set a governor
-        );
     }
 
     /// @custom:legacy
@@ -58,6 +51,6 @@ contract L2CrossDomainMessenger is CrossDomainMessenger, ISemver {
 
     /// @inheritdoc CrossDomainMessenger
     function _isUnsafeTarget(address _target) internal view override returns (bool) {
-        return _target == address(this) || _target == address(Predeploys.L2_TO_L1_MESSAGE_PASSER) || _target == address(Predeploys.BLAST);
+        return _target == address(this) || _target == address(Predeploys.L2_TO_L1_MESSAGE_PASSER);
     }
 }

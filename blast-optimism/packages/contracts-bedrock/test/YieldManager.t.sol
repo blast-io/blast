@@ -12,7 +12,6 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { console } from "forge-std/console.sol";
 
 // Target contract dependencies
-import { Types } from "src/libraries/Types.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
@@ -21,13 +20,10 @@ import { USDConversions } from "src/mainnet-bridge/USDConversions.sol";
 import { DSRYieldProvider, IDsrManager, IPot } from "src/mainnet-bridge/yield-providers/DSRYieldProvider.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
-import { Insurance } from "src/mainnet-bridge/Insurance.sol";
-import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 
 // Target contract
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
-import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
 
 contract Util is Test {
     function assertClose(int256 a, int256 b) internal {
@@ -61,12 +57,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
     error InsufficientInsuranceBalance();
 
     function emulatePositiveYield(uint256 amount) internal {
-        Lido.transfer(address(ethYieldManager), amount);
-    }
-
-    function emulateNegativeYield(uint256 amount) internal {
-        vm.prank(address(ethYieldManager));
-        Lido.transfer(address(this), amount);
+        ILido(LidoAddress).transfer(address(ethYieldManager), amount);
     }
 
     function test_getProviderInfo_succeeds() external {
@@ -75,38 +66,37 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         YieldManager.ProviderInfo memory info = ethYieldManager.getProviderInfoAt(0);
         assertEq(info.providerAddress, address(lidoProvider));
         assertEq(info.id, keccak256(abi.encodePacked("LidoYieldProvider", string(abi.encodePacked("1.0.0")))));
-        assertEq(info.stakedPrincipal, uint256(0));
-        assertClose(info.stakedBalance, 1 ether);
+        assertEq(info.stakedBalance, uint256(0));
+        assertClose(info.stakedValue, 1 ether);
         assertClose(uint256(info.yield), 1 ether);
     }
 
     function test_stake_Lido_succeeds() external {
         vm.deal(address(ethYieldManager), 1 ether);
 
-        uint256 availableBalance = ethYieldManager.availableBalance();
-        assertEq(availableBalance, 1 ether);
+        uint256 lockedValue = ethYieldManager.lockedValue();
+        assertEq(lockedValue, 1 ether);
 
         vm.prank(multisig);
         ethYieldManager.stake(0, address(lidoProvider), 0.4 ether);
         assertEq(address(ethYieldManager).balance, 0.6 ether);
 
         YieldManager.ProviderInfo memory info = ethYieldManager.getProviderInfoAt(0);
-        assertEq(info.stakedPrincipal, uint256(0.4 ether));
-        assertClose(info.stakedBalance, uint256(0.4 ether));
+        assertEq(info.stakedBalance, uint256(0.4 ether));
+        assertClose(info.stakedValue, uint256(0.4 ether));
         assertClose(info.yield, int256(0 ether));
-        assertEq(ethYieldManager.availableBalance(), uint256(0.6 ether));
+        assertEq(ethYieldManager.lockedValue(), uint256(0.6 ether));
         uint256 totalEth = ethYieldManager.totalValue();
         assertClose(totalEth, 1 ether);
     }
 
-    function test_unstake_Lido_succeeds() external { // ensure withdrawal queue is not paused skip(1700000000);
+    function test_unstake_Lido_succeeds() external {
+        // ensure withdrawal queue is not paused
+        skip(1700000000);
         vm.deal(address(ethYieldManager), 1 ether);
 
-        uint256 availableBalance = ethYieldManager.availableBalance();
-        assertEq(availableBalance, 1 ether);
-
-        // avoid paused error
-        vm.warp(1706000000);
+        uint256 lockedValue = ethYieldManager.lockedValue();
+        assertEq(lockedValue, 1 ether);
 
         vm.prank(multisig);
         ethYieldManager.stake(0, address(lidoProvider), 0.4 ether);
@@ -119,14 +109,50 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         YieldManager.ProviderInfo memory info = ethYieldManager.getProviderInfoAt(0);
         assertEq(info.pendingBalance, uint256(0.2 ether));
-        assertEq(info.stakedPrincipal, uint256(0.2 ether));
+        assertEq(info.stakedBalance, uint256(0.2 ether));
+    }
+
+    function test_claimPending_Lido_succeeds() external {
+        vm.pauseGasMetering();
+        // ensure withdrawal queue is not paused
+        skip(1700000000);
+        vm.deal(address(ethYieldManager), 1 ether);
+
+        uint256 lockedValue = ethYieldManager.lockedValue();
+        assertEq(lockedValue, 1 ether);
+
+        vm.startPrank(multisig);
+        ethYieldManager.stake(0, address(lidoProvider), 0.4 ether);
+
+        ethYieldManager.unstake(0, address(lidoProvider), 0.3 ether);
+
+        setUpMockLidoClaim(1, 1, 0.2 ether, address(ethYieldManager));
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = 1;
+        vm.recordLogs();
+        ethYieldManager.claimPending(0, address(lidoProvider), requestIds);
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+
+        // ensure there's no DepositedTransaction event
+        assertEq(entries.length, 1);
+        assertEq(entries[0].topics[0], keccak256("Claimed(bytes32,uint256)"));
+        assertEq(entries[0].topics[1], YieldProvider(lidoProvider).id());
+        uint256 claimed = abi.decode(entries[0].data, (uint256));
+        assertEq(claimed, uint256(0.2 ether));
+
+        assertEq(ethYieldManager.lockedValue(), 0.8 ether);
+        YieldManager.ProviderInfo memory info = ethYieldManager.getProviderInfoAt(0);
+        assertEq(info.pendingBalance, uint256(0.1 ether));  // 0.3 - 0.2
+        assertEq(info.stakedBalance, uint256(0.1 ether));   // 0.4 - 0.3
+        assertClose(info.stakedValue, uint256(0.1 ether));  // 0.4 - 0.3
+        assertClose(info.totalValue, uint256(0.2 ether));   // 0.4 - 0.2
     }
 
     function test_recordStakedDeposit_Lido_succeeds() external {
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), 0.4 ether);
         YieldManager.ProviderInfo memory info = ethYieldManager.getProviderInfoAt(0);
-        assertEq(info.stakedPrincipal, uint256(0.4 ether));
+        assertEq(info.stakedBalance, uint256(0.4 ether));
     }
 
     function test_commitYieldReport_positive_yield_no_insurance_succeeds() external {
@@ -187,7 +213,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertEq(entries[5].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
         assertEq(entries[5].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
 
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
+        uint256 insuranceBalance = ILido(LidoAddress).balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(0.01 ether));
     }
 
@@ -233,7 +259,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertEq(entries[5].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
         assertEq(entries[5].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
 
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
+        uint256 insuranceBalance = ILido(LidoAddress).balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(0.1 ether));
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
@@ -277,7 +303,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(insurancePremiumPaid, uint256(0.1 ether));
         assertEq(insuranceWithdrawn, 0);
 
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
+        uint256 insuranceBalance = ILido(LidoAddress).balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(0.1 ether));
 
         assertClose(ethYieldManager.accumulatedNegativeYields(), 0.3 ether);
@@ -309,7 +335,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertEq(insuranceWithdrawn, 0);
 
 
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
+        uint256 insuranceBalance = ILido(LidoAddress).balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(0 ether));
 
         assertClose(ethYieldManager.accumulatedNegativeYields(), 1 ether);
@@ -323,7 +349,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         emulatePositiveYield(3 ether);
 
         // send 2 ETH to insurance
-        Lido.transfer(ethYieldManager.insurance(), 2 ether);
+        ILido(LidoAddress).transfer(ethYieldManager.insurance(), 2 ether);
 
         vm.recordLogs();
         vm.prank(multisig);
@@ -353,7 +379,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(insuranceWithdrawn, 1 ether + buffer);
 
 
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
+        uint256 insuranceBalance = ILido(LidoAddress).balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(1 ether));
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), 0 ether);
@@ -367,7 +393,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         emulatePositiveYield(3 ether);
 
         // send 0.5 ETH to insurance
-        Lido.transfer(ethYieldManager.insurance(), 0.5 ether);
+        ILido(LidoAddress).transfer(ethYieldManager.insurance(), 0.5 ether);
 
         vm.expectRevert(InsufficientInsuranceBalance.selector);
 
@@ -375,1032 +401,12 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         ethYieldManager.commitYieldReport(true);
     }
 
-    /// @notice This test ensures that the yield manager claims the correct amount
-    ///         of claimable withdrawals from the Lido withdrawal queue before
-    ///         committing the yield report. It also ensures that any realized
-    ///         negative yield from the claim is reflected in the yield report.
-    function test_commitYieldReport_claim_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 1 ether);
+    // TODO: withdrawals
+    // TODO: fuzz test: L1 share price only changes upon yield report
+    // TODO: set admin
+    // TODO: set insurance
+    // TODO: accounting e2e
 
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 0.4 ether);
-        ethYieldManager.unstake(0, address(lidoProvider), 0.3 ether);
-        vm.stopPrank();
-
-        finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last three events (Claimed, YieldCommit, YieldReport)
-        // there should be no TransactionDeposited event
-        uint256 claimedIndex = entries.length - 3;
-        uint256 yieldCommitIndex = entries.length - 2;
-        uint256 yieldReportIndex = entries.length - 1;
-
-        assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
-        assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
-
-        assertEq(expected, 0.3 ether);
-        assertClose(claimed, 0.3 ether);
-        uint256 negativeYield = expected - claimed;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-
-        // yield could be slightly negative
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-        assertClose(yield + 1 ether, int256(0 ether + 1 ether));
-
-        int256 expectedTotalYield = yield + int256(negativeYield) * -1;
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, expectedTotalYield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        uint256 expectedAccumulatedNegativeYield = totalYield >= 0 ?
-            uint256(0) :
-            uint256(totalYield * -1);
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), expectedAccumulatedNegativeYield);
-    }
-
-    /// @notice This test ensures that any negative yield that is realized from
-    ///         the claim is paid off by the positive yield.
-    function test_commitYieldReport_claim_positive_yield_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 1 ether);
-
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 1.0 ether);
-        ethYieldManager.unstake(0, address(lidoProvider), 0.4 ether);
-        vm.stopPrank();
-
-        emulatePositiveYield(0.1 ether);
-
-        finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last four events (Claimed, YieldCommit, YieldReport, TransactionDeposited)
-        uint256 claimedIndex = entries.length - 4;
-        uint256 yieldCommitIndex = entries.length - 3;
-        uint256 yieldReportIndex = entries.length - 2;
-        uint256 transactionDepositedIndex = entries.length - 1;
-
-        assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
-        assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
-
-        assertEq(expected, 0.4 ether);
-        assertClose(claimed, 0.4 ether);
-        uint256 negativeYield = expected - claimed;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-        assertClose(yield, int256(0.1 ether));
-
-        int256 totalExpectedYield = yield + int256(negativeYield) * -1;
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, totalExpectedYield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        assertEq(entries[transactionDepositedIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[transactionDepositedIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
-        assertEq(entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
-    }
-
-    /// @notice This test ensures that when there are multiple claimable withdrawals
-    ///         the yield manager claims the correct amount of claimable withdrawals
-    function test_commitYieldReport_claim_multiple_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 1 ether);
-
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 1.0 ether);
-
-        // total of 0.6 ETH unstaked in three withdrawals
-        ethYieldManager.unstake(0, address(lidoProvider), 0.1 ether);
-        ethYieldManager.unstake(0, address(lidoProvider), 0.2 ether);
-        ethYieldManager.unstake(0, address(lidoProvider), 0.3 ether);
-        vm.stopPrank();
-
-        finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last three events (Claimed, YieldCommit, YieldReport)
-        // there should be no TransactionDeposited event
-        uint256 claimedIndex = entries.length - 3;
-        uint256 yieldCommitIndex = entries.length - 2;
-        uint256 yieldReportIndex = entries.length - 1;
-
-        assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
-        assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
-
-        assertEq(expected, 0.6 ether);
-        assertClose(claimed, 0.6 ether);
-        uint256 negativeYield = expected - claimed;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-        // due to transfers during unstaking, the yield is not exactly 0
-        // adding 1 ether to both sides to avoid comparison with 0
-        assertClose(yield + int256(1 ether), int256(1 ether));
-
-        int256 expectedTotalYield = yield + int256(negativeYield) * -1;
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, expectedTotalYield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        uint256 expectedAccumulatedNegativeYields = totalYield < 0 ? uint256(totalYield * -1) : 0;
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), expectedAccumulatedNegativeYields);
-    }
-
-    /// @notice This test ensures that when the number of claimable withdrawals
-    ///         exceeds the batch size, the yield manager claims the correct amount
-    function test_commitYieldReport_claim_batch_size_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 2 ether);
-
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 2.0 ether);
-
-        // unstake 11 times, but because the batch size is 10, only 10 should be claimed
-        for (uint256 i = 0; i < 11; i++) {
-            ethYieldManager.unstake(0, address(lidoProvider), 0.1 ether);
-        }
-        vm.stopPrank();
-
-        finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last three events (Claimed, YieldCommit, YieldReport)
-        // there should be no TransactionDeposited event
-        uint256 claimedIndex = entries.length - 3;
-        uint256 yieldCommitIndex = entries.length - 2;
-        uint256 yieldReportIndex = entries.length - 1;
-
-        assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
-        assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
-
-        assertEq(expected, 1.0 ether);
-        assertClose(claimed, 1.0 ether);
-        uint256 negativeYield = expected - claimed;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-
-        // due to multiple transfers from unstaking, the yield might not be exactly 0
-        assertClose(yield + int256(1 ether), int256(1 ether));
-
-        int256 totalExpectedYield = yield + int256(negativeYield) * -1;
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, totalExpectedYield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        uint256 expectedAccumulatedNegativeYield = totalExpectedYield >= 0 ?
-            uint256(totalExpectedYield) :
-            uint256(totalExpectedYield * -1);
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), expectedAccumulatedNegativeYield);
-
-        assertEq(lidoProvider.lastClaimedIndex(), 10);
-        assertEq(lidoProvider.lastUnstakeRequestIndex(), 11);
-    }
-
-    /// @notice This test ensures that when there are no claimable withdrawals
-    ///         the yield manager does not claim any withdrawals
-    function test_commitYieldReport_not_claimable_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 2 ether);
-
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 2.0 ether);
-
-        // unstake 11 times, but because the batch size is 10, only 10 should be claimed
-        for (uint256 i = 0; i < 11; i++) {
-            ethYieldManager.unstake(0, address(lidoProvider), 0.1 ether);
-        }
-        vm.stopPrank();
-
-        emulatePositiveYield(0.1 ether);
-
-        // do not finalize withdrawals
-        //finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last three events (YieldCommit, YieldReport, TransactionDeposited)
-        uint256 yieldCommitIndex = entries.length - 3;
-        uint256 yieldReportIndex = entries.length - 2;
-        uint256 transactionDepositedIndex = entries.length - 1;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-
-        assertClose(yield, int256(0.1 ether));
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, yield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        assertEq(entries[transactionDepositedIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[transactionDepositedIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
-        assertEq(entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
-
-    }
-
-    /// @notice This test ensures that negative yield from claim and negative yield
-    ///         from staked balance are combined
-    function test_commitYieldReport_claim_negative_yield_combined_succeeds() external {
-        // ensure withdrawal queue is not paused
-        skip(1700000000);
-        vm.deal(address(ethYieldManager), 1 ether);
-
-        vm.startPrank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), 1.0 ether);
-        ethYieldManager.unstake(0, address(lidoProvider), 0.2 ether);
-        vm.stopPrank();
-
-        emulateNegativeYield(0.1 ether);
-
-        finalizeWithdrawals();
-
-        vm.recordLogs();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // verify the last three events (Claimed, YieldCommit, YieldReport)
-        uint256 claimedIndex = entries.length - 3;
-        uint256 yieldCommitIndex = entries.length - 2;
-        uint256 yieldReportIndex = entries.length - 1;
-
-        assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
-        assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
-
-        assertEq(expected, 0.2 ether);
-        assertClose(claimed, 0.2 ether);
-        uint256 negativeYieldFromClaim = expected - claimed;
-
-        assertEq(entries[yieldCommitIndex].topics[0], keccak256("YieldCommit(bytes32,int256)"));
-        assertEq(entries[yieldCommitIndex].topics[1], YieldProvider(lidoProvider).id());
-        int256 yield = abi.decode(entries[yieldCommitIndex].data, (int256));
-
-        assertClose(yield, int256(-0.1 ether));
-
-        int256 totalExpectedYield = yield + int256(negativeYieldFromClaim) * -1;
-
-        assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
-        assertEq(totalYield, totalExpectedYield);
-        assertEq(insurancePremiumPaid, 0);
-        assertEq(insuranceWithdrawn, 0);
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), uint256(totalExpectedYield * -1));
-
-    }
-
-    function test_requestWithdrawal_portal_succeeds() external {
-        vm.prank(address(op));
-        uint256 requestId = ethYieldManager.requestWithdrawal(1 ether);
-        assertEq(requestId, 1);
-    }
-
-    function test_requestWithdrawal_not_portal_reverts() external {
-        vm.prank(address(0x4));
-        vm.expectRevert(ETHYieldManager.CallerIsNotPortal.selector);
-        ethYieldManager.requestWithdrawal(1 ether);
-    }
-
-    function test_setInsurance_succeeds() external {
-        Insurance newInsurance = new Insurance(ethYieldManager);
-
-        vm.prank(multisig);
-        ethYieldManager.setInsurance(address(newInsurance), 5000, 1000);
-
-        assertEq(ethYieldManager.insurance(), address(newInsurance));
-        assertEq(ethYieldManager.insuranceFeeBips(), 5000);
-        assertEq(ethYieldManager.insuranceWithdrawalBuffer(), 1000);
-    }
-
-    function test_setInsurance_non_owner_reverts() external {
-        Insurance newInsurance = new Insurance(ethYieldManager);
-
-        vm.expectRevert();
-        vm.prank(address(0x4));
-        ethYieldManager.setInsurance(address(newInsurance), 5000, 1000);
-    }
-}
-
-contract ETH_Insurance_Test is LidoYieldProvider_Initializer, Util {
-    function test_setAdmin_succeeds() external {
-        assertEq(insurance.admin(), multisig);
-        vm.prank(multisig);
-        insurance.setAdmin(address(0x4));
-        assertEq(insurance.admin(), address(0x4));
-    }
-
-    function test_coverLoss_admin_succeeds() external {
-
-        Lido.transfer(address(insurance), 2 ether);
-
-        assertEq(ethYieldManager.totalValue(), 0 ether);
-
-        vm.prank(multisig);
-        insurance.coverLoss(address(Lido), 1 ether);
-
-        assertClose(ethYieldManager.totalValue(), 1 ether);
-    }
-
-    function test_coverLoss_ym_succeeds() external {
-
-        Lido.transfer(address(insurance), 2 ether);
-
-        assertEq(ethYieldManager.totalValue(), 0 ether);
-
-        vm.prank(address(ethYieldManager));
-        insurance.coverLoss(address(Lido), 1 ether);
-
-        assertClose(ethYieldManager.totalValue(), 1 ether);
-    }
-
-    function test_coverLoss_non_admin_reverts() external {
-
-        Lido.transfer(address(insurance), 2 ether);
-
-        assertEq(ethYieldManager.totalValue(), 0 ether);
-
-        vm.expectRevert(abi.encodeWithSelector(Insurance.OnlyAdminOrYieldManager.selector));
-
-        vm.prank(address(0x4));
-        insurance.coverLoss(address(Lido), 1 ether);
-    }
-
-    function test_different_insurance_rates_succeeds() external {
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), 0.1 ether);
-        Lido.transfer(address(ethYieldManager), 0.2 ether);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-
-        uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
-        assertClose(insuranceBalance, uint256(0.01 ether));
-
-        // change rate to 0%
-        vm.startPrank(multisig);
-        ethYieldManager.setInsurance(address(insurance), 0, ethYieldManager.insuranceWithdrawalBuffer());
-        vm.stopPrank();
-
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), 0.1 ether);
-        Lido.transfer(address(ethYieldManager), 0.2 ether);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-
-        insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
-        assertClose(insuranceBalance, uint256(0.01 ether));
-
-        // change rate to 50%
-        vm.startPrank(multisig);
-        ethYieldManager.setInsurance(address(insurance), 5000, ethYieldManager.insuranceWithdrawalBuffer());
-        vm.stopPrank();
-
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), 0.1 ether);
-        Lido.transfer(address(ethYieldManager), 0.2 ether);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-
-        insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
-        // 0.01 + 0.05
-        assertClose(insuranceBalance, uint256(0.06 ether));
-    }
-}
-
-/// @notice Tests specifically related to accounting (incl. negative yields and withdrawal discounts)
-///         This test does not use the insurance contract (i.e. commitYieldReport(false))
-///
-/// Formulas:
-///    - `totalValue()`: tokenBalance() - getLockedBalance() + totalProviderValue()
-///    - `sharePrice()`: totalValue() / (totalValue() + accumulatedNegativeYields)
-///
-/// Exhaustive list of `accumulatedNegativeYields` mutations:
-///    - `commitYieldReport()`
-///        - via LidoYieldProvider._claim() (via `_delegatecall_preCommitYieldReportDelegateCallHook` -> yp._claim() -> `ym.recordNegativeYield()`)
-///        - via `totalYield` update
-///    - `finalize()`: negative yields are paid off from discounted withdrawals
-///
-/// Exhaustive list of `totalValue()` mutations:
-///    - YM.tokenBalance() = address(ETHYieldManager).balance
-///    - YM.getLockedBalance() (via WithdrawalQueue.lockedBalance)
-///        - increase via YM.finalize() (-> WithdrawalQueue._finalize())
-///        - decrease via YM.claimWithdrawal()
-///    - YM.totalProviderValue() = YP.stakedBalance() + YP.pendingBalance
-///        - YP.stakedBalance() = LIDO.balanceOf(ETHYieldManager)
-///        - YP.pendingBalance
-///            - increase via YM.unstake()
-///            - decrease via YM.commitYieldReport() (-> YP.preCommitYieldReportDelegateCallHook() -> YP._claim())
-contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Initializer, Util {
-    // finalize decreases accumulatedNegativeYields by correct amount
-    // i.e. share price never changes after finalize
-    function testFuzz_sharePrice_does_not_change_after_single_finalize(
-        uint256 balance,
-        uint256 withdrawalAmount
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(withdrawalAmount > 0);
-        vm.assume(balance > withdrawalAmount);
-
-        // set up balance
-        vm.deal(address(ethYieldManager), balance);
-
-        // set up withdrawal
-        vm.prank(address(op));
-        uint256 requestId = ethYieldManager.requestWithdrawal(withdrawalAmount);
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.prank(multisig);
-        ethYieldManager.finalize(requestId);
-
-        assertEq(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    // TODO: fuzz: multiple finalizes
-
-    function testFuzz_sharePrice_does_not_decrease_with_negative_yields_after_single_finalize(
-        uint256 balance,
-        uint256 withdrawalAmount,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(withdrawalAmount > 0);
-        vm.assume(balance > withdrawalAmount);
-        vm.assume(balance > originalNegativeYield);
-
-        // set up balance
-        vm.deal(address(ethYieldManager), balance);
-
-        // set up withdrawal
-        vm.prank(address(op));
-        uint256 requestId = ethYieldManager.requestWithdrawal(withdrawalAmount);
-
-        // set up negative yield
-        vm.prank(address(ethYieldManager));
-        ethYieldManager.recordNegativeYield(originalNegativeYield);
-        assertEq(ethYieldManager.accumulatedNegativeYields(), originalNegativeYield);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.prank(multisig);
-        ethYieldManager.finalize(requestId);
-
-        // TODO: figure out the precision range
-        assertGe(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    // see OptimismPortal_FinalizeWithdrawal_Test for testFuzz_sharePrice_does_not_change_after_finalizeWithdrawalTransaction
-
-    // share price should stay the same after ETH balance increase
-    function testFuzz_sharePrice_does_not_change_after_ETH_balance_increase(
-        uint256 balance,
-        uint256 increaseAmount
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > increaseAmount);
-        vm.assume(increaseAmount > 0);
-
-        // set up balance
-        vm.deal(address(ethYieldManager), balance);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.deal(address(ethYieldManager), increaseAmount + balance);
-
-        assertEq(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_does_not_decrease_with_negative_yields_after_ETH_balance_increase(
-        uint256 balance,
-        uint256 increaseAmount,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > increaseAmount);
-        vm.assume(balance > originalNegativeYield);
-        vm.assume(originalNegativeYield > 0);
-        vm.assume(increaseAmount > 0);
-
-        // set up balance
-        vm.deal(address(ethYieldManager), balance);
-
-        // set up negative yield
-        vm.prank(address(ethYieldManager));
-        ethYieldManager.recordNegativeYield(originalNegativeYield);
-        assertEq(ethYieldManager.accumulatedNegativeYields(), originalNegativeYield);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.deal(address(ethYieldManager), increaseAmount + balance);
-
-        assertGe(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_does_not_decrease_after_stETH_balance_increase(
-        uint256 balance,
-        uint256 increaseAmount,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > increaseAmount);
-        vm.assume(balance > originalNegativeYield);
-        //vm.assume(originalNegativeYield > 0);
-        vm.assume(increaseAmount > 0);
-
-        // set up balance
-        vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-
-        // set up negative yield
-        vm.prank(address(ethYieldManager));
-        ethYieldManager.recordNegativeYield(originalNegativeYield);
-        assertEq(ethYieldManager.accumulatedNegativeYields(), originalNegativeYield);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.deal(address(ethYieldManager), increaseAmount + balance);
-
-        // can only increase (by a very small amount) but never decrease
-        assertGe(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_does_not_change_after_pendingBalance_increase_via_unstake(
-        uint256 balance,
-        uint256 unstakeAmount
-    ) external {
-        // share price = 1
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(1000 ether > unstakeAmount);
-        vm.assume(unstakeAmount > 100);
-
-        // avoid paused error
-        vm.warp(1706000000);
-
-        // set up balance
-        vm.deal(address(this), balance + unstakeAmount);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
-        Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
-
-        assertEq(ethYieldManager.sharePrice(), 1e27);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        vm.prank(multisig);
-        ethYieldManager.unstake(0, address(lidoProvider), unstakeAmount);
-        assertGe(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_decreases_after_negative_yield_from_provider(
-        uint256 balance,
-        uint256 negativeYield,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > negativeYield);
-        vm.assume(100000 ether > originalNegativeYield);
-        vm.assume(originalNegativeYield > 0);
-        vm.assume(balance > originalNegativeYield + negativeYield);
-        // using a sufficiently large negative yield to avoid precision errors
-        vm.assume(negativeYield > 1e9);
-
-        // set up balance and original negative yield
-        vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
-
-        // first commit yield report
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertLt(sharePriceBefore, 1e27);
-
-        // more negative yield
-        vm.prank(address(ethYieldManager));
-        Lido.transfer(address(this), negativeYield);
-
-        // commit yield report again
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        assertLt(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_decreases_after_negative_yield_from_claim(
-        uint256 balance,
-        uint256 unstakeAmount
-    ) external {
-        // share price = 1
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(1000 ether > unstakeAmount);
-        vm.assume(unstakeAmount > 100);
-
-        // make sure withdrawal queue is not paused
-        vm.warp(1706000000);
-
-        // set up balance and stake
-        vm.deal(address(this), balance + unstakeAmount);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
-        Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
-
-        // unstake and finalize
-        vm.prank(multisig);
-        ethYieldManager.unstake(0, address(lidoProvider), unstakeAmount);
-
-        finalizeWithdrawals();
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertEq(sharePriceBefore, 1e27);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-        assertLt(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    // guarantees only when share price is 1
-    function testFuzz_sharePrice_does_not_change_after_stake(
-        uint256 balance,
-        uint256 stakeAmount
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > stakeAmount);
-        vm.assume(stakeAmount > 0);
-
-        // set up balance
-        vm.deal(address(ethYieldManager), balance + stakeAmount);
-
-        // set up negative yield
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-
-        vm.prank(multisig);
-        ethYieldManager.stake(0, address(lidoProvider), stakeAmount);
-
-        assertEq(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    // when share price is less than 1, stake() can inifinitesimally influence the share price
-    //function testFuzz_sharePrice_does_not_change_with_negative_yields_after_stake() external {
-    //    // TODO
-    //}
-
-    function testFuzz_sharePrice_does_not_change_after_positive_yield(
-        uint256 balance,
-        uint256 yield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > yield);
-        vm.assume(yield > 100);
-
-        // set up balance and stake
-        vm.deal(address(this), balance + yield);
-        Lido.submit{value: balance + yield}(address(0));
-        Lido.transfer(address(ethYieldManager), balance + yield);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertEq(sharePriceBefore, 1e27);
-
-        // commit yield report
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        assertEq(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_increases_after_positive_yield(
-        uint256 balance,
-        uint256 positiveYield,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > positiveYield);
-        vm.assume(100000 ether > originalNegativeYield);
-        vm.assume(originalNegativeYield > 0);
-        vm.assume(balance > originalNegativeYield);
-        // using a sufficiently large negative yield to avoid precision errors
-        vm.assume(positiveYield > 1e9);
-
-        // set up balance and original negative yield
-        vm.deal(address(this), balance + positiveYield + 1 ether);
-        Lido.submit{value: balance + positiveYield + 1 ether}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
-
-        // first commit yield report
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertLt(sharePriceBefore, 1e27);
-
-        // provide positive yield
-        Lido.transfer(address(ethYieldManager), positiveYield);
-
-        // commit yield report again
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        assertGt(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
-
-    function testFuzz_sharePrice_recovers_to_1_after_positive_yield(
-        uint256 balance,
-        uint256 positiveYield,
-        uint256 originalNegativeYield
-    ) external {
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(100000 ether > positiveYield);
-        vm.assume(100000 ether > originalNegativeYield);
-        vm.assume(originalNegativeYield > 0);
-        vm.assume(balance > originalNegativeYield);
-        // using a sufficiently large negative yield to avoid precision errors
-        vm.assume(positiveYield > 1e9);
-        // 100 as a buffer to avoid precision issues
-        vm.assume(positiveYield > originalNegativeYield + 100);
-
-        // set up balance and original negative yield
-        vm.deal(address(this), balance + positiveYield + 1 ether);
-        Lido.submit{value: balance + positiveYield + 1 ether}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
-
-        // first commit yield report
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertLt(sharePriceBefore, 1e27);
-
-        // provide positive yield
-        Lido.transfer(address(ethYieldManager), positiveYield);
-
-        // commit yield report again
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        assertEq(ethYieldManager.sharePrice(), 1e27);
-    }
-
-    function testFuzz_negative_yields_accumulate_after_commitYieldReport(
-        uint256 balance,
-        uint256 negativeYield
-    ) external {
-        vm.assume(balance > 1 ether);
-        vm.assume(balance < 100000 ether);
-        vm.assume(negativeYield < 100000 ether);
-        vm.assume(negativeYield > 0);
-
-        // emulate negative yield
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
-        vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-
-
-        uint256 accumulatedBefore = ethYieldManager.accumulatedNegativeYields();
-        assertEq(accumulatedBefore, 0);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(false);
-
-        assertGt(ethYieldManager.accumulatedNegativeYields(), accumulatedBefore);
-        //assertClose(accumulatedBefore + negativeYield, ethYieldManager.accumulatedNegativeYields());
-    }
-
-    // TODO claim should be always 0 for LidoYP.recordUnstaked
-}
-
-/// @notice Tests related to accounting (incl. negative yields and withdrawal discounts)
-///         This test uses the insurance contract (i.e. commitYieldReport(false))
-contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_Initializer, Util {
-    error InsufficientInsuranceBalance();
-    error NegativeYieldIncrease();
-    // withdrawal buffer
-
-    // when insurance is enabled and it doesn't have enough balance to cover
-    // the negative yield, it should revert
-    function testFuzz_commitYieldReport_insufficient_insurance_to_cover_negative_yields_reverts(
-        uint256 balance,
-        uint256 negativeYield,
-        uint256 insuranceBalance
-    ) external {
-        vm.assume(balance > 1 ether);
-        vm.assume(balance < 100000 ether);
-        vm.assume(insuranceBalance < 100000 ether);
-        vm.assume(negativeYield < 100000 ether);
-        vm.assume(negativeYield > 0);
-        vm.assume(insuranceBalance < negativeYield);
-
-        // emulate negative yield
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
-        // 1 ether is a buffer
-        vm.deal(address(this), balance + insuranceBalance + 1 ether);
-        Lido.submit{value: balance}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-
-        // set up insurance balance
-        Lido.transfer(address(insurance), insuranceBalance);
-
-        vm.expectRevert(InsufficientInsuranceBalance.selector);
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-    }
-
-    // commitYieldReport(true) should revert upon claim loss if insurance doesn't have enough balance
-    function testFuzz_commitYieldReport_insufficient_insurance_to_cover_claim_loss_reverts(
-        uint256 balance,
-        uint256 unstakeAmount
-    ) external {
-        // no negative yields
-        vm.assume(balance > 0);
-        vm.assume(1000 ether > balance);
-        vm.assume(balance > unstakeAmount);
-        vm.assume(unstakeAmount > 100);
-
-        // make sure withdrawal queue is not paused
-        vm.warp(1706000000);
-
-        // set up balance and stake and give 1 ether to insurance
-        vm.deal(address(this), balance + unstakeAmount + 1 ether);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
-        Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
-
-        assertEq(Lido.balanceOf(address(insurance)), 0);
-
-        // unstake and finalize
-        vm.prank(multisig);
-        ethYieldManager.unstake(0, address(lidoProvider), unstakeAmount);
-
-        finalizeWithdrawals();
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertEq(sharePriceBefore, 1e27);
-
-        // revert with InsufficientInsuranceBalance or NegativeYieldIncrease
-        vm.expectRevert();
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-    }
-
-    // commitYieldReport(true) should pay off negative yields from insurance
-    function testFuzz_commitYieldReport_sufficient_insurance_to_cover_negative_yields_succeeds(
-        uint256 balance,
-        uint256 negativeYield,
-        uint256 insuranceBalance
-    ) external {
-        vm.assume(balance > 1 ether);
-        vm.assume(balance < 100000 ether);
-        vm.assume(insuranceBalance < 100000 ether);
-        vm.assume(negativeYield < 100000 ether);
-        vm.assume(negativeYield > 0);
-        vm.assume(insuranceBalance > negativeYield);
-        // to avoid precision errors
-        vm.assume(insuranceBalance > 100);
-
-        // emulate negative yield
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
-        // 1 ether is a buffer
-        vm.deal(address(this), balance + insuranceBalance + 1 ether);
-        Lido.submit{value: balance + insuranceBalance + 1 ether}(address(0));
-        Lido.transfer(address(ethYieldManager), balance);
-
-        // set up insurance balance
-        Lido.transfer(address(insurance), insuranceBalance);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReport(true);
-
-        assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
-    }
-
-    // ensure that share price remains 1 when pending balance decreases and a loss can be realized as a result of LidoYP._claim
-    function testFuzz_commitYieldReportAfterInsuranceWithdrawal_succeeds_after_claim_loss(
-        uint256 balance,
-        uint256 unstakeAmount
-    ) external {
-        // share price = 1
-        vm.assume(balance > 0);
-        vm.assume(100000 ether > balance);
-        vm.assume(balance > unstakeAmount);
-        vm.assume(1000 ether > unstakeAmount);
-        vm.assume(unstakeAmount > 100);
-
-        // make sure withdrawal queue is not paused
-        vm.warp(1706000000);
-
-        // set up balance and stake and give 1 ether to insurance
-        vm.deal(address(this), balance + unstakeAmount + 1 ether);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
-        Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
-        Lido.transfer(address(insurance), 1 ether);
-        vm.prank(address(l1BlastBridge));
-        ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
-
-
-        // unstake and finalize
-        vm.prank(multisig);
-        ethYieldManager.unstake(0, address(lidoProvider), unstakeAmount);
-
-        finalizeWithdrawals();
-
-        uint256 sharePriceBefore = ethYieldManager.sharePrice();
-        assertEq(sharePriceBefore, 1e27);
-
-        vm.prank(multisig);
-        ethYieldManager.commitYieldReportAfterInsuranceWithdrawal(address(Lido), 0.1 ether);
-        assertEq(ethYieldManager.sharePrice(), sharePriceBefore);
-    }
 }
 
 contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
@@ -1416,21 +422,103 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
             abi.encode(block.timestamp)
         );
 
-        YieldManager.ProviderInfo memory info = usdYieldManager.getProviderInfoAt(0);
+        YieldManager.ProviderInfo memory info = l1BlastBridge.getProviderInfoAt(0);
         assertEq(info.providerAddress, address(dsrProvider));
         assertEq(info.id, keccak256(abi.encodePacked("DSRYieldProvider", string(abi.encodePacked("1.0.0")))));
-        assertEq(info.stakedPrincipal, uint256(0));
-        assertClose(info.stakedBalance, 0 ether);
+        assertEq(info.stakedBalance, uint256(0));
+        assertClose(info.stakedValue, 0 ether);
         assertClose(uint256(info.yield), 0 ether);
     }
 
+    /*
+    uint256 constant WAD_DECIMALS = 18;
+    uint256 constant USD_DECIMALS = 6;
+    int128 constant DAI_INDEX = 0;
+    int128 constant USDC_INDEX = 1;
+    int128 constant USDT_INDEX = 2;
+
+    event YieldReport(
+        int256  yield,
+        uint256 insurancePremiumPaid,
+        uint256 insuranceWithdrawn
+    );
+
+    error InsufficientInsuranceBalance();
+    error InsufficientBalance();
+    error MinimumAmountNotMet();
+    error InvalidTokenIndex();
+
+    function _testConvert(int128 inputToken, int128 outputToken, uint256 inputAmountWad, uint256 minOutputAmountWad) internal {
+        uint256 inputTokenBalance = IERC20(USDConversions._token(inputToken)).balanceOf(address(l1BlastBridge));
+        uint256 outputTokenBalance = IERC20(USDConversions._token(outputToken)).balanceOf(address(l1BlastBridge));
+        vm.prank(address(multisig));
+        uint256 amountReceived = l1BlastBridge.convert(inputToken, outputToken, inputAmountWad, minOutputAmountWad);
+        assertGe(amountReceived, USDConversions._convertDecimals(minOutputAmountWad, outputToken));
+        assertEq(IERC20(USDConversions._token(inputToken)).balanceOf(address(l1BlastBridge)), inputTokenBalance - USDConversions._convertDecimals(inputAmountWad, inputToken));
+        assertEq(IERC20(USDConversions._token(outputToken)).balanceOf(address(l1BlastBridge)), outputTokenBalance + amountReceived);
+    }
+
+    function test_usdConversions_USDCToDAI() external {
+        deal(address(USDC), address(l1BlastBridge), 2 ether);
+        _testConvert(USDC_INDEX, DAI_INDEX, 2 ether, 2 ether);
+    }
+
+    function test_usdConversions_DAIToUSDC() external {
+        deal(address(DAI), address(l1BlastBridge), 2 ether);
+        _testConvert(DAI_INDEX, USDC_INDEX, 2 ether, 2 ether);
+    }
+
+    // TODO: for some reason Curve isn't working on a fork so these tests aren't working, the call to Curve looks correct though. Just a random EVM error that makes it hard to debug.
+    function test_usdConversions_DAIToUSDT() external {
+        deal(address(DAI), address(l1BlastBridge), 2 ether);
+        _testConvert(DAI_INDEX, USDT_INDEX, 2 ether, 1.9 ether);
+    }
+
+    function test_usdConversions_USDTToDAI() external {
+        deal(address(USDT), address(l1BlastBridge), 2 ether);
+        _testConvert(USDT_INDEX, DAI_INDEX, 2 ether, 1.9 ether);
+    }
+
+    function test_usdConversions_USDCToUSDT() external {
+        deal(address(USDC), address(l1BlastBridge), 2 ether);
+        _testConvert(USDC_INDEX, USDT_INDEX, 2 ether, 1.9 ether);
+    }
+
+    function test_usdConversions_USDTToUSDC() external {
+        deal(address(USDT), address(l1BlastBridge), 100 ether);
+        _testConvert(USDT_INDEX, USDC_INDEX, 100 ether, 50 ether);
+    }
+
+    function test_usdConversions_reverts() external {
+        deal(address(DAI), address(l1BlastBridge), 2 ether);
+        deal(address(USDC), address(l1BlastBridge), 2 ether);
+        deal(address(USDT), address(l1BlastBridge), 2 ether);
+
+        vm.expectRevert(MinimumAmountNotMet.selector);
+        vm.prank(address(multisig));
+        l1BlastBridge.convert(0, 1, 2 ether, 2 ether + 1);
+
+        vm.expectRevert();
+        vm.prank(address(multisig));
+        l1BlastBridge.convert(3, 0, 2 ether, 2 ether);
+
+        vm.expectRevert();
+        vm.prank(address(multisig));
+        l1BlastBridge.convert(0, 3, 2 ether, 2 ether);
+
+        vm.expectRevert();
+        vm.prank(address(multisig));
+        l1BlastBridge.convert(0, 0, 2 ether, 2 ether);
+    }
+    */
+
     function test_stake_DSR_succeeds() external {
         vm.startPrank(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
-        RealDAI.mint(address(usdYieldManager), 10 ether);
+        RealDAI.mint(address(l1BlastBridge), 10 ether);
         vm.stopPrank();
 
         vm.prank(multisig);
-        usdYieldManager.stake(0, address(dsrProvider), 10 ether);
+        l1BlastBridge.stake(0, address(dsrProvider), 10 ether);
 
         IPot pot = IPot(DSR_MANAGER.pot());
         vm.mockCall(
@@ -1441,50 +529,202 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
             abi.encode(block.timestamp - 30 days)
         );
 
-        YieldManager.ProviderInfo memory info = usdYieldManager.getProviderInfoAt(0);
+        YieldManager.ProviderInfo memory info = l1BlastBridge.getProviderInfoAt(0);
         assertEq(info.providerAddress, address(dsrProvider));
         assertEq(info.id, keccak256(abi.encodePacked("DSRYieldProvider", string(abi.encodePacked("1.0.0")))));
-        assertEq(info.stakedPrincipal, uint256(10 ether));
-        assertGt(info.stakedBalance, 10 ether);
-        uint256 yield = info.stakedBalance - 10 ether;
+        assertEq(info.stakedBalance, uint256(10 ether));
+        assertGt(info.stakedValue, 10 ether);
+        uint256 yield = info.stakedValue - 10 ether;
         assertEq(uint256(info.yield), yield);
-        uint256 totalValue = usdYieldManager.totalValue();
+        uint256 totalValue = l1BlastBridge.totalValue();
         assertEq(totalValue, 10 ether + yield);
+    }
+
+    function test_convert_USDC_TO_DAI_succeeds() external {
+        vm.prank(RealUSDC.masterMinter());
+        RealUSDC.configureMinter(address(this), type(uint256).max);
+        RealUSDC.mint(address(l1BlastBridge), 10e6); // 10 USDC
+
+        vm.prank(address(l1BlastBridge));
+        RealUSDC.approve(0x0A59649758aa4d66E25f08Dd01271e891fe52199, type(uint256).max);
+
+        vm.prank(multisig);
+        l1BlastBridge.convert(1, 0, 10 ether, 10 ether); // convert USDC to DAI
+        assertEq(RealDAI.balanceOf(address(l1BlastBridge)), 10 ether);
+        assertEq(RealUSDC.balanceOf(address(l1BlastBridge)), 0);
+    }
+
+    function test_DAI_deposit_conversion_succeeds() external {
+        uint256 nonce = L1Messenger.messageNonce();
+
+        // Deal Alice's USDC State
+        deal(address(RealDAI), alice, 10 ether, true);
+        vm.prank(alice);
+        RealDAI.approve(address(l1BlastBridge), type(uint256).max);
+
+        // no need to specify extraData for DAI
+        bytes memory extraData = hex"";
+
+        // The l1BlastBridge should transfer alice's tokens to itself
+        vm.expectCall(
+            address(RealDAI), abi.encodeWithSelector(DAI.transferFrom.selector, alice, address(l1BlastBridge), 10 ether)
+        );
+
+        bytes memory message = abi.encodeWithSelector(
+            StandardBridge.finalizeBridgeERC20.selector, address(DAI), address(Usdb), alice, alice, 10 ether, extraData
+        );
+
+        // the L1 bridge should call L1CrossDomainMessenger.sendMessage
+        vm.expectCall(
+            address(L1Messenger),
+            abi.encodeWithSelector(CrossDomainMessenger.sendMessage.selector, address(l2BlastBridge), message, 10000)
+        );
+
+        bytes memory innerMessage = abi.encodeWithSelector(
+            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+        );
+
+        uint64 baseGas = L1Messenger.baseGas(message, 10000);
+        vm.expectCall(
+            address(op),
+            abi.encodeWithSelector(
+                OptimismPortal.depositTransaction.selector, address(L2Messenger), 0, baseGas, false, innerMessage
+            )
+        );
+
+        bytes memory opaqueData = abi.encodePacked(uint256(0), uint256(0), baseGas, false, innerMessage);
+
+        vm.prank(alice);
+        l1BlastBridge.bridgeERC20(address(RealDAI), address(Usdb), 10 ether, 10000, extraData);
+        assertEq(RealDAI.balanceOf(address(l1BlastBridge)), 10 ether);
+    }
+
+    function test_USDC_deposit_conversion_succeeds() external {
+        uint256 nonce = L1Messenger.messageNonce();
+
+        // Deal Alice's USDC State
+        deal(address(RealUSDC), alice, 10 * 1.0e6, true);
+        vm.prank(alice);
+        RealUSDC.approve(address(l1BlastBridge), type(uint256).max);
+
+        // specify minAmountOut to be 10 DAI
+        bytes memory extraData = abi.encodePacked(uint256(10 ether)); // this has to be in wad
+
+        // The l1BlastBridge should transfer alice's tokens to itself
+        vm.expectCall(
+            address(RealUSDC), abi.encodeWithSelector(USDC.transferFrom.selector, alice, address(l1BlastBridge), 10 * 1.0e6)
+        );
+
+        bytes memory message = abi.encodeWithSelector(
+            StandardBridge.finalizeBridgeERC20.selector, address(DAI), address(Usdb), alice, alice, 10 ether, extraData
+        );
+
+        // the L1 bridge should call L1CrossDomainMessenger.sendMessage
+        vm.expectCall(
+            address(L1Messenger),
+            abi.encodeWithSelector(CrossDomainMessenger.sendMessage.selector, address(l2BlastBridge), message, 10000)
+        );
+
+        bytes memory innerMessage = abi.encodeWithSelector(
+            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+        );
+
+        uint64 baseGas = L1Messenger.baseGas(message, 10000);
+        vm.expectCall(
+            address(op),
+            abi.encodeWithSelector(
+                OptimismPortal.depositTransaction.selector, address(L2Messenger), 0, baseGas, false, innerMessage
+            )
+        );
+
+        bytes memory opaqueData = abi.encodePacked(uint256(0), uint256(0), baseGas, false, innerMessage);
+
+        vm.prank(alice);
+        l1BlastBridge.bridgeERC20(address(RealUSDC), address(Usdb), 10 * 1.0e6, 10000, extraData);
+        assertEq(RealUSDC.balanceOf(address(l1BlastBridge)), 0);
+        assertEq(RealDAI.balanceOf(address(l1BlastBridge)), 10 ether);
+    }
+
+    function test_USDC_deposit_no_extra_data_reverts() external {
+        // Deal Alice's USDC State
+        deal(address(RealUSDC), alice, 10 * 1.0e6, true);
+        vm.prank(alice);
+        RealUSDC.approve(address(l1BlastBridge), type(uint256).max);
+
+        vm.expectRevert(InvalidExtraData.selector);
+
+        vm.prank(alice);
+        l1BlastBridge.bridgeERC20(address(RealUSDC), address(Usdb), 10 * 1.0e6, 10000, hex"");
+    }
+
+    function test_USDT_deposit_conversion_succeeds() external {
+        uint256 nonce = L1Messenger.messageNonce();
+
+        // Deal Alice's USDT State
+        deal(address(USDT), alice, 10 * 1.0e6, true);
+        vm.prank(alice);
+        USDT.approve(address(l1BlastBridge), type(uint256).max);
+
+        // specify minAmountOut to be 10 DAI
+        bytes memory extraData = abi.encodePacked(uint256(9.9 ether)); // this has to be in wad
+
+        // The l1BlastBridge should transfer alice's tokens to itself
+        vm.expectCall(
+            address(USDT), abi.encodeWithSelector(USDT.transferFrom.selector, alice, address(l1BlastBridge), 10 * 1.0e6)
+        );
+
+        // TODO: check the relayed message content
+
+
+        vm.prank(alice);
+        l1BlastBridge.bridgeERC20(address(USDT), address(Usdb), 10 * 1.0e6, 10000, extraData);
+        assertEq(USDT.balanceOf(address(l1BlastBridge)), 0);
+        assertGe(RealDAI.balanceOf(address(l1BlastBridge)), 9.9 ether);
+    }
+
+    function test_USDT_deposit_no_extra_data_reverts() external {
+        // Deal Alice's USDT State
+        deal(address(USDT), alice, 10 * 1.0e6, true);
+        vm.prank(alice);
+        USDT.approve(address(l1BlastBridge), type(uint256).max);
+
+        vm.expectRevert(InvalidExtraData.selector);
+
+        vm.prank(alice);
+        l1BlastBridge.bridgeERC20(address(USDT), address(Usdb), 10 * 1.0e6, 10000, hex"");
     }
 
     function test_unstake_DSR_succeeds() external {
         vm.startPrank(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
-        RealDAI.mint(address(usdYieldManager), 10 ether);
+        RealDAI.mint(address(l1BlastBridge), 10 ether);
         vm.stopPrank();
 
         vm.startPrank(multisig);
-        usdYieldManager.stake(0, address(dsrProvider), 10 ether);
+        l1BlastBridge.stake(0, address(dsrProvider), 10 ether);
 
-        assertEq(RealDAI.balanceOf(address(usdYieldManager)), 0);
+        assertEq(RealDAI.balanceOf(address(l1BlastBridge)), 0);
 
         skip(3600);
 
         vm.recordLogs();
-        usdYieldManager.unstake(0, address(dsrProvider), 10 ether);
-        vm.stopPrank();
+        l1BlastBridge.unstake(0, address(dsrProvider), 10 ether);
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         uint256 logLength = entries.length;
         uint256 claimedLogIndex = logLength - 1;
         uint256 unstakedLogIndex = logLength - 2;
 
-        assertEq(entries[claimedLogIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
+        assertEq(entries[claimedLogIndex].topics[0], keccak256("Claimed(bytes32,uint256)"));
         assertEq(entries[claimedLogIndex].topics[1], YieldProvider(dsrProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedLogIndex].data, (uint256,uint256));
+        uint256 claimed = abi.decode(entries[claimedLogIndex].data, (uint256));
         assertEq(claimed, uint256(10 ether));
-        assertEq(expected, uint256(10 ether));
 
         assertEq(entries[unstakedLogIndex].topics[0], keccak256("Unstaked(bytes32,uint256)"));
         assertEq(entries[unstakedLogIndex].topics[1], YieldProvider(dsrProvider).id());
         uint256 unstaked = abi.decode(entries[unstakedLogIndex].data, (uint256));
         assertEq(unstaked, uint256(10 ether));
 
-        assertEq(RealDAI.balanceOf(address(usdYieldManager)), 10 ether);
+        assertEq(RealDAI.balanceOf(address(l1BlastBridge)), 10 ether);
     }
 
     /*
@@ -1492,7 +732,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         vm.prank(address(l1BlastBridge));
         l1BlastBridge.recordStakedDeposit(address(dsrProvider), 10 ether);
         YieldManager.ProviderInfo memory info = l1BlastBridge.getProviderInfoAt(0);
-        assertEq(info.stakedPrincipal, uint256(10 ether));
+        assertEq(info.stakedBalance, uint256(10 ether));
     }
     */
 
@@ -1500,9 +740,8 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         uint256 yield = emulatePositiveYield(10 ether, 30 days);
 
         vm.recordLogs();
-        vm.startPrank(multisig);
-        usdYieldManager.commitYieldReport(false);
-        vm.stopPrank();
+        vm.prank(multisig);
+        l1BlastBridge.commitYieldReport(false);
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         assertEq(entries.length, 3);
@@ -1517,7 +756,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         assertEq(totalYield, int256(yield));
 
         assertEq(entries[2].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[2].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(usdYieldManager))));
+        assertEq(entries[2].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(l1BlastBridge))));
         assertEq(entries[2].topics[2], addressToBytes32(Predeploys.USDB));
         // TODO: verify the tx data
     }
@@ -1526,9 +765,8 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         uint256 yield = emulatePositiveYield(10 ether, 30 days);
 
         vm.recordLogs();
-        vm.startPrank(multisig);
-        usdYieldManager.commitYieldReport(true);
-        vm.stopPrank();
+        vm.prank(multisig);
+        l1BlastBridge.commitYieldReport(true);
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         uint256 logLength = entries.length;
@@ -1553,74 +791,24 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         assertEq(insuranceWithdrawn, 0);
 
         assertEq(entries[depositLogIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[depositLogIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(usdYieldManager))));
+        assertEq(entries[depositLogIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(l1BlastBridge))));
         assertEq(entries[depositLogIndex].topics[2], addressToBytes32(Predeploys.USDB)); // USDB
 
-        uint256 insuranceBalance = RealDAI.balanceOf(usdYieldManager.insurance());
+        uint256 insuranceBalance = RealDAI.balanceOf(l1BlastBridge.insurance());
         assertClose(insuranceBalance, uint256(yield / 10)); // 10% of yield
     }
 
     function emulatePositiveYield(uint256 initialAmount, uint256 elapsed) internal returns (uint256 yield) {
         vm.startPrank(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
-        RealDAI.mint(address(usdYieldManager), initialAmount);
+        RealDAI.mint(address(l1BlastBridge), initialAmount);
         vm.stopPrank();
 
-        vm.prank(multisig);
-        usdYieldManager.stake(0, address(dsrProvider), initialAmount);
+        vm.startPrank(multisig);
+        l1BlastBridge.stake(0, address(dsrProvider), initialAmount);
 
         skip(elapsed);
 
-        YieldManager.ProviderInfo memory info = usdYieldManager.getProviderInfoAt(0);
-        yield = info.stakedBalance - initialAmount;
-    }
-}
-
-contract USD_Insurance_Test is DSRYieldProvider_Initializer, Util {
-
-    function setUp() public override {
-        super.setUp();
-
-        vm.startPrank(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
-        RealDAI.mint(address(insurance), 10 ether);
-        vm.stopPrank();
-    }
-
-    function test_setAdmin_succeeds() external {
-        assertEq(insurance.admin(), multisig);
-        vm.prank(multisig);
-        insurance.setAdmin(address(0x4));
-        assertEq(insurance.admin(), address(0x4));
-    }
-
-    function test_coverLoss_admin_succeeds() external {
-
-        assertEq(insurance.admin(), multisig);
-
-        assertEq(usdYieldManager.totalValue(), 0 ether);
-
-        vm.prank(multisig);
-        insurance.coverLoss(address(RealDAI), 1 ether);
-
-        assertEq(usdYieldManager.totalValue(), 1 ether);
-    }
-
-    function test_coverLoss_ym_succeeds() external {
-
-        assertEq(usdYieldManager.totalValue(), 0 ether);
-
-        vm.prank(address(usdYieldManager));
-        insurance.coverLoss(address(RealDAI), 1 ether);
-
-        assertClose(usdYieldManager.totalValue(), 1 ether);
-    }
-
-    function test_coverloss_non_admin_reverts() external {
-
-        assertEq(usdYieldManager.totalValue(), 0 ether);
-
-        vm.expectRevert(abi.encodeWithSelector(Insurance.OnlyAdminOrYieldManager.selector));
-
-        vm.prank(address(0x4));
-        insurance.coverLoss(address(RealDAI), 1 ether);
+        YieldManager.ProviderInfo memory info = l1BlastBridge.getProviderInfoAt(0);
+        yield = info.stakedValue - initialAmount;
     }
 }

@@ -2,17 +2,15 @@
 pragma solidity 0.8.15;
 
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
 import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 
 interface ILido is IERC20 {
-    function submit(address referral) external payable returns (uint256);
+    function submit(address referral) external payable;
     function increaseAllowance(address spender, uint256 addedValue) external returns (bool);
     function isStakingPaused() external view returns (bool);
-    function getPooledEthByShares(uint256 shares) external view returns (uint256);
 }
 
 interface IWithdrawalQueue {
@@ -20,28 +18,10 @@ interface IWithdrawalQueue {
     function findCheckpointHints(uint256[] calldata _requestIds, uint256 _firstIndex, uint256 _lastIndex) external view returns (uint256[] memory hintIds);
     function requestWithdrawals(uint256[] calldata _amounts, address _owner) external returns (uint256[] memory requestIds);
     function claimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external;
-    function getWithdrawalStatus(uint256[] calldata _requestIds) external view returns (WithdrawalRequestStatus[] memory statuses);
 }
 
 interface IInsurance {
     function coverLoss(address token, uint256 amount) external;
-}
-
-/// @notice output format struct for `_getWithdrawalStatus()` method
-/// @dev taken from Lido's WithdrawalQueueBase contract
-struct WithdrawalRequestStatus {
-    /// @notice stETH token amount that was locked on withdrawal queue for this request
-    uint256 amountOfStETH;
-    /// @notice amount of stETH shares locked on withdrawal queue for this request
-    uint256 amountOfShares;
-    /// @notice address that can claim or transfer this request
-    address owner;
-    /// @notice timestamp of when the request was created, in seconds
-    uint256 timestamp;
-    /// @notice true, if request is finalized
-    bool isFinalized;
-    /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
-    bool isClaimed;
 }
 
 /// @title LidoYieldProvider
@@ -50,12 +30,6 @@ contract LidoYieldProvider is YieldProvider {
     ILido public constant LIDO = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     IWithdrawalQueue public constant WITHDRAWAL_QUEUE = IWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
 
-    address public immutable THIS;
-    uint256 public immutable claimBatchSize = 10;
-
-    uint256[] public unstakeRequests;
-    uint256 public lastClaimedIndex;
-
     /// @notice Emitted when a withdrawal is requested from Lido.
     /// @param requestId Lido WitdrawalQueue requestId.
     /// @param amount    Amount requested for withdrawal.
@@ -63,16 +37,12 @@ contract LidoYieldProvider is YieldProvider {
 
     /// @param _yieldManager Address of the yield manager for the underlying
     ///        yield asset of this provider.
-    constructor(YieldManager _yieldManager) YieldProvider(_yieldManager) {
-        THIS = address(this);
-        // add a dummy request to make the index start from 1
-        unstakeRequests.push(0);
-    }
+    constructor(YieldManager _yieldManager) YieldProvider(_yieldManager) {}
 
     /// @inheritdoc YieldProvider
     function initialize() external override onlyDelegateCall {
-        LIDO.approve(address(WITHDRAWAL_QUEUE), type(uint256).max);
-        LIDO.approve(address(YIELD_MANAGER), type(uint256).max);
+        // LIDO.approve(address(WITHDRAWAL_QUEUE), type(uint256).max);
+        // LIDO.approve(address(YIELD_MANAGER), type(uint256).max);
     }
 
     /// @inheritdoc YieldProvider
@@ -82,17 +52,17 @@ contract LidoYieldProvider is YieldProvider {
 
     /// @inheritdoc YieldProvider
     function isStakingEnabled(address token) public view override returns (bool) {
-        return token == address(LIDO) && !LIDO.isStakingPaused();
+        return token == address(LIDO) && LIDO.isStakingPaused();
     }
 
     /// @inheritdoc YieldProvider
-    function stakedBalance() public view override returns (uint256) {
+    function stakedValue() public view override returns (uint256) {
         return LIDO.balanceOf(address(YIELD_MANAGER));
     }
 
     /// @inheritdoc YieldProvider
     function yield() public view override returns (int256) {
-        return SafeCast.toInt256(stakedBalance()) - SafeCast.toInt256(stakedPrincipal);
+        return int256(stakedValue()) - int256(stakedBalance);
     }
 
     /// @inheritdoc YieldProvider
@@ -102,40 +72,31 @@ contract LidoYieldProvider is YieldProvider {
 
     /// @inheritdoc YieldProvider
     function stake(uint256 amount) external override onlyDelegateCall {
-        if (amount > YIELD_MANAGER.availableBalance()) {
+        if (amount > YIELD_MANAGER.lockedValue()) {
             revert InsufficientStakableFunds();
         }
         LIDO.submit{value: amount}(address(0));
     }
 
     /// @inheritdoc YieldProvider
-    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256 pending, uint256 claimed) {
+    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256 pending) {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         uint256 requestId = WITHDRAWAL_QUEUE.requestWithdrawals(amounts, address(YIELD_MANAGER))[0];
-        LidoYieldProvider(THIS).enqueueUnstakeRequest(requestId);
         emit LidoUnstakeInitiated(requestId, amount);
         pending = amount;
     }
 
-    function lastUnstakeRequestIndex() public view returns (uint256) {
-        return unstakeRequests.length - 1;
-    }
-
-    function enqueueUnstakeRequest(uint256 lidoRequestId) external onlyYieldManager {
-        unstakeRequests.push(lidoRequestId);
-    }
-
-    function setLastClaimedIndex(uint256 index) external onlyYieldManager {
-        lastClaimedIndex = index;
-    }
-
-    function recordClaimed(uint256 claimed, uint256 expected) external onlyYieldManager {
-        _recordClaimed(claimed, expected);
-    }
-
-    function preCommitYieldReportDelegateCallHook() external override onlyDelegateCall {
-        _claim();
+    /// @inheritdoc YieldProvider
+    function claim(uint256[] calldata requestIds) external override onlyDelegateCall returns (uint256 claimed) {
+        uint256 balanceBefore = address(YIELD_MANAGER).balance;
+        uint256[] memory hintIds = WITHDRAWAL_QUEUE.findCheckpointHints(
+            requestIds,
+            0,
+            WITHDRAWAL_QUEUE.getLastCheckpointIndex()
+        );
+        WITHDRAWAL_QUEUE.claimWithdrawals(requestIds, hintIds);
+        claimed = address(YIELD_MANAGER).balance - balanceBefore;
     }
 
     /// @inheritdoc YieldProvider
@@ -161,73 +122,5 @@ contract LidoYieldProvider is YieldProvider {
     /// @inheritdoc YieldProvider
     function insuranceBalance() public view override returns (uint256) {
         return LIDO.balanceOf(YIELD_MANAGER.insurance());
-    }
-
-    /// @notice Claims withdrawals from Lido. It selects a batch of claimable
-    ///         withdrawal requests (up to `claimBatchSize`), claims them and
-    ///         records negative yield if any. This method is meant to be
-    ///         delegate-called by the yield manager.
-    function _claim() internal onlyDelegateCall returns (uint256 claimed, uint256 expected) {
-        LidoYieldProvider yp = LidoYieldProvider(THIS);
-        uint256 lastClaimedIndex = yp.lastClaimedIndex();
-        uint256 lastRequestIndex = yp.lastUnstakeRequestIndex();
-
-        if (lastClaimedIndex == lastRequestIndex) {
-            // nothing to claim
-            return (0, 0);
-        }
-        // sanity check
-        require(lastClaimedIndex < lastRequestIndex, "invalid claim index");
-
-        // withdrawal status check for a batch of requests
-        uint256 firstIndex = lastClaimedIndex + 1;
-        uint256 lastIndex = (lastRequestIndex - lastClaimedIndex) > claimBatchSize
-            ? firstIndex + claimBatchSize - 1
-            : lastRequestIndex;
-
-        uint256[] memory requestIds = new uint256[](lastIndex - firstIndex + 1);
-        uint256 i;
-        for (i = firstIndex; i <= lastIndex; i++) {
-            requestIds[i - firstIndex] = yp.unstakeRequests(i);
-        }
-
-        WithdrawalRequestStatus[] memory statuses = WITHDRAWAL_QUEUE.getWithdrawalStatus(requestIds);
-
-        for (i = 0; i < statuses.length; i++) {
-            // find the first non-claimable request
-            if (!(statuses[i].isFinalized && !statuses[i].isClaimed)) {
-                break;
-            }
-            expected += statuses[i].amountOfStETH;
-        }
-        uint256 lastClaimableIndex = i + lastClaimedIndex;
-        // if there is nothing to claim, return
-        if (lastClaimableIndex == lastClaimedIndex) {
-            return (0, 0);
-        }
-
-        uint256 balanceBefore = address(YIELD_MANAGER).balance;
-
-        uint256[] memory claimableRequestIds = new uint256[](i);
-        for (uint256 j = 0; j < i; j++) {
-            claimableRequestIds[j] = requestIds[j];
-        }
-
-        uint256[] memory hintIds = WITHDRAWAL_QUEUE.findCheckpointHints(
-            claimableRequestIds,
-            1,
-            WITHDRAWAL_QUEUE.getLastCheckpointIndex()
-        );
-
-        // update the last claimed index
-        yp.setLastClaimedIndex(lastClaimableIndex);
-        WITHDRAWAL_QUEUE.claimWithdrawals(claimableRequestIds, hintIds);
-
-        claimed = address(YIELD_MANAGER).balance - balanceBefore;
-        yp.recordClaimed(claimed, expected);
-        uint256 negativeYield = expected - claimed;
-        if (negativeYield > 0) {
-            YIELD_MANAGER.recordNegativeYield(negativeYield);
-        }
     }
 }

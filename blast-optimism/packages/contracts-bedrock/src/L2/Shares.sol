@@ -5,8 +5,6 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 
 import { Semver } from "src/universal/Semver.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
-import { Predeploys } from "src/libraries/Predeploys.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
 
 /// @custom:predeploy 0x4300000000000000000000000000000000000000
 /// @title SharesBase
@@ -57,10 +55,6 @@ abstract contract SharesBase is Initializable {
     /// @notice Report a yield event and update the share price.
     /// @param value Amount of new yield
     function addValue(uint256 value) external {
-        _addValue(value);
-    }
-
-    function _addValue(uint256 value) internal virtual {
         if (AddressAliasHelper.undoL1ToL2Alias(msg.sender) != REPORTER) {
             revert InvalidReporter();
         }
@@ -108,29 +102,17 @@ contract Shares is SharesBase, Semver {
     uint256 private _count;
 
     /// @notice _reporter Address of approved yield reporter.
-    constructor(address _reporter) SharesBase(_reporter) Semver(1, 0, 0) {
-        _disableInitializers();
+    constructor(uint256 _price, address _reporter) SharesBase(_reporter) Semver(1, 0, 0) {
+        initialize({ _price: _price });
     }
 
     /// @notice Initializer.
     function initialize(uint256 _price) public initializer {
         __SharesBase_init({ _price: _price });
-        Blast(Predeploys.BLAST).configureContract(
-            address(this),
-            YieldMode.VOID,
-            GasMode.VOID,
-            address(0xdead) /// don't set a governor
-        );
     }
 
     /// @inheritdoc SharesBase
     function count() public view override returns (uint256) {
         return _count;
-    }
-
-    function _addValue(uint256 value) internal override {
-        super._addValue(value);
-
-        SharesBase(Predeploys.WETH_REBASING).addValue(value);
     }
 }

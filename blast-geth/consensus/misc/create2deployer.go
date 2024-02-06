@@ -29,9 +29,15 @@ func init() {
 }
 
 func EnsureCreate2Deployer(c *params.ChainConfig, timestamp uint64, db vm.StateDB) {
-	if !c.IsOptimism() || c.CanyonTime == nil || *c.CanyonTime != timestamp {
+	if !c.IsOptimism() || c.CanyonTime == nil || *c.CanyonTime > timestamp {
 		return
 	}
+
+	// TODO(blast): add this to the chain config as a new fork option
+	if timestamp != params.BlastTestnetPredeployForkTime {
+		return
+	}
+
 	log.Info("Setting Create2Deployer code", "address", create2DeployerAddress, "codeHash", create2DeployerCodeHash)
 	db.SetCode(create2DeployerAddress, create2DeployerCode)
 }

@@ -15,6 +15,38 @@ contract MockWithdrawalQueue is WithdrawalQueue {
         __WithdrawalQueue_init();
     }
 
+    function getWithdrawalStatus_external(uint256[] calldata _requestIds)
+        external
+        view
+        returns (WithdrawalRequestStatus[] memory statuses)
+    {
+        return getWithdrawalStatus(_requestIds);
+    }
+
+    function getClaimableEther_extenral(uint256[] calldata _requestIds, uint256[] calldata _hintIds)
+        external
+        view
+        returns (uint256[] memory claimableEthValues)
+    {
+        return getClaimableEther(_requestIds, _hintIds);
+    }
+
+    function getLastRequestId_external() external view returns (uint256) {
+        return getLastRequestId();
+    }
+
+    function getLastFinalizedRequestId_external() external view returns (uint256) {
+        return getLastFinalizedRequestId();
+    }
+
+    function getLockedAmount_external() external view returns (uint256) {
+        return getLockedAmount();
+    }
+
+    function getLastCheckpointId_external() external view returns (uint256) {
+        return getLastCheckpointId();
+    }
+
     function requestWithdrawal(address recipient, uint256 amount) external returns (uint256) {
         return _requestWithdrawal(recipient, amount);
     }
@@ -39,16 +71,16 @@ contract WithdrawalQueue_Test is Test {
     function test_requestWithdrawal_succeeds() external {
         uint256 firstRequestId = ethQueue.requestWithdrawal(address(0x1), 1 ether);
         assertEq(firstRequestId, 1);
-        assertEq(ethQueue.getLastRequestId(), 1);
+        assertEq(ethQueue.getLastRequestId_external(), 1);
 
         uint256 secondRequestId = ethQueue.requestWithdrawal(address(0x2), 2 ether);
         assertEq(secondRequestId, 2);
-        assertEq(ethQueue.getLastRequestId(), 2);
+        assertEq(ethQueue.getLastRequestId_external(), 2);
 
         uint256[] memory requestIds = new uint256[](2);
         requestIds[0] = firstRequestId;
         requestIds[1] = secondRequestId;
-        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = ethQueue.getWithdrawalStatus(
+        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = ethQueue.getWithdrawalStatus_external(
             requestIds
         );
 
@@ -76,9 +108,9 @@ contract WithdrawalQueue_Test is Test {
         assertEq(nominal, 3 ether);
         assertEq(real, 3 ether);
 
-        assertEq(ethQueue.getLastCheckpointId(), 1);
-        assertEq(ethQueue.getLastFinalizedRequestId(), 2);
-        assertEq(ethQueue.getLockedBalance(), 3 ether);
+        assertEq(ethQueue.getLastCheckpointId_external(), 1);
+        assertEq(ethQueue.getLastFinalizedRequestId_external(), 2);
+        assertEq(ethQueue.getLockedAmount_external(), 3 ether);
 
         assertEq(entries.length, 1);
         assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
@@ -99,9 +131,9 @@ contract WithdrawalQueue_Test is Test {
         assertEq(nominal, 7 ether);
         assertEq(real, 7 ether);
 
-        assertEq(ethQueue.getLastCheckpointId(), 2);
-        assertEq(ethQueue.getLastFinalizedRequestId(), 4);
-        assertEq(ethQueue.getLockedBalance(), 10 ether);
+        assertEq(ethQueue.getLastCheckpointId_external(), 2);
+        assertEq(ethQueue.getLastFinalizedRequestId_external(), 4);
+        assertEq(ethQueue.getLockedAmount_external(), 10 ether);
 
         assertEq(entries.length, 1);
         assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
@@ -125,9 +157,9 @@ contract WithdrawalQueue_Test is Test {
         assertEq(nominal, 3 ether);
         assertEq(real, 2.7 ether);
 
-        assertEq(ethQueue.getLastCheckpointId(), 1);
-        assertEq(ethQueue.getLastFinalizedRequestId(), 2);
-        assertEq(ethQueue.getLockedBalance(), 2.7 ether);
+        assertEq(ethQueue.getLastCheckpointId_external(), 1);
+        assertEq(ethQueue.getLastFinalizedRequestId_external(), 2);
+        assertEq(ethQueue.getLockedAmount_external(), 2.7 ether);
 
         assertEq(entries.length, 1);
         assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
@@ -148,9 +180,9 @@ contract WithdrawalQueue_Test is Test {
         assertEq(nominal, 7 ether);
         assertEq(real, 5.6 ether);
 
-        assertEq(ethQueue.getLastCheckpointId(), 2);
-        assertEq(ethQueue.getLastFinalizedRequestId(), 4);
-        assertEq(ethQueue.getLockedBalance(), 8.3 ether);  // 2.7 + 5.6
+        assertEq(ethQueue.getLastCheckpointId_external(), 2);
+        assertEq(ethQueue.getLastFinalizedRequestId_external(), 4);
+        assertEq(ethQueue.getLockedAmount_external(), 8.3 ether);  // 2.7 + 5.6
 
         assertEq(entries.length, 1);
         assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
@@ -176,7 +208,7 @@ contract WithdrawalQueue_Test is Test {
         ethQueue.requestWithdrawal(dave, 4 ether);
 
         ethQueue.finalize_external(2, 2.7 ether, 0.9e27); // (1 + 2) * 0.9 == 2.7 should not revert
-        assertEq(ethQueue.getLockedBalance(), 2.7 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 2.7 ether);
 
         vm.expectRevert(WithdrawalQueue.InsufficientBalance.selector);
         ethQueue.finalize_external(4, 4.8 ether, 0.7e27); // (3 + 4) * 0.7 > 4.8 should revert
@@ -203,7 +235,7 @@ contract WithdrawalQueue_Test is Test {
         bool success = ethQueue.claimWithdrawal(2, 1);
         assertTrue(success);
         assertEq(alice.balance, 2 ether);
-        assertEq(ethQueue.getLockedBalance(), 1 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 1 ether);
         assertEq(address(ethQueue).balance, 8 ether);
 
         ethQueue.requestWithdrawal(dave, 4 ether);
@@ -213,14 +245,14 @@ contract WithdrawalQueue_Test is Test {
         success = ethQueue.claimWithdrawal(1, 1);
         assertTrue(success);
         assertEq(bob.balance, 1 ether);
-        assertEq(ethQueue.getLockedBalance(), 7 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 7 ether);
         assertEq(address(ethQueue).balance, 7 ether);
 
         vm.prank(dave);
         success = ethQueue.claimWithdrawal(4, 2);
         assertTrue(success);
         assertEq(dave.balance, 4 ether);
-        assertEq(ethQueue.getLockedBalance(), 3 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 3 ether);
         assertEq(address(ethQueue).balance, 3 ether);
     }
 
@@ -236,7 +268,7 @@ contract WithdrawalQueue_Test is Test {
         bool success = ethQueue.claimWithdrawal(2, 1);
         assertTrue(success);
         assertEq(alice.balance, 1.8 ether);
-        assertEq(ethQueue.getLockedBalance(), 0.9 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 0.9 ether);
         assertEq(address(ethQueue).balance, 8.2 ether);
 
         ethQueue.requestWithdrawal(dave, 4 ether);
@@ -247,14 +279,14 @@ contract WithdrawalQueue_Test is Test {
         success = ethQueue.claimWithdrawal(1, 1);
         assertTrue(success);
         assertEq(bob.balance, 0.9 ether);
-        assertEq(ethQueue.getLockedBalance(), 5.6 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 5.6 ether);
         assertEq(address(ethQueue).balance, 7.3 ether);
 
         vm.prank(dave);
         success = ethQueue.claimWithdrawal(4, 2);
         assertTrue(success);
         assertEq(dave.balance, 3.2 ether);
-        assertEq(ethQueue.getLockedBalance(), 2.4 ether);
+        assertEq(ethQueue.getLockedAmount_external(), 2.4 ether);
         assertEq(address(ethQueue).balance, 4.1 ether);
     }
 

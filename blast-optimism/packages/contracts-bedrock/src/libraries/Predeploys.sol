@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 /// @title Predeploys
@@ -85,11 +85,11 @@ library Predeploys {
     address internal constant BLAST = 0x4300000000000000000000000000000000000002;
 
     /// @notice Address of the USDB predeploy.
-    address internal constant USDB = 0x4300000000000000000000000000000000000003;
+    address internal constant USDB = 0x4200000000000000000000000000000000000022;
 
     /// @notice Address of the WETH predeploy.
-    address internal constant WETH_REBASING = 0x4300000000000000000000000000000000000004;
+    address internal constant WETH_REBASING = 0x4200000000000000000000000000000000000023;
 
     /// @notice Address of the L2BlastBridge predeploy.
-    address internal constant L2_BLAST_BRIDGE = 0x4300000000000000000000000000000000000005;
+    address internal constant L2_BLAST_BRIDGE = 0x4200000000000000000000000000000000000024;
 }

@@ -8,14 +8,14 @@ import "../../governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
 import "../../governance/extensions/GovernorTimelockControlUpgradeable.sol";
 import "../../proxy/utils/Initializable.sol";
 
-contract MyGovernor3Upgradeable is
+contract MyGovernorUpgradeable is
     Initializable, GovernorUpgradeable,
     GovernorTimelockControlUpgradeable,
     GovernorCompatibilityBravoUpgradeable,
     GovernorVotesUpgradeable,
     GovernorVotesQuorumFractionUpgradeable
 {
-    function __MyGovernor3_init(
+    function __MyGovernor_init(
         IVotesUpgradeable _token,
         TimelockControllerUpgradeable _timelock
     ) internal onlyInitializing {
@@ -26,7 +26,7 @@ contract MyGovernor3Upgradeable is
         __GovernorVotesQuorumFraction_init_unchained(4);
     }
 
-    function __MyGovernor3_init_unchained(
+    function __MyGovernor_init_unchained(
         IVotesUpgradeable,
         TimelockControllerUpgradeable
     ) internal onlyInitializing {}

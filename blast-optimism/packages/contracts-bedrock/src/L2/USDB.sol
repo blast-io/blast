@@ -10,16 +10,15 @@ import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
 import { IOptimismMintableERC20 } from "src/universal/IOptimismMintableERC20.sol";
 import { Semver } from "src/universal/Semver.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
-import { Predeploys } from "src/libraries/Predeploys.sol";
+import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 
 /// @custom:proxied
-/// @custom:predeploy 0x4300000000000000000000000000000000000003
+/// @custom:predeploy 0x4200000000000000000000000000000000000022
 /// @title USDB
 /// @notice Rebasing ERC20 token with the share price determined by an L1
 ///         REPORTER. Conforms to OptimismMintableERC20 interface to allow mint/burn
-///         interactions from the L1BlastBridge.
-contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
+///         interfactions from the L1BlastBridge.
+contract USDB is SharesBase, ERC20Rebasing, Semver, IOptimismMintableERC20 {
     /// @notice Address of the corresponding version of this token on the remote chain.
     address public immutable REMOTE_TOKEN;
 
@@ -40,34 +39,40 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
 
     /// @notice A modifier that only allows the bridge to call
     modifier onlyBridge() {
-        if (msg.sender != BRIDGE) {
+        // UNDO alias required because _bridge is a L1 address
+        if (AddressAliasHelper.undoL1ToL2Alias(msg.sender) != BRIDGE) {
             revert CallerIsNotBridge();
         }
         _;
     }
 
     /// @custom:semver 1.0.0
-    /// @param _usdYieldManager Address of the USD Yield Manager. SharesBase yield reporter.
-    /// @param _l2Bridge        Address of the L2 Blast bridge.
-    /// @param _remoteToken     Address of the corresponding L1 token.
-    constructor(address _usdYieldManager, address _l2Bridge, address _remoteToken)
-        ERC20Rebasing(_usdYieldManager, 18)
+    /// @param _bridge      Address of the L1 USD bridge.
+    /// @param _remoteToken Address of the corresponding L1 token.
+    constructor(address _bridge, address _remoteToken)
+        SharesBase(_bridge)
+        ERC20Rebasing("Rebasing USD", "USDB", 18)
         Semver(1, 0, 0)
     {
-        BRIDGE = _l2Bridge;
+        BRIDGE = _bridge;
         REMOTE_TOKEN = _remoteToken;
-        _disableInitializers();
+        initialize();
     }
 
     /// @notice Initializer
     function initialize() public initializer {
-        __ERC20Rebasing_init("Rebasing USD", "USDB", 1e9);
-        Blast(Predeploys.BLAST).configureContract(
-            address(this),
-            YieldMode.VOID,
-            GasMode.VOID,
-            address(0xdead) /// don't set a governor
-        );
+        __ERC20Rebasing_init("Rebasing USD", "USDB");
+        __SharesBase_init({ _price: 1e8 });
+    }
+
+    /// @inheritdoc ERC20Rebasing
+    function sharePrice() public view override returns (uint256) {
+        return price;
+    }
+
+    /// @inheritdoc SharesBase
+    function count() public view override returns (uint256) {
+        return _totalShares;
     }
 
     /// @notice ERC165 interface check function.
@@ -75,7 +80,7 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
     /// @return Whether or not the interface is supported by this contract.
     function supportsInterface(bytes4 _interfaceId) external pure returns (bool) {
         bytes4 iface1 = type(IERC165).interfaceId;
-        // Interface corresponding to the updated OptimismMintableERC20.
+        // Interface corresponding to the updated OptimismMintableERC20 (this contract).
         bytes4 iface2 = type(IOptimismMintableERC20).interfaceId;
         return _interfaceId == iface1 || _interfaceId == iface2;
     }
@@ -120,7 +125,12 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
             revert TransferFromZeroAddress();
         }
 
+        uint256 accountBalance = balanceOf(_from);
+        if (_amount > accountBalance) {
+            revert InsufficientBalance();
+        }
         _withdraw(_from, _amount);
+
         emit Burn(_from, _amount);
     }
 }

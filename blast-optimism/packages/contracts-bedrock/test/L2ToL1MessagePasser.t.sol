@@ -2,20 +2,18 @@
 pragma solidity 0.8.15;
 
 // Testing utilities
-import { L2OutputOracle_Initializer } from "test/CommonTest.t.sol";
+import { CommonTest } from "test/CommonTest.t.sol";
 
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
 
-// Target contract dependencies
-import { YieldMode } from "src/L2/Blast.sol";
-import { GasMode } from "src/L2/Gas.sol";
-
 // Target contract
 import { L2ToL1MessagePasser } from "src/L2/L2ToL1MessagePasser.sol";
 
-contract L2ToL1MessagePasserTest is L2OutputOracle_Initializer {
+contract L2ToL1MessagePasserTest is CommonTest {
+    L2ToL1MessagePasser messagePasser;
+
     event MessagePassed(
         uint256 indexed nonce,
         address indexed sender,

@@ -100,19 +100,7 @@ func entrypoint(ctx *cli.Context) error {
 
 // checkPredeploy ensures that the predeploy at index i has the correct proxy admin set
 func checkPredeploy(client *ethclient.Client, i uint64) error {
-	err := checkPredeployWithNamespace(client, i, genesis.BigL2PredeployNamespace)
-	if err != nil {
-		return err
-	}
-	err = checkPredeployWithNamespace(client, i, genesis.BlastBigL2PredeployNamespace)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func checkPredeployWithNamespace(client *ethclient.Client, i uint64, namespace *big.Int) error {
-	bigAddr := new(big.Int).Or(namespace, new(big.Int).SetUint64(i))
+	bigAddr := new(big.Int).Or(genesis.BigL2PredeployNamespace, new(big.Int).SetUint64(i))
 	addr := common.BigToAddress(bigAddr)
 	if !predeploys.IsProxied(addr) {
 		return nil

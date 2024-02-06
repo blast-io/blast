@@ -13,7 +13,6 @@ import (
 var selfConfigureContractPath = filepath.Join(basePath, "./blast_contract_tests/self_configure_contract/SelfConfigureContract.json")
 var interleaveContractPath = filepath.Join(basePath, "./blast_contract_tests/interleave_contract/InterleaveContract.json")
 var simulateContractPath = filepath.Join(basePath, "./blast_contract_tests/simulate_contract_test/SimulateContract.json")
-var recursiveContractPath = filepath.Join(basePath, "./blast_contract_tests/recursive_contract_tests/D1.json")
 
 func TestDeployNewContract(t *testing.T) {
 	state := setupDb(t) // -> puts env vars in db
@@ -261,60 +260,6 @@ func TestClaimYield(t *testing.T) {
 	}
 	if db.GetClaimableAmount(addr).Cmp(big.NewInt(5)) != 0 {
 		t.Error("all yield must be claimed")
-	}
-
-}
-
-// Tests that claiming all yield at max does not revert
-func TestClaimYieldMax(t *testing.T) {
-	db := setupDb(t)
-	addr := deployTestContract(db, selfConfigureContractPath, t)
-	price := getVar("price", params.BlastSharesAddress, db, t).(*big.Int)
-	db.AddBalance(addr, new(big.Int).Mul(price, big.NewInt(10))) // 10 shares
-	if db.GetBalanceValues(addr).Shares.Cmp(big.NewInt(10)) != 0 {
-		t.Error("expected 10 shares")
-	}
-
-	count := getVar("count", params.BlastSharesAddress, db, t).(*big.Int)
-	distributeYield(db, count, t)
-	newClaimableYield := readClaimableYield(db, addr, t)
-	if newClaimableYield.Cmp(big.NewInt(10)) != 0 {
-		t.Error("claimable yield did not update")
-	}
-
-	rec := getAddr(5)
-	claimedYield := claimYield(db, addr, t, big.NewInt(10), &rec)
-	if claimedYield.Cmp(big.NewInt(10)) != 0 {
-		t.Error("expected yield to be 10")
-	}
-	if db.GetBalance(rec).Cmp(big.NewInt(10)) != 0 {
-		t.Error("yield did not transfer to correct account")
-	}
-	if db.GetClaimableAmount(addr).Cmp(big.NewInt(0)) != 0 {
-		t.Error("all yield must be claimed")
-	}
-}
-
-func TestClaimYieldRevert(t *testing.T) {
-	db := setupDb(t)
-	addr := deployTestContract(db, selfConfigureContractPath, t)
-	price := getVar("price", params.BlastSharesAddress, db, t).(*big.Int)
-	db.AddBalance(addr, new(big.Int).Mul(price, big.NewInt(10))) // 10 shares
-	if db.GetBalanceValues(addr).Shares.Cmp(big.NewInt(10)) != 0 {
-		t.Error("expected 10 shares")
-	}
-
-	count := getVar("count", params.BlastSharesAddress, db, t).(*big.Int)
-	distributeYield(db, count, t)
-	newClaimableYield := readClaimableYield(db, addr, t)
-	if newClaimableYield.Cmp(big.NewInt(10)) != 0 {
-		t.Error("claimable yield did not update")
-	}
-
-	rec := getAddr(5)
-	_, err := claimYieldWithErr(db, addr, t, big.NewInt(10000), &rec)
-	if err == nil {
-		t.Fatal("expected execution revert")
 	}
 
 }

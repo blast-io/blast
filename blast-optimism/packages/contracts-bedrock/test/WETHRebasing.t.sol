@@ -1,20 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-// Testing utilities
-// Target contract is imported by the `Bridge_Initializer`
 import { Bridge_Initializer } from "test/CommonTest.t.sol";
 import { ILegacyMintableERC20, IOptimismMintableERC20 } from "src/universal/IOptimismMintableERC20.sol";
 import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-
-// Libraries
-import { Predeploys } from "src/libraries/Predeploys.sol";
-
-// Target contract dependencies
+import { YieldMode } from "src/L2/ERC20Rebasing.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
-import { YieldMode } from "src/L2/Blast.sol";
-import { GasMode } from "src/L2/Gas.sol";
 
 contract Shares_Test is Bridge_Initializer {
     event NewPrice(uint256 price);
@@ -23,10 +15,6 @@ contract Shares_Test is Bridge_Initializer {
         super.setUp();
 
         setShareCount(1);
-    }
-
-    function test_blastConfig() external {
-        checkBlastConfig(address(SHARES), address(0xdead), YieldMode.VOID, GasMode.VOID);
     }
 
     function totalETH() internal view returns (uint256) {
@@ -89,10 +77,6 @@ contract WETHRebasing_Test is Bridge_Initializer {
     error InsufficientAllowance();
     error NotClaimableAccount();
 
-    function test_blastConfig() external {
-        checkBlastConfig(address(WETH), address(0xdead), YieldMode.AUTOMATIC, GasMode.VOID);
-    }
-
     function totalETH() internal view returns (uint256) {
         return address(WETH).balance + alice.balance + bob.balance + charlie.balance;
     }
@@ -103,8 +87,6 @@ contract WETHRebasing_Test is Bridge_Initializer {
         vm.deal(alice, (perToken*alice.balance) / 1e18);
         vm.deal(bob, (perToken*bob.balance) / 1e18);
         vm.deal(charlie, (perToken*charlie.balance) / 1e18);
-        vm.prank(Predeploys.SHARES);
-        WETH.addValue(0);
     }
 
     function addBalance(address account, uint256 amount) internal {
@@ -114,9 +96,193 @@ contract WETHRebasing_Test is Bridge_Initializer {
     function testConfigure(YieldMode yieldMode, uint256 expectedBalance, uint256 expectedSharePrice) internal {
         vm.prank(alice);
         WETH.configure(yieldMode);
-        assertEq(WETH.price(), expectedSharePrice);
+        assertEq(WETH.sharePrice(), expectedSharePrice);
         assertEq(WETH.balanceOf(alice), expectedBalance);
         assertTrue(WETH.getConfiguration(alice) == yieldMode);
+    }
+
+    function test_configure_succeeds() external {
+        vm.prank(alice);
+        WETH.deposit{value: WETH.sharePrice()}();
+
+        // defaults to Automatic
+        assertTrue(WETH.getConfiguration(alice) == YieldMode.AUTOMATIC);
+
+        uint256 aliceBalance = WETH.balanceOf(alice);
+        uint256 sharePrice = WETH.sharePrice();
+
+        // AUTOMATIC -> CLAIMABLE
+        testConfigure(YieldMode.CLAIMABLE, aliceBalance, sharePrice);
+        // CLAIMABLE -> AUTOMATIC
+        testConfigure(YieldMode.AUTOMATIC, aliceBalance, sharePrice);
+        // AUTOMATIC -> VOID
+        testConfigure(YieldMode.VOID, aliceBalance, sharePrice);
+        // VOID -> CLAIMABLE
+        testConfigure(YieldMode.CLAIMABLE, aliceBalance, sharePrice);
+        // CLAIMABLE -> VOID
+        testConfigure(YieldMode.VOID, aliceBalance, sharePrice);
+        // VOID -> AUTOMATIC
+        testConfigure(YieldMode.AUTOMATIC, aliceBalance, sharePrice);
+    }
+
+    function test_transfer_succeeds() external {
+        vm.prank(alice);
+        WETH.deposit{value: 100}();
+        assertEq(WETH.balanceOf(alice), 100);
+        vm.prank(bob);
+        WETH.deposit{value: 100}();
+        assertEq(WETH.balanceOf(bob), 100);
+        vm.prank(charlie);
+        WETH.deposit{value: 100}();
+        assertEq(WETH.balanceOf(charlie), 100);
+
+        vm.prank(bob);
+        WETH.configure(YieldMode.VOID);
+
+        uint256 sharePrice = WETH.sharePrice();
+
+        vm.prank(charlie);
+        WETH.configure(YieldMode.CLAIMABLE);
+
+        vm.startPrank(alice);
+        WETH.transfer(bob, 10);
+        assertEq(WETH.balanceOf(alice), 90);
+        assertEq(WETH.balanceOf(bob), 110);
+        assertEq(WETH.sharePrice(), sharePrice);
+        WETH.transfer(charlie, 10);
+        assertEq(WETH.balanceOf(alice), 80);
+        assertEq(WETH.balanceOf(charlie), 110);
+        assertEq(WETH.sharePrice(), sharePrice);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        WETH.transfer(alice, 10);
+        assertEq(WETH.balanceOf(bob), 100);
+        assertEq(WETH.balanceOf(alice), 90);
+        assertEq(WETH.sharePrice(), sharePrice);
+        WETH.transfer(charlie, 10);
+        assertEq(WETH.balanceOf(bob), 90);
+        assertEq(WETH.balanceOf(charlie), 120);
+        assertEq(WETH.sharePrice(), sharePrice);
+        vm.stopPrank();
+
+        vm.startPrank(charlie);
+        WETH.transfer(alice, 10);
+        assertEq(WETH.balanceOf(charlie), 110);
+        assertEq(WETH.balanceOf(alice), 100);
+        assertEq(WETH.sharePrice(), sharePrice);
+        WETH.transfer(bob, 10);
+        assertEq(WETH.balanceOf(charlie), 100);
+        assertEq(WETH.balanceOf(bob), 100);
+        assertEq(WETH.sharePrice(), sharePrice);
+        vm.stopPrank();
+    }
+
+    function test_transfer_insufficientBalance_reverts() external {
+        vm.expectRevert(InsufficientBalance.selector);
+        vm.prank(alice);
+        WETH.transfer(bob, 10);
+    }
+
+    function test_claim_succeeds() external {
+        vm.prank(alice);
+        WETH.configure(YieldMode.CLAIMABLE);
+
+        uint256 sharePrice = WETH.sharePrice();
+        vm.prank(alice);
+        WETH.deposit{value: sharePrice}();
+
+        assertEq(WETH.balanceOf(alice), sharePrice);
+
+        addYield(totalETH());
+
+        WETH.balanceOf(alice);
+        assertEq(WETH.getClaimableAmount(alice), sharePrice);
+        vm.prank(alice);
+        WETH.claim(bob, sharePrice/2);
+        assertEq(WETH.balanceOf(alice), sharePrice);
+        assertEq(WETH.balanceOf(bob), sharePrice/2);
+        assertEq(WETH.getClaimableAmount(alice), sharePrice/2);
+    }
+
+    function test_claim_insufficientFunds_reverts() external {
+        vm.prank(alice);
+        WETH.configure(YieldMode.CLAIMABLE);
+
+        vm.prank(alice);
+        WETH.deposit{value: 100}();
+
+        assertEq(WETH.balanceOf(alice), 100);
+
+        vm.expectRevert(InsufficientBalance.selector);
+        vm.prank(alice);
+        WETH.claim(bob, 1);
+    }
+
+    function test_claim_notClaimable_reverts() external {
+        vm.prank(alice);
+        WETH.configure(YieldMode.AUTOMATIC);
+
+        vm.prank(alice);
+        WETH.deposit{value: 100}();
+
+        vm.expectRevert(NotClaimableAccount.selector);
+        vm.prank(alice);
+        Usdb.claim(bob, 1);
+    }
+
+    function test_approval_succeeds() external {
+        vm.prank(alice);
+        WETH.approve(bob, 100);
+
+        assertEq(WETH.allowance(alice, bob), 100);
+    }
+
+    function test_transferFrom_withApproval_succeeds() external {
+        vm.prank(alice);
+        WETH.deposit{value: 100}();
+
+        vm.prank(alice);
+        WETH.approve(bob, 100);
+
+        vm.prank(bob);
+        WETH.transferFrom(alice, bob, 100);
+
+        assertEq(WETH.balanceOf(alice), 0);
+        assertEq(WETH.balanceOf(bob), 100);
+    }
+
+    function test_transferFrom_withoutApproval_reverts() external {
+        vm.prank(alice);
+        WETH.deposit{value: 100}();
+
+        vm.expectRevert(InsufficientAllowance.selector);
+        vm.prank(bob);
+        WETH.transferFrom(alice, bob, 100);
+    }
+
+    function test_rebasing() external {
+        uint256 sharePrice = WETH.sharePrice();
+        vm.prank(alice);
+        WETH.deposit{value: sharePrice/2}();
+        vm.prank(bob);
+        WETH.deposit{value: sharePrice/2}();
+        vm.prank(charlie);
+        WETH.deposit{value: sharePrice}();
+
+        addBalance(address(WETH), 1);
+
+        assertEq(WETH.balanceOf(alice), sharePrice/2);
+        assertEq(WETH.balanceOf(bob), sharePrice/2);
+        assertEq(WETH.balanceOf(charlie), sharePrice);
+        assertEq(WETH.sharePrice(), sharePrice);
+
+        addBalance(address(WETH), 2);
+
+        assertEq(WETH.balanceOf(alice), sharePrice/2);
+        assertEq(WETH.balanceOf(bob), sharePrice/2);
+        assertEq(WETH.balanceOf(charlie), sharePrice + 1);
+        assertEq(WETH.sharePrice(), sharePrice + 1);
     }
 
     function test_deposit_succeeds() external {
@@ -147,33 +313,89 @@ contract WETHRebasing_Test is Bridge_Initializer {
     }
 
     function test_withdraw_succeeds() external {
-        uint256 price = WETH.price();
-        vm.deal(alice, price);
+        vm.deal(alice, 1e6);
         vm.prank(alice);
-        WETH.deposit{value: price}();
+        WETH.deposit{value: 1e6}();
 
         addYield(totalETH());
         uint256 aliceBalance = alice.balance;
 
         vm.expectEmit(true, true, true, true);
-        emit Withdrawal(alice, 2*price);
+        emit Withdrawal(alice, 2e6);
 
         vm.prank(alice);
-        WETH.withdraw(2*price);
+        WETH.withdraw(2e6);
         assertEq(WETH.balanceOf(alice), 0);
-        assertEq(alice.balance, aliceBalance+2*price);
+        assertEq(alice.balance, aliceBalance+2e6);
     }
 
     function test_withdraw_insufficientBalance_fails() external {
-        uint256 price = WETH.price();
-        vm.deal(alice, price);
         vm.prank(alice);
-        WETH.deposit{value: price}();
+        WETH.deposit{value: 100}();
 
         vm.expectRevert(InsufficientBalance.selector);
         vm.prank(alice);
-        WETH.withdraw(2*price);
-
-        assertEq(WETH.balanceOf(alice), price);
+        WETH.withdraw(200);
+        assertEq(WETH.balanceOf(alice), 100);
     }
+
+    function testFuzz_transfer(uint8 aliceConfiguration, uint8 bobConfiguration, uint256 transferAmount) external {
+        uint256 aliceBalance = alice.balance;
+        vm.assume(transferAmount <= aliceBalance);
+        vm.assume(aliceConfiguration <= 2);
+        vm.assume(bobConfiguration <= 2);
+
+        vm.prank(alice);
+        WETH.deposit{value: aliceBalance}();
+
+        vm.prank(alice);
+        WETH.configure(YieldMode(aliceConfiguration));
+
+        vm.prank(bob);
+        WETH.configure(YieldMode(bobConfiguration));
+
+        vm.prank(alice);
+        WETH.transfer(bob, transferAmount);
+
+        assertEq(WETH.balanceOf(alice), aliceBalance - transferAmount);
+        assertEq(WETH.balanceOf(bob), transferAmount);
+    }
+
+    /*
+    function testFuzz_yield(
+        uint256 aliceDeposit,
+        uint256 bobDeposit,
+        uint256 charlieDeposit,
+        uint256 yield
+    ) external {
+        vm.assume(aliceDeposit <= alice.balance);
+        vm.assume(bobDeposit <= bob.balance);
+        vm.assume(charlieDeposit <= charlie.balance);
+        vm.assume(yield < 100e6);
+
+        vm.prank(alice);
+        WETH.configure(YieldMode.AUTOMATIC);
+        vm.prank(bob);
+        WETH.configure(YieldMode.VOID);
+        vm.prank(charlie);
+        WETH.configure(YieldMode.CLAIMABLE);
+
+        vm.prank(alice);
+        WETH.deposit{value: aliceDeposit}();
+        vm.prank(bob);
+        WETH.deposit{value: bobDeposit}();
+        vm.prank(charlie);
+        WETH.deposit{value: charlieDeposit}();
+
+        uint256 sharePrice = WETH.sharePrice();
+        uint256 aliceYield = (yield * (aliceDeposit - aliceDeposit % sharePrice)) / (address(WETH).balance - bobDeposit) + aliceDeposit;
+        uint256 charlieYield = (yield * (charlieDeposit - charlieDeposit % sharePrice)) / (address(WETH).balance - bobDeposit);
+        addBalance(address(WETH), yield);
+
+        assertEq(WETH.balanceOf(alice), aliceYield);
+        assertEq(WETH.balanceOf(bob), bobDeposit);
+        assertEq(WETH.balanceOf(charlie), charlieDeposit);
+        assertEq(WETH.getClaimableAmount(charlie), charlieYield);
+    }
+    */
 }

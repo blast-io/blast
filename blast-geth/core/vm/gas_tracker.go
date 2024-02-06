@@ -2,7 +2,6 @@ package vm
 
 import (
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,9 +35,9 @@ func (gtm *GasTracker) UseGas(address common.Address, amount uint64) {
 }
 
 func (gtm *GasTracker) RefundGas(address common.Address, amount uint64) {
-	// sanity check
+	// TODO(blast): non-panic way to deal with refund gas
 	if amount > gtm.gasUsed || amount > gtm.allocations[address] {
-		panic(fmt.Sprintf("refund exceeds gas used: gasUsed=%d, allocation=%d, amount=%d", gtm.gasUsed, gtm.allocations[address], amount))
+		panic("impossible")
 	}
 
 	gtm.gasUsed -= amount
@@ -46,11 +45,6 @@ func (gtm *GasTracker) RefundGas(address common.Address, amount uint64) {
 }
 
 func (gtm *GasTracker) AllocateDevGas(gasPrice *big.Int, refund uint64, state StateDB, timestamp uint64) {
-	// net gas used is 0 or gas consumed is <= refund
-	if gtm.gasUsed == 0 || gtm.gasUsed <= refund {
-		return
-	}
-
 	remainingGas := new(big.Int).SetUint64(gtm.gasUsed - refund)
 	netGas := new(big.Int).SetUint64(gtm.gasUsed)
 	accumulatedGas := new(big.Int)
@@ -79,9 +73,9 @@ func (gtm *GasTracker) AllocateDevGas(gasPrice *big.Int, refund uint64, state St
 		}
 	}
 
-	// sanity check
+	// TODO(blast): -> remove this panic. this panic serves as a canary for now
 	if totalGasAccount.Cmp(remainingGas) > 0 {
-		panic(fmt.Sprintf("gas accounting inflation: totalGasAccount=%v, remainingGas=%v", totalGasAccount.String(), remainingGas.String()))
+		panic("gas accounting inflation")
 	}
 
 	// give rest of gas to base fee recipient (for blast admin to claim)

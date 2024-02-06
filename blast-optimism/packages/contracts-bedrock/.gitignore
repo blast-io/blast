@@ -26,7 +26,3 @@ deployments/1337
 
 # Devnet config which changes with each 'make devnet-up'
 deploy-config/devnetL1.json
-
-l1state.json
-l2state.json
-step.json

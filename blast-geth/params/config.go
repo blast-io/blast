@@ -57,6 +57,11 @@ var (
 	chaosnetRegolithTime = uint64(1692156862)
 )
 
+// Blast chain config
+var (
+	BlastTestnetPredeployForkTime = uint64(1705690800)
+)
+
 func newUint64(val uint64) *uint64 { return &val }
 
 var (

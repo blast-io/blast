@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { SafeCall } from "src/libraries/SafeCall.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
@@ -158,37 +157,6 @@ contract L1StandardBridge is StandardBridge, ISemver {
         virtual
     {
         _initiateERC20Deposit(_l1Token, _l2Token, msg.sender, _to, _amount, _minGasLimit, _extraData);
-    }
-
-    /// Blast: This function is modified from StandardBridge to enable
-    /// discounted withdrawals on L1. The `msg.value` check is
-    /// less strict and `msg.value` is used instead of `_amount`
-    /// in the following steps.
-    /// @inheritdoc StandardBridge
-    function finalizeBridgeETH(
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes calldata _extraData
-    )
-        public
-        payable
-        override
-        onlyOtherBridge
-    {
-        // Blast: Accept discounted `msg.value`
-        require(msg.value <= _amount, "L1StandardBridge: amount sent exceeds amount required");
-        require(_to != address(this), "L1StandardBridge: cannot send to self");
-        require(_to != address(messenger), "L1StandardBridge: cannot send to messenger");
-
-        // Emit the correct events. By default this will be _amount, but child
-        // contracts may override this function in order to emit legacy events as well.
-        // Blast: replace `_amount` with `msg.value`
-        _emitETHBridgeFinalized(_from, _to, msg.value, _extraData);
-
-        // Blast: replace `_amount` with `msg.value`
-        bool success = SafeCall.call(_to, gasleft(), msg.value, hex"");
-        require(success, "L1StandardBridge: ETH transfer failed");
     }
 
     /// @custom:legacy

@@ -21,7 +21,7 @@ contract StdAssertionsTest is Test {
                                     FAIL(STRING)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function test_ShouldFail() external {
+    function testShouldFail() external {
         vm.expectEmit(false, false, false, true);
         emit log_named_string("Error", CUSTOM_ERROR);
         t._fail(CUSTOM_ERROR);
@@ -31,21 +31,21 @@ contract StdAssertionsTest is Test {
                                     ASSERT_FALSE
     //////////////////////////////////////////////////////////////////////////*/
 
-    function test_AssertFalse_Pass() external {
+    function testAssertFalse_Pass() external {
         t._assertFalse(false, EXPECT_PASS);
     }
 
-    function test_AssertFalse_Fail() external {
+    function testAssertFalse_Fail() external {
         vm.expectEmit(false, false, false, true);
         emit log("Error: Assertion Failed");
         t._assertFalse(true, EXPECT_FAIL);
     }
 
-    function test_AssertFalse_Err_Pass() external {
+    function testAssertFalse_Err_Pass() external {
         t._assertFalse(false, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function test_AssertFalse_Err_Fail() external {
+    function testAssertFalse_Err_Fail() external {
         vm.expectEmit(false, false, false, true);
         emit log_named_string("Error", CUSTOM_ERROR);
         t._assertFalse(true, CUSTOM_ERROR, EXPECT_FAIL);
@@ -55,11 +55,11 @@ contract StdAssertionsTest is Test {
                                     ASSERT_EQ(BOOL)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertEq_Bool_Pass(bool a) external {
+    function testAssertEq_Bool_Pass(bool a) external {
         t._assertEq(a, a, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_Bool_Fail(bool a, bool b) external {
+    function testAssertEq_Bool_Fail(bool a, bool b) external {
         vm.assume(a != b);
 
         vm.expectEmit(false, false, false, true);
@@ -67,11 +67,11 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_BoolErr_Pass(bool a) external {
+    function testAssertEq_BoolErr_Pass(bool a) external {
         t._assertEq(a, a, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_BoolErr_Fail(bool a, bool b) external {
+    function testAssertEq_BoolErr_Fail(bool a, bool b) external {
         vm.assume(a != b);
 
         vm.expectEmit(false, false, false, true);
@@ -83,11 +83,11 @@ contract StdAssertionsTest is Test {
                                     ASSERT_EQ(BYTES)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertEq_Bytes_Pass(bytes calldata a) external {
+    function testAssertEq_Bytes_Pass(bytes calldata a) external {
         t._assertEq(a, a, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_Bytes_Fail(bytes calldata a, bytes calldata b) external {
+    function testAssertEq_Bytes_Fail(bytes calldata a, bytes calldata b) external {
         vm.assume(keccak256(a) != keccak256(b));
 
         vm.expectEmit(false, false, false, true);
@@ -95,11 +95,11 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_BytesErr_Pass(bytes calldata a) external {
+    function testAssertEq_BytesErr_Pass(bytes calldata a) external {
         t._assertEq(a, a, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_BytesErr_Fail(bytes calldata a, bytes calldata b) external {
+    function testAssertEq_BytesErr_Fail(bytes calldata a, bytes calldata b) external {
         vm.assume(keccak256(a) != keccak256(b));
 
         vm.expectEmit(false, false, false, true);
@@ -111,7 +111,7 @@ contract StdAssertionsTest is Test {
                                     ASSERT_EQ(ARRAY)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertEq_UintArr_Pass(uint256 e0, uint256 e1, uint256 e2) public {
+    function testAssertEq_UintArr_Pass(uint256 e0, uint256 e1, uint256 e2) public {
         uint256[] memory a = new uint256[](3);
         a[0] = e0;
         a[1] = e1;
@@ -124,7 +124,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_IntArr_Pass(int256 e0, int256 e1, int256 e2) public {
+    function testAssertEq_IntArr_Pass(int256 e0, int256 e1, int256 e2) public {
         int256[] memory a = new int256[](3);
         a[0] = e0;
         a[1] = e1;
@@ -137,7 +137,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_AddressArr_Pass(address e0, address e1, address e2) public {
+    function testAssertEq_AddressArr_Pass(address e0, address e1, address e2) public {
         address[] memory a = new address[](3);
         a[0] = e0;
         a[1] = e1;
@@ -150,7 +150,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_PASS);
     }
 
-    function testFuzz_AssertEq_UintArr_FailEl(uint256 e1) public {
+    function testAssertEq_UintArr_FailEl(uint256 e1) public {
         vm.assume(e1 != 0);
         uint256[] memory a = new uint256[](3);
         uint256[] memory b = new uint256[](3);
@@ -161,7 +161,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_IntArr_FailEl(int256 e1) public {
+    function testAssertEq_IntArr_FailEl(int256 e1) public {
         vm.assume(e1 != 0);
         int256[] memory a = new int256[](3);
         int256[] memory b = new int256[](3);
@@ -172,7 +172,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_AddressArr_FailEl(address e1) public {
+    function testAssertEq_AddressArr_FailEl(address e1) public {
         vm.assume(e1 != address(0));
         address[] memory a = new address[](3);
         address[] memory b = new address[](3);
@@ -183,7 +183,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_UintArrErr_FailEl(uint256 e1) public {
+    function testAssertEq_UintArrErr_FailEl(uint256 e1) public {
         vm.assume(e1 != 0);
         uint256[] memory a = new uint256[](3);
         uint256[] memory b = new uint256[](3);
@@ -196,7 +196,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, CUSTOM_ERROR, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_IntArrErr_FailEl(int256 e1) public {
+    function testAssertEq_IntArrErr_FailEl(int256 e1) public {
         vm.assume(e1 != 0);
         int256[] memory a = new int256[](3);
         int256[] memory b = new int256[](3);
@@ -209,7 +209,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, CUSTOM_ERROR, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_AddressArrErr_FailEl(address e1) public {
+    function testAssertEq_AddressArrErr_FailEl(address e1) public {
         vm.assume(e1 != address(0));
         address[] memory a = new address[](3);
         address[] memory b = new address[](3);
@@ -222,7 +222,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, CUSTOM_ERROR, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_UintArr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_UintArr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -234,7 +234,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_IntArr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_IntArr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -246,7 +246,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_AddressArr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_AddressArr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -258,7 +258,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_UintArrErr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_UintArrErr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -272,7 +272,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, CUSTOM_ERROR, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_IntArrErr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_IntArrErr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -286,7 +286,7 @@ contract StdAssertionsTest is Test {
         t._assertEq(a, b, CUSTOM_ERROR, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEq_AddressArrErr_FailLen(uint256 lenA, uint256 lenB) public {
+    function testAssertEq_AddressArrErr_FailLen(uint256 lenA, uint256 lenB) public {
         vm.assume(lenA != lenB);
         vm.assume(lenA <= 10000);
         vm.assume(lenB <= 10000);
@@ -304,12 +304,12 @@ contract StdAssertionsTest is Test {
                                     ASSERT_EQ(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function test_AssertEqUint() public {
+    function testAssertEqUint() public {
         assertEqUint(uint8(1), uint128(1));
         assertEqUint(uint64(2), uint64(2));
     }
 
-    function testFail_AssertEqUint() public {
+    function testFailAssertEqUint() public {
         assertEqUint(uint64(1), uint96(2));
         assertEqUint(uint160(3), uint160(4));
     }
@@ -318,13 +318,13 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_ABS(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqAbs_Uint_Pass(uint256 a, uint256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_Uint_Pass(uint256 a, uint256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
 
         t._assertApproxEqAbs(a, b, maxDelta, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbs_Uint_Fail(uint256 a, uint256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_Uint_Fail(uint256 a, uint256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) > maxDelta);
 
         vm.expectEmit(false, false, false, true);
@@ -332,13 +332,13 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbs(a, b, maxDelta, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqAbs_UintErr_Pass(uint256 a, uint256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_UintErr_Pass(uint256 a, uint256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
 
         t._assertApproxEqAbs(a, b, maxDelta, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbs_UintErr_Fail(uint256 a, uint256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_UintErr_Fail(uint256 a, uint256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) > maxDelta);
 
         vm.expectEmit(false, false, false, true);
@@ -350,7 +350,7 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_ABS_DECIMAL(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqAbsDecimal_Uint_Pass(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_Uint_Pass(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
@@ -358,7 +358,7 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_Uint_Fail(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_Uint_Fail(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) > maxDelta);
@@ -368,7 +368,7 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_UintErr_Pass(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_UintErr_Pass(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
@@ -376,7 +376,7 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_UintErr_Fail(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_UintErr_Fail(uint256 a, uint256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) > maxDelta);
@@ -390,13 +390,13 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_ABS(INT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqAbs_Int_Pass(int256 a, int256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_Int_Pass(int256 a, int256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
 
         t._assertApproxEqAbs(a, b, maxDelta, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbs_Int_Fail(int256 a, int256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_Int_Fail(int256 a, int256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) > maxDelta);
 
         vm.expectEmit(false, false, false, true);
@@ -404,13 +404,13 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbs(a, b, maxDelta, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqAbs_IntErr_Pass(int256 a, int256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_IntErr_Pass(int256 a, int256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
 
         t._assertApproxEqAbs(a, b, maxDelta, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbs_IntErr_Fail(int256 a, int256 b, uint256 maxDelta) external {
+    function testAssertApproxEqAbs_IntErr_Fail(int256 a, int256 b, uint256 maxDelta) external {
         vm.assume(stdMath.delta(a, b) > maxDelta);
 
         vm.expectEmit(false, false, false, true);
@@ -422,17 +422,13 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_ABS_DECIMAL(INT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqAbsDecimal_Int_Pass(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
-        external
-    {
+    function testAssertApproxEqAbsDecimal_Int_Pass(int256 a, int256 b, uint256 maxDelta, uint256 decimals) external {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
 
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_Int_Fail(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
-        external
-    {
+    function testAssertApproxEqAbsDecimal_Int_Fail(int256 a, int256 b, uint256 maxDelta, uint256 decimals) external {
         vm.assume(stdMath.delta(a, b) > maxDelta);
 
         vm.expectEmit(false, false, false, true);
@@ -440,7 +436,7 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_IntErr_Pass(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_IntErr_Pass(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) <= maxDelta);
@@ -448,7 +444,7 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqAbsDecimal(a, b, maxDelta, decimals, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqAbsDecimal_IntErr_Fail(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
+    function testAssertApproxEqAbsDecimal_IntErr_Fail(int256 a, int256 b, uint256 maxDelta, uint256 decimals)
         external
     {
         vm.assume(stdMath.delta(a, b) > maxDelta);
@@ -462,14 +458,14 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_REL(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqRel_Uint_Pass(uint256 a, uint256 b, uint256 maxPercentDelta) external {
+    function testAssertApproxEqRel_Uint_Pass(uint256 a, uint256 b, uint256 maxPercentDelta) external {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRel(a, b, maxPercentDelta, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRel_Uint_Fail(uint256 a, uint256 b, uint256 maxPercentDelta) external {
+    function testAssertApproxEqRel_Uint_Fail(uint256 a, uint256 b, uint256 maxPercentDelta) external {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -478,14 +474,14 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqRel(a, b, maxPercentDelta, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqRel_UintErr_Pass(uint256 a, uint256 b, uint256 maxPercentDelta) external {
+    function testAssertApproxEqRel_UintErr_Pass(uint256 a, uint256 b, uint256 maxPercentDelta) external {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRel(a, b, maxPercentDelta, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRel_UintErr_Fail(uint256 a, uint256 b, uint256 maxPercentDelta) external {
+    function testAssertApproxEqRel_UintErr_Fail(uint256 a, uint256 b, uint256 maxPercentDelta) external {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -498,24 +494,18 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_REL_DECIMAL(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqRelDecimal_Uint_Pass(
-        uint256 a,
-        uint256 b,
-        uint256 maxPercentDelta,
-        uint256 decimals
-    ) external {
+    function testAssertApproxEqRelDecimal_Uint_Pass(uint256 a, uint256 b, uint256 maxPercentDelta, uint256 decimals)
+        external
+    {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRelDecimal(a, b, maxPercentDelta, decimals, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRelDecimal_Uint_Fail(
-        uint256 a,
-        uint256 b,
-        uint256 maxPercentDelta,
-        uint256 decimals
-    ) external {
+    function testAssertApproxEqRelDecimal_Uint_Fail(uint256 a, uint256 b, uint256 maxPercentDelta, uint256 decimals)
+        external
+    {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -524,24 +514,18 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqRelDecimal(a, b, maxPercentDelta, decimals, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqRelDecimal_UintErr_Pass(
-        uint256 a,
-        uint256 b,
-        uint256 maxPercentDelta,
-        uint256 decimals
-    ) external {
+    function testAssertApproxEqRelDecimal_UintErr_Pass(uint256 a, uint256 b, uint256 maxPercentDelta, uint256 decimals)
+        external
+    {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRelDecimal(a, b, maxPercentDelta, decimals, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRelDecimal_UintErr_Fail(
-        uint256 a,
-        uint256 b,
-        uint256 maxPercentDelta,
-        uint256 decimals
-    ) external {
+    function testAssertApproxEqRelDecimal_UintErr_Fail(uint256 a, uint256 b, uint256 maxPercentDelta, uint256 decimals)
+        external
+    {
         vm.assume(a < type(uint128).max && b < type(uint128).max && b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -554,14 +538,14 @@ contract StdAssertionsTest is Test {
                                     APPROX_EQ_REL(INT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertApproxEqRel_Int_Pass(int128 a, int128 b, uint128 maxPercentDelta) external {
+    function testAssertApproxEqRel_Int_Pass(int128 a, int128 b, uint128 maxPercentDelta) external {
         vm.assume(b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRel(a, b, maxPercentDelta, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRel_Int_Fail(int128 a, int128 b, uint128 maxPercentDelta) external {
+    function testAssertApproxEqRel_Int_Fail(int128 a, int128 b, uint128 maxPercentDelta) external {
         vm.assume(b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -570,14 +554,14 @@ contract StdAssertionsTest is Test {
         t._assertApproxEqRel(a, b, maxPercentDelta, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertApproxEqRel_IntErr_Pass(int128 a, int128 b, uint128 maxPercentDelta) external {
+    function testAssertApproxEqRel_IntErr_Pass(int128 a, int128 b, uint128 maxPercentDelta) external {
         vm.assume(b != 0);
         vm.assume(stdMath.percentDelta(a, b) <= maxPercentDelta);
 
         t._assertApproxEqRel(a, b, maxPercentDelta, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AssertApproxEqRel_IntErr_Fail(int128 a, int128 b, uint128 maxPercentDelta) external {
+    function testAssertApproxEqRel_IntErr_Fail(int128 a, int128 b, uint128 maxPercentDelta) external {
         vm.assume(b != 0);
         vm.assume(stdMath.percentDelta(a, b) > maxPercentDelta);
 
@@ -634,7 +618,7 @@ contract StdAssertionsTest is Test {
                                     ASSERT_EQ_CALL
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertEqCall_Return_Pass(
+    function testAssertEqCall_Return_Pass(
         bytes memory callDataA,
         bytes memory callDataB,
         bytes memory returnData,
@@ -646,7 +630,7 @@ contract StdAssertionsTest is Test {
         t._assertEqCall(targetA, callDataA, targetB, callDataB, strictRevertData, EXPECT_PASS);
     }
 
-    function testFuzz_RevertWhenCalled_AssertEqCall_Return_Fail(
+    function testAssertEqCall_Return_Fail(
         bytes memory callDataA,
         bytes memory callDataB,
         bytes memory returnDataA,
@@ -663,7 +647,7 @@ contract StdAssertionsTest is Test {
         t._assertEqCall(targetA, callDataA, targetB, callDataB, strictRevertData, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertEqCall_Revert_Pass(
+    function testAssertEqCall_Revert_Pass(
         bytes memory callDataA,
         bytes memory callDataB,
         bytes memory revertDataA,
@@ -675,7 +659,7 @@ contract StdAssertionsTest is Test {
         t._assertEqCall(targetA, callDataA, targetB, callDataB, NON_STRICT_REVERT_DATA, EXPECT_PASS);
     }
 
-    function testFuzz_RevertWhenCalled_AssertEqCall_Revert_Fail(
+    function testAssertEqCall_Revert_Fail(
         bytes memory callDataA,
         bytes memory callDataB,
         bytes memory revertDataA,
@@ -691,7 +675,7 @@ contract StdAssertionsTest is Test {
         t._assertEqCall(targetA, callDataA, targetB, callDataB, STRICT_REVERT_DATA, EXPECT_FAIL);
     }
 
-    function testFuzz_RevertWhenCalled_AssertEqCall_Fail(
+    function testAssertEqCall_Fail(
         bytes memory callDataA,
         bytes memory callDataB,
         bytes memory returnDataA,
@@ -718,23 +702,23 @@ contract StdAssertionsTest is Test {
                                 ASSERT_NOT_EQ(BYTES)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function testFuzz_AssertNotEq_Bytes_Pass(bytes32 a, bytes32 b) external {
+    function testAssertNotEq_Bytes_Pass(bytes32 a, bytes32 b) external {
         vm.assume(a != b);
         t._assertNotEq(a, b, EXPECT_PASS);
     }
 
-    function testFuzz_AssertNotEq_Bytes_Fail(bytes32 a) external {
+    function testAssertNotEq_Bytes_Fail(bytes32 a) external {
         vm.expectEmit(false, false, false, true);
         emit log("Error: a != b not satisfied [bytes32]");
         t._assertNotEq(a, a, EXPECT_FAIL);
     }
 
-    function testFuzz_AssertNotEq_BytesErr_Pass(bytes32 a, bytes32 b) external {
+    function testAssertNotEq_BytesErr_Pass(bytes32 a, bytes32 b) external {
         vm.assume(a != b);
         t._assertNotEq(a, b, CUSTOM_ERROR, EXPECT_PASS);
     }
 
-    function testFuzz_AsserNottEq_BytesErr_Fail(bytes32 a) external {
+    function testAsserNottEq_BytesErr_Fail(bytes32 a) external {
         vm.expectEmit(false, false, false, true);
         emit log_named_string("Error", CUSTOM_ERROR);
         t._assertNotEq(a, a, CUSTOM_ERROR, EXPECT_FAIL);
@@ -744,12 +728,12 @@ contract StdAssertionsTest is Test {
                                 ASSERT_NOT_EQ(UINT)
     //////////////////////////////////////////////////////////////////////////*/
 
-    function test_AssertNotEqUint() public {
+    function testAssertNotEqUint() public {
         assertNotEq(uint8(1), uint128(2));
         assertNotEq(uint64(3), uint64(4));
     }
 
-    function testFail_AssertNotEqUint() public {
+    function testFailAssertNotEqUint() public {
         assertNotEq(uint64(1), uint96(1));
         assertNotEq(uint160(2), uint160(2));
     }

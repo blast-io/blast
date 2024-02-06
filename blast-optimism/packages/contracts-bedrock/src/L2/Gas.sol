@@ -1,7 +1,5 @@
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
-
-import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 enum GasMode {
     VOID,
@@ -65,7 +63,6 @@ contract Gas is IGas {
         require(_baseClaimRate < _ceilClaimRate, "base claim rate must be < ceil claim rate");
         require(_baseGasSeconds < _ceilGasSeconds, "base gas seconds must be < ceil gas seconds");
         require(_baseGasSeconds > 0, "base gas seconds must be > 0");
-        require(_ceilClaimRate <= 10000, "ceil claim rate must be less than or equal to 10_000 bips");
         // admin vars
         admin =  _admin;
         blastConfigurationContract = _blastConfigurationContract;
@@ -111,7 +108,6 @@ contract Gas is IGas {
         require(_baseClaimRate < _ceilClaimRate, "base claim rate must be < ceil claim rate");
         require(_baseGasSeconds < _ceilGasSeconds, "base gas seconds must be < ceil gas seconds");
         require(_baseGasSeconds > 0, "base gas seconds must be > 0");
-        require(_ceilClaimRate <= 10000, "ceil claim rate must be less than or equal to 10_000 bips");
 
         zeroClaimRate = _zeroClaimRate;
         baseGasSeconds = _baseGasSeconds;
@@ -128,7 +124,7 @@ contract Gas is IGas {
     function adminClaimGas(address contractAddress) external onlyAdmin returns (uint256) {
         (, uint256 etherBalance,,) = readGasParams(contractAddress);
         _updateGasParams(contractAddress, 0, 0, GasMode.VOID);
-        SafeTransferLib.safeTransferETH(blastFeeVault, etherBalance);
+        payable(blastFeeVault).transfer(etherBalance);
         return etherBalance;
     }
     /**
@@ -150,8 +146,6 @@ contract Gas is IGas {
      * @return The amount of gas claimed
      */
     function claimGasAtMinClaimRate(address contractAddress, address recipientOfGas, uint256 minClaimRateBips) public returns (uint256) {
-        require(minClaimRateBips <= ceilClaimRate, "desired claim rate exceeds maximum");
-
         (uint256 etherSeconds, uint256 etherBalance,,) = readGasParams(contractAddress);
         if (minClaimRateBips <= zeroClaimRate) {
             return claimAll(contractAddress, recipientOfGas);
@@ -165,7 +159,7 @@ contract Gas is IGas {
         uint256 bipsDiff = minClaimRateBips - baseClaimRate;
         uint256 secondsDiff = ceilGasSeconds - baseGasSeconds;
         uint256 rateDiff = ceilClaimRate - baseClaimRate;
-        uint256 minSecondsStaked = baseGasSeconds + Math.ceilDiv(bipsDiff * secondsDiff, rateDiff);
+        uint256 minSecondsStaked = baseGasSeconds + (bipsDiff * secondsDiff / rateDiff);
         uint256 maxEtherClaimable = etherSeconds / minSecondsStaked;
         if (maxEtherClaimable > etherBalance)  {
             maxEtherClaimable = etherBalance;
@@ -221,10 +215,8 @@ contract Gas is IGas {
 
         _updateGasParams(contractAddress, etherSeconds - gasSecondsToConsumeNormalized, etherBalance - gasToClaim, mode);
 
-        SafeTransferLib.safeTransferETH(recipientOfGas, userEther);
-        if (penalty > 0) {
-            SafeTransferLib.safeTransferETH(blastFeeVault, penalty);
-        }
+        payable(recipientOfGas).transfer(userEther);
+        payable(blastFeeVault).transfer(penalty);
 
         return userEther;
     }
@@ -240,7 +232,7 @@ contract Gas is IGas {
         if (secondsStaked < baseGasSeconds) {
             return (zeroClaimRate, 0);
         }
-        if (secondsStaked >= ceilGasSeconds) {
+        if (secondsStaked > ceilGasSeconds) {
             uint256 gasToConsumeNormalized = gasToClaim * ceilGasSeconds;
             return (ceilClaimRate, gasToConsumeNormalized);
         }

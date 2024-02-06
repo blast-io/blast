@@ -115,29 +115,8 @@ abstract contract Deployer is Script {
             string memory deploymentName = deployments[i].name;
 
             string memory deployTx = _getDeployTransactionByContractAddress(addr);
-            if (bytes(deployTx).length == 0 || keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("USDToken")) || keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("ETHYieldToken")) || keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("USDBRemoteToken"))) {
+            if (bytes(deployTx).length == 0) {
                 console.log("Deploy Tx not found for %s skipping deployment artifact generation", deploymentName);
-                Artifact memory artifact = Artifact({
-                    abi: "[]",
-                    addr: addr,
-                    args: new string[](0),
-                    bytecode: "",
-                    deployedBytecode: "",
-                    devdoc: "",
-                    metadata: "",
-                    numDeployments: 1,
-                    receipt: "",
-                    solcInputHash: bytes32(0),
-                    storageLayout: '{"storage":[],"types":{}}',
-                    transactionHash: bytes32(0),
-                    userdoc: ""
-                });
-
-                string memory json = _serializeArtifact(artifact);
-
-                string memory artifactPath = string.concat(deploymentsDir, "/", deploymentName, ".json");
-
-                vm.writeJson({ json: json, path: artifactPath });
                 continue;
             }
             string memory contractName = _getContractNameFromDeployTransaction(deployTx);
@@ -157,7 +136,6 @@ abstract contract Deployer is Script {
             } catch { }
             numDeployments++;
 
-            console.log(contractName);
             Artifact memory artifact = Artifact({
                 abi: getAbi(contractName),
                 addr: addr,
@@ -462,7 +440,7 @@ abstract contract Deployer is Script {
         // NOTE: these are commented because otherwise the deployment encounters OOM errors
         // json = stdJson.serialize("", "devdoc", _artifact.devdoc);
         // json = stdJson.serialize("", "metadata", _artifact.metadata);
-        json = stdJson.serialize("", "numDeployments", _artifact.numDeployments);
+        // json = stdJson.serialize("", "numDeployments", _artifact.numDeployments);
         json = stdJson.serialize("", "receipt", _artifact.receipt);
         json = stdJson.serialize("", "solcInputHash", _artifact.solcInputHash);
         json = stdJson.serialize("", "storageLayout", _artifact.storageLayout);
@@ -473,7 +451,7 @@ abstract contract Deployer is Script {
 
     /// @notice The context of the deployment is used to namespace the artifacts.
     ///         An unknown context will use the chainid as the context name.
-    function _getDeploymentContext() internal returns (string memory) {
+    function _getDeploymentContext() private returns (string memory) {
         string memory context = vm.envOr("DEPLOYMENT_CONTEXT", string(""));
         if (bytes(context).length > 0) {
             return context;

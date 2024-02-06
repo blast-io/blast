@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { Predeploys } from "src/libraries/Predeploys.sol";
@@ -7,7 +7,6 @@ import { ISemver } from "src/universal/ISemver.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
 
 /// @custom:proxied
 /// @custom:predeploy 0x4200000000000000000000000000000000000010
@@ -59,18 +58,12 @@ contract L2StandardBridge is StandardBridge, ISemver {
     /// @notice Constructs the L2StandardBridge contract.
     /// @param _otherBridge Address of the L1StandardBridge.
     constructor(StandardBridge _otherBridge) StandardBridge(_otherBridge) {
-        _disableInitializers();
+        initialize();
     }
 
     /// @notice Initializer
     function initialize() public reinitializer(Constants.INITIALIZER) {
         __StandardBridge_init({ _messenger: CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER) });
-        Blast(Predeploys.BLAST).configureContract(
-            address(this),
-            YieldMode.VOID,
-            GasMode.VOID,
-            address(0xdead) /// don't set a governor
-        );
     }
 
     /// @notice Allows EOAs to bridge ETH by sending directly to the bridge.

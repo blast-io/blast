@@ -1,9 +1,7 @@
 package runtime
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -13,12 +11,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -155,64 +153,6 @@ func getBytecodeFromForgeArtifacts(filepath string, t *testing.T) []byte {
 	return common.Hex2Bytes(bytecodeObject.(string))
 }
 
-func setStateGeneral(allocJson map[string]interface{}, addrRaw string, db *state.StateDB, t *testing.T) {
-	addr := common.HexToAddress(addrRaw)
-	db.CreateAccount(addr)
-	// set code
-	contractParams, ok := allocJson[addrRaw]
-	if !ok {
-		t.Fatal("unable to find contract")
-	}
-
-	// sets code
-	code, ok := contractParams.(map[string]interface{})["code"]
-	if ok {
-		if _, ok := code.(string); !ok {
-			t.Fatal("code is not a string")
-		}
-		codeStr := code.(string)
-		codeBytes := common.Hex2Bytes(codeStr[2:])
-		db.SetCode(addr, codeBytes)
-	}
-	// set storage
-	storage, ok := contractParams.(map[string]interface{})["storage"]
-	if ok {
-		for slot, value := range storage.(map[string]interface{}) {
-			if _, ok := value.(string); !ok {
-				t.Fatal("value is not a string")
-			}
-			db.SetState(addr, common.HexToHash(slot), common.HexToHash(value.(string)))
-		}
-	}
-
-	// sets flags
-	flags, ok := contractParams.(map[string]interface{})["flags"]
-	if ok {
-		if _, ok := flags.(float64); !ok {
-			t.Fatal("flags is not a float64")
-		}
-		flagsFloat, _ := flags.(float64)
-		flagsUint8 := uint8(flagsFloat)
-
-		db.SetFlags(addr, flagsUint8)
-	}
-
-	// sets balance
-	balance, ok := contractParams.(map[string]interface{})["balance"]
-	if ok {
-		if _, ok := balance.(string); !ok {
-			t.Fatal("balance is not a string")
-		}
-		balanceString, _ := balance.(string)
-		_, ok := new(big.Int).SetString(balanceString, 0)
-		if !ok {
-			t.Fatal("balance cannot be converted to big int")
-		}
-		// DO NOT set balance, messes with tests dealing with share count
-		// db.SetBalance(addr, balanceBigInt)
-	}
-}
-
 func setState(allocJson map[string]interface{}, addr common.Address, hasStorage bool, db *state.StateDB, t *testing.T) {
 	db.CreateAccount(addr)
 	// set code
@@ -258,7 +198,22 @@ func setState(allocJson map[string]interface{}, addr common.Address, hasStorage 
 	db.SetFlags(addr, flagsUint8)
 }
 
-func deployGenesisWithDbOld(t *testing.T, db *state.StateDB) *state.StateDB {
+func deployGenesis(t *testing.T) *state.StateDB {
+	path := BASE_OPTIMISM_PATH + "/.devnet/genesis-l2.json"
+	genesisJson := readJson(path, t)
+	allocJson, ok := genesisJson["alloc"]
+	if !ok {
+		t.Fatal("unable to parse genesis json")
+	}
+	db, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+
+	setState(allocJson.(map[string]interface{}), params.BlastAccountConfigurationAddress, false, db, t)
+	setState(allocJson.(map[string]interface{}), params.BlastGasAddress, true, db, t)
+	setState(allocJson.(map[string]interface{}), params.BlastSharesAddress, true, db, t)
+	return db
+}
+
+func deployGenesisWithDb(t *testing.T, db *state.StateDB) *state.StateDB {
 	path := BASE_OPTIMISM_PATH + "/.devnet/genesis-l2.json"
 	genesisJson := readJson(path, t)
 	allocJson, ok := genesisJson["alloc"]
@@ -270,27 +225,6 @@ func deployGenesisWithDbOld(t *testing.T, db *state.StateDB) *state.StateDB {
 	setState(allocJson.(map[string]interface{}), params.BlastGasAddress, true, db, t)
 	setState(allocJson.(map[string]interface{}), params.BlastSharesAddress, true, db, t)
 	return db
-}
-
-func deployGenesisWithDb(t *testing.T, db *state.StateDB) {
-	path := BASE_OPTIMISM_PATH + "/.devnet/genesis-l2.json"
-	genesisJson := readJson(path, t)
-	allocJson, ok := genesisJson["alloc"]
-	if !ok {
-		t.Fatal("unable to parse genesis json")
-	}
-	allocJsonMap := allocJson.(map[string]interface{})
-	for key := range allocJsonMap {
-		setStateGeneral(allocJson.(map[string]interface{}), key, db, t)
-	}
-}
-
-func TestDeploy2(t *testing.T) {
-	db, err := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deployGenesisWithDb(t, db)
 }
 
 func setup(t *testing.T) (*Config, *vm.EVM) {
@@ -310,6 +244,7 @@ func setup(t *testing.T) (*Config, *vm.EVM) {
 	cfg.State.Prepare(rules, cfg.Origin, cfg.Coinbase, &addr, vm.ActivePrecompiles(rules), nil)
 
 	deployGenesisWithDb(t, cfg.State)
+	misc.EnsureUpdateGas(cfg.ChainConfig, params.BlastTestnetPredeployForkTime, cfg.State)
 	return cfg, env
 }
 
@@ -323,11 +258,18 @@ func configureOptimism(cfg *Config) {
 		EIP1559DenominatorCanyon: 250,
 	}
 }
-func enableTracer(cfg *Config) {
-	cfg.EVMConfig.Tracer = logger.NewStructLogger(nil)
-}
 
 func setupDb(t *testing.T) *state.StateDB {
+	state, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	deployGenesisWithDb(t, state)
+	cfg := new(Config)
+	setDefaults(cfg, new(uint64))
+	configureOptimism(cfg)
+	misc.EnsureUpdateGas(cfg.ChainConfig, params.BlastTestnetPredeployForkTime, state)
+	return state
+}
+
+func setupDbWithoutUpdatedGasPredeploy(t *testing.T) *state.StateDB {
 	state, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	deployGenesisWithDb(t, state)
 	return state
@@ -389,13 +331,12 @@ func staticCall(tp *TransactionParams, statedb *state.StateDB, t *testing.T) []b
 	}
 	return ret
 }
-func stateTransition(tp *TransactionParams, statedb *state.StateDB, t *testing.T) *core.ExecutionResult {
-	result, _ := stateTransitionLogs(tp, statedb, t)
-	return result
-}
 
-func stateTransitionLogs(tp *TransactionParams, statedb *state.StateDB, t *testing.T) (*core.ExecutionResult, *Config) {
+func stateTransition(tp *TransactionParams, statedb *state.StateDB, t *testing.T) *core.ExecutionResult {
 	cfg := new(Config)
+	if tp.gasPrice != nil {
+
+	}
 	if tp.gasPrice != nil {
 		cfg.GasPrice = tp.gasPrice
 	} else {
@@ -418,7 +359,6 @@ func stateTransitionLogs(tp *TransactionParams, statedb *state.StateDB, t *testi
 	}
 	setDefaults(cfg, new(uint64))
 	configureOptimism(cfg)
-	enableTracer(cfg)
 
 	if cfg.State == nil {
 		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
@@ -444,7 +384,7 @@ func stateTransitionLogs(tp *TransactionParams, statedb *state.StateDB, t *testi
 	}
 
 	env := NewEnv(cfg)
-	// TODO(blast): refactor this for clarity
+	// TODO: clean this up
 	env.Context.L1CostFunc = types.NewL1CostFunc(cfg.ChainConfig, cfg.State)
 	var rules = cfg.ChainConfig.Rules(env.Context.BlockNumber, env.Context.Random != nil, env.Context.Time)
 	cfg.State.Prepare(rules, cfg.Origin, cfg.Coinbase, msg.To, vm.ActivePrecompiles(rules), nil)
@@ -454,7 +394,7 @@ func stateTransitionLogs(tp *TransactionParams, statedb *state.StateDB, t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	return executionResult, cfg
+	return executionResult
 }
 
 func getAddr(a uint64) common.Address {
@@ -685,15 +625,8 @@ func claimAllYield(db *state.StateDB, addr common.Address, t *testing.T, recipie
 	claimedYield := new(big.Int).SetBytes(result.ReturnData)
 	return claimedYield
 }
-func claimYield(db *state.StateDB, addr common.Address, t *testing.T, amount *big.Int, recipient *common.Address) *big.Int {
-	yield, err := claimYieldWithErr(db, addr, t, amount, recipient)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return yield
-}
 
-func claimYieldWithErr(db *state.StateDB, addr common.Address, t *testing.T, amount *big.Int, recipient *common.Address) (*big.Int, error) {
+func claimYield(db *state.StateDB, addr common.Address, t *testing.T, amount *big.Int, recipient *common.Address) *big.Int {
 	gov := readGovernor(db, addr, t)
 	if gov == common.HexToAddress("0x0") {
 		gov = addr
@@ -715,11 +648,11 @@ func claimYieldWithErr(db *state.StateDB, addr common.Address, t *testing.T, amo
 	}
 	result := stateTransition(&tp, db, t)
 	if result.Err != nil {
-		return nil, result.Err
+		t.Fatal(result.Err)
 	}
 
 	claimedYield := new(big.Int).SetBytes(result.ReturnData)
-	return claimedYield, nil
+	return claimedYield
 }
 
 func claimGas(db *state.StateDB, addr common.Address, recipient *common.Address, gasToClaim *big.Int, gasSecondsToConsume *big.Int, blockNumber *big.Int, t *testing.T) *big.Int {
@@ -741,60 +674,7 @@ func claimGas(db *state.StateDB, addr common.Address, recipient *common.Address,
 		input:       input,
 		blockNumber: blockNumber,
 	}
-	result, cfg := stateTransitionLogs(&tp, db, t)
-	tracer := cfg.EVMConfig.Tracer
-	structLogger := tracer.(*logger.StructLogger)
-	tracingResult, err := structLogger.GetResult()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var prettyJSON bytes.Buffer
-	error := json.Indent(&prettyJSON, tracingResult, "", "\t")
-	if error != nil {
-		t.Fatal(error)
-	}
-	fmt.Println(string(prettyJSON.Bytes()))
-
-	if result.Err != nil {
-		t.Fatal(result.Err)
-	}
-	claimedGas := new(big.Int).SetBytes(result.ReturnData)
-	return claimedGas
-}
-
-func claimGasAtMinClaimRate(db *state.StateDB, addr common.Address, recipient *common.Address, claimRate *big.Int, blockNumber *big.Int, t *testing.T) *big.Int {
-	gov := readGovernor(db, addr, t)
-	if gov == common.HexToAddress("0x0") {
-		gov = addr
-	}
-	if recipient == nil {
-		recipient = &gov
-	}
-	abi := getAbi(addrToAbiPath[params.BlastAccountConfigurationAddress.String()], t)
-	input, err := abi.Pack("claimGasAtMinClaimRate", addr, *recipient, claimRate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tp := TransactionParams{
-		sender:      gov,
-		to:          &params.BlastAccountConfigurationAddress,
-		input:       input,
-		blockNumber: blockNumber,
-	}
-
-	result, cfg := stateTransitionLogs(&tp, db, t)
-	tracer := cfg.EVMConfig.Tracer
-	structLogger := tracer.(*logger.StructLogger)
-	tracingResult, err := structLogger.GetResult()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var prettyJSON bytes.Buffer
-	error := json.Indent(&prettyJSON, tracingResult, "", "\t")
-	if error != nil {
-		t.Fatal(error)
-	}
-
+	result := stateTransition(&tp, db, t)
 	if result.Err != nil {
 		t.Fatal(result.Err)
 	}

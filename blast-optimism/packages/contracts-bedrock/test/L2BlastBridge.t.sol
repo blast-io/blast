@@ -12,24 +12,14 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // Libraries
 import { Hashing } from "src/libraries/Hashing.sol";
 import { Types } from "src/libraries/Types.sol";
-import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 
 // Target contract dependencies
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
-import { YieldMode } from "src/L2/Blast.sol";
-import { GasMode } from "src/L2/Gas.sol";
 
 contract L2BlastBridge_Test is Bridge_Initializer {
     using stdStorage for StdStorage;
-
-    function test_blastConfig() external {
-        assertEq(blast.governorMap(address(l2BlastBridge)), address(0xdead));
-        assertTrue(blast.readYieldConfiguration(address(l2BlastBridge)) == uint8(YieldMode.VOID));
-        (,,, GasMode gasMode) = blast.readGasParams(address(l2BlastBridge));
-        assertTrue(gasMode == GasMode.VOID);
-    }
 
     /// @dev Tests that the bridge is initialized correctly.
     function test_initialize_succeeds() external {
@@ -177,7 +167,7 @@ contract PreBridgeERC20 is Bridge_Initializer {
     }
 }
 
-contract L2BlastBridge_BridgeERC20_Test is PreBridgeERC20 {
+contract L2StandardBridge_BridgeERC20_Test is PreBridgeERC20 {
     // BridgeERC20
     // - token is burned
     // - emits WithdrawalInitiated
@@ -262,7 +252,7 @@ contract PreBridgeERC20To is Bridge_Initializer {
     }
 }
 
-contract L2BlastBridge_BridgeERC20To_Test is PreBridgeERC20To {
+contract L2StandardBridge_BridgeERC20To_Test is PreBridgeERC20To {
     /// @dev Tests that `bridgeERC20To` burns the tokens, emits `WithdrawalInitiated`,
     ///      and initiates a withdrawal with `Withdrawer.initiateWithdrawal`.
     function test_bridgeERC20To_succeeds() external {
@@ -272,9 +262,8 @@ contract L2BlastBridge_BridgeERC20To_Test is PreBridgeERC20To {
     }
 }
 
-contract L2BlastBridge_Bridge_Test is Bridge_Initializer {
+contract L2StandardBridge_Bridge_Test is Bridge_Initializer {
     /// @dev Tests that `finalizeDeposit` reverts if the amounts do not match.
-    /*
     function test_finalizeBridgeETH_incorrectValue_reverts() external {
         vm.mockCall(
             address(l2BlastBridge.messenger()),
@@ -286,7 +275,6 @@ contract L2BlastBridge_Bridge_Test is Bridge_Initializer {
         vm.expectRevert("StandardBridge: amount sent does not match amount required");
         l2BlastBridge.finalizeBridgeETH{ value: 50 }(alice, alice, 100, hex"");
     }
-    */
 
     /// @dev Tests that `finalizeDeposit` reverts if the receipient is the other bridge.
     function test_finalizeBridgeETH_sendToSelf_reverts() external {
@@ -300,9 +288,22 @@ contract L2BlastBridge_Bridge_Test is Bridge_Initializer {
         vm.expectRevert("StandardBridge: cannot send to self");
         l2BlastBridge.finalizeBridgeETH{ value: 100 }(alice, address(l2BlastBridge), 100, hex"");
     }
+
+    /// @dev Tests that `finalizeDeposit` reverts if the receipient is the messenger.
+    function test_finalizeBridgeETH_sendToMessenger_reverts() external {
+        vm.mockCall(
+            address(l2BlastBridge.messenger()),
+            abi.encodeWithSelector(CrossDomainMessenger.xDomainMessageSender.selector),
+            abi.encode(address(l2BlastBridge.OTHER_BRIDGE()))
+        );
+        vm.deal(address(L2Messenger), 100);
+        vm.prank(address(L2Messenger));
+        vm.expectRevert("StandardBridge: cannot send to messenger");
+        l2BlastBridge.finalizeBridgeETH{ value: 100 }(alice, address(L2Messenger), 100, hex"");
+    }
 }
 
-contract L2BlastBridge_FinalizeBridgeETH_Test is Bridge_Initializer {
+contract L2StandardBridge_FinalizeBridgeETH_Test is Bridge_Initializer {
     /// @dev Tests that `finalizeBridgeETH` succeeds.
     function test_finalizeBridgeETH_succeeds() external {
         address messenger = address(l2BlastBridge.messenger());
@@ -318,15 +319,5 @@ contract L2BlastBridge_FinalizeBridgeETH_Test is Bridge_Initializer {
         emit ETHBridgeFinalized(alice, alice, 100, hex"");
 
         l2BlastBridge.finalizeBridgeETH{ value: 100 }(alice, alice, 100, hex"");
-    }
-
-    function test_finalizeBridgeETHDirect_succeeds() external {
-        vm.deal(AddressAliasHelper.applyL1ToL2Alias(address(l2BlastBridge.OTHER_BRIDGE())), 100);
-        vm.prank(AddressAliasHelper.applyL1ToL2Alias(address(l2BlastBridge.OTHER_BRIDGE())));
-
-        vm.expectEmit(true, true, true, true);
-        emit ETHBridgeFinalized(alice, alice, 100, hex"");
-
-        l2BlastBridge.finalizeBridgeETHDirect{ value: 100 }(alice, alice, 100, hex"");
     }
 }

@@ -164,7 +164,6 @@ func (c *Contract) Caller() common.Address {
 }
 
 // UseGas attempts the use gas and subtracts it and returns true on success
-// Gas-tracker not included in this logic
 func (c *Contract) UseGas(gas uint64) (ok bool) {
 	if c.Gas < gas {
 		return false
@@ -173,8 +172,6 @@ func (c *Contract) UseGas(gas uint64) (ok bool) {
 	return true
 }
 
-// UseGasForConstantCost attempts the use gas and subtracts it and returns true on success for
-// The gas consumed is also factored into the gas tracker. This is called for to consume the CONSTANT cost for op-codes
 func (c *Contract) UseGasForConstantCost(gas uint64) (ok bool) {
 	if c.Gas < gas {
 		return false
@@ -185,8 +182,7 @@ func (c *Contract) UseGasForConstantCost(gas uint64) (ok bool) {
 	return true
 }
 
-// UseGasNatively attempts the use gas and subtracts it and returns true on success
-// The gas consumed is also factored into the gas tracker. This is called by operation_acl
+// Gas Tracking Code
 func (c *Contract) UseGasNatively(gas uint64) (ok bool) {
 	if c.Gas < gas {
 		return false
@@ -197,8 +193,7 @@ func (c *Contract) UseGasNatively(gas uint64) (ok bool) {
 	return true
 }
 
-// UseGasWithOp attempts the use gas and subtracts it and returns true on success
-// The gas consumed is also factored into the gas tracker, with special handling for CALLS
+// UseGas attempts the use gas and subtracts it and returns true on success
 func (c *Contract) UseGasWithOp(gas uint64, op OpCode, evm *EVM) (ok bool) {
 	if c.Gas < gas {
 		return false

@@ -142,11 +142,15 @@ type ExecutionPayload struct {
 	ExtraData     BytesMax32      `json:"extraData"`
 	BaseFeePerGas Uint256Quantity `json:"baseFeePerGas"`
 	BlockHash     common.Hash     `json:"blockHash"`
-	// nil if not present, pre-shanghai
-	Withdrawals *types.Withdrawals `json:"withdrawals,omitempty"`
 	// Array of transaction objects, each object is a byte list (DATA) representing
 	// TransactionType || TransactionPayload or LegacyTransaction as defined in EIP-2718
 	Transactions []Data `json:"transactions"`
+	// Nil if not present (Bedrock)
+	Withdrawals *types.Withdrawals `json:"withdrawals,omitempty"`
+	// Nil if not present (Bedrock, Canyon, Delta)
+	BlobGasUsed *Uint64Quantity `json:"blobGasUsed,omitempty"`
+	// Nil if not present (Bedrock, Canyon, Delta)
+	ExcessBlobGas *Uint64Quantity `json:"excessBlobGas,omitempty"`
 }
 
 func (payload *ExecutionPayload) ID() BlockID {
@@ -234,6 +238,8 @@ func BlockAsPayload(bl *types.Block, canyonForkTime *uint64) (*ExecutionPayload,
 		BaseFeePerGas: *baseFee,
 		BlockHash:     bl.Hash(),
 		Transactions:  opaqueTxs,
+		ExcessBlobGas: (*Uint64Quantity)(bl.ExcessBlobGas()),
+		BlobGasUsed:   (*Uint64Quantity)(bl.BlobGasUsed()),
 	}
 
 	if canyonForkTime != nil && uint64(payload.Timestamp) >= *canyonForkTime {

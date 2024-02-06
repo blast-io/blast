@@ -107,8 +107,7 @@ type EVM struct {
 	// Depth is the current call stack
 	depth int
 
-	// measure of context diversity (unique call frames over txn execution)
-	// high # unique call-frames over execution can increase gas price
+	// # of frames
 	frameCount int
 
 	// chainConfig contains information about the current chain
@@ -159,8 +158,10 @@ func (evm *EVM) Reset(txCtx TxContext, statedb StateDB) {
 	evm.TxContext = txCtx
 	evm.StateDB = statedb
 
-	// frame count must be reset at the start of a new transaction
-	evm.frameCount = 0
+	testnetHardFork := new(big.Int).SetUint64(params.GasFrameCountBlockNumberFork)
+	if evm.Context.BlockNumber.Cmp(testnetHardFork) > 0 {
+		evm.frameCount = 0
+	}
 }
 
 // Cancel cancels any running EVM operation. This may be called concurrently and

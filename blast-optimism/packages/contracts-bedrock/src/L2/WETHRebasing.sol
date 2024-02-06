@@ -11,7 +11,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Semver } from "src/universal/Semver.sol";
 
 /// @custom:proxied
-/// @custom:predeploy 0x4300000000000000000000000000000000000004
+/// @custom:predeploy 0x4200000000000000000000000000000000000023
 /// @title WETHRebasing
 /// @notice Rebasing ERC20 token that serves as WETH on Blast L2.
 /// Although the WETH token builds on top of the already rebasing native ether,
@@ -23,7 +23,7 @@ import { Semver } from "src/universal/Semver.sol";
 /// however, users and contracts are able to opt-out of receiving yield, while their funds are still
 /// gaining yield for the WETH contract. Using the native ether share price would leave yields
 /// in the WETH contract that are unallocated due to the VOID balances. To resolve this, WETH has
-/// its own share price that’s computed based on its current balance and removing void funds
+/// it’s own share price that’s computed based on it’s current balance and removing void funds
 /// so the yields are only divided amongst the active funds.
 contract WETHRebasing is ERC20Rebasing, Semver {
     /// @notice Emitted whenever tokens are deposited to an account.
@@ -39,26 +39,28 @@ contract WETHRebasing is ERC20Rebasing, Semver {
     error ETHTransferFailed();
 
     /// @custom:semver 1.0.0
-    constructor()
-        ERC20Rebasing(Predeploys.SHARES, 18)
-        Semver(1, 0, 0)
-    {
-        _disableInitializers();
-    }
+    constructor() ERC20Rebasing("Wrapped Ether", "WETH", 18) Semver(1, 0, 0) {}
 
     /// @notice Initializer.
-    function initialize() external initializer {
-        __ERC20Rebasing_init(
-            "Wrapped Ether",
-            "WETH",
-            SharesBase(Predeploys.SHARES).price()
-        );
+    function initialize() external payable initializer {
+        __ERC20Rebasing_init("Wrapped Ether", "WETH");
         Blast(Predeploys.BLAST).configureContract(
             address(this),
             YieldMode.AUTOMATIC,
             GasMode.VOID,
-            address(0xdead) /// don't set a governor
+            address(0) /// don't set a governor
         );
+        require(msg.value == SharesBase(Predeploys.SHARES).price());
+        _totalShares = 1;
+    }
+
+    /// @inheritdoc ERC20Rebasing
+    function sharePrice() public view override returns (uint256) {
+        return _sharePrice();
+    }
+
+    function count() public view returns (uint256) {
+        return _totalShares;
     }
 
     /// @notice Allows a user to send ETH directly and have
@@ -87,18 +89,13 @@ contract WETHRebasing is ERC20Rebasing, Semver {
         emit Withdrawal(account, wad);
     }
 
-    /// @notice Update the share price based on the rebased contract balance.
-    function _addValue(uint256) internal override {
-        if (msg.sender != REPORTER) {
-            revert InvalidReporter();
+    /// @notice Compute current share price based on the current contract balance.
+    ///         Ignoring ETH sent in the current transaction.
+    /// @return Current share price.
+    function _sharePrice() internal view returns (uint256) {
+        if  (_totalShares == 0) {
+            return 0;
         }
-
-        uint256 yieldBearingEth = price * _totalShares;
-        uint256 pending = address(this).balance - yieldBearingEth - _totalVoidAndRemainders;
-        if (pending < _totalShares || _totalShares == 0) {
-            return;
-        }
-
-        price += (pending / _totalShares);
+        return (address(this).balance - _totalVoidAndRemainders - msg.value) / _totalShares;
     }
 }

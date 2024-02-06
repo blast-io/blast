@@ -11,52 +11,52 @@ contract StdErrorsTest is Test {
         test = new ErrorsTest();
     }
 
-    function test_ExpectAssertion() public {
+    function testExpectAssertion() public {
         vm.expectRevert(stdError.assertionError);
         test.assertionError();
     }
 
-    function test_ExpectArithmetic() public {
+    function testExpectArithmetic() public {
         vm.expectRevert(stdError.arithmeticError);
         test.arithmeticError(10);
     }
 
-    function test_ExpectDiv() public {
+    function testExpectDiv() public {
         vm.expectRevert(stdError.divisionError);
         test.divError(0);
     }
 
-    function test_ExpectMod() public {
+    function testExpectMod() public {
         vm.expectRevert(stdError.divisionError);
         test.modError(0);
     }
 
-    function test_ExpectEnum() public {
+    function testExpectEnum() public {
         vm.expectRevert(stdError.enumConversionError);
         test.enumConversion(1);
     }
 
-    function test_ExpectEncodeStg() public {
+    function testExpectEncodeStg() public {
         vm.expectRevert(stdError.encodeStorageError);
         test.encodeStgError();
     }
 
-    function test_ExpectPop() public {
+    function testExpectPop() public {
         vm.expectRevert(stdError.popError);
         test.pop();
     }
 
-    function test_ExpectOOB() public {
+    function testExpectOOB() public {
         vm.expectRevert(stdError.indexOOBError);
         test.indexOOBError(1);
     }
 
-    function test_ExpectMem() public {
+    function testExpectMem() public {
         vm.expectRevert(stdError.memOverflowError);
         test.mem();
     }
 
-    function test_ExpectIntern() public {
+    function testExpectIntern() public {
         vm.expectRevert(stdError.zeroVarError);
         test.intern();
     }

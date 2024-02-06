@@ -424,7 +424,7 @@ func (s *stateObject) SubBalance(amount *big.Int) {
 
 func computeSharesAndRemainder(sharePrice, value *big.Int) (shares, remainder *big.Int) {
 	if sharePrice.Sign() < 0 {
-		panic("negative share price") // add redundant sanity check for negative share price
+		panic("negative share price")
 	} else if sharePrice.Sign() == 0 {
 		shares = new(big.Int)
 		remainder = value

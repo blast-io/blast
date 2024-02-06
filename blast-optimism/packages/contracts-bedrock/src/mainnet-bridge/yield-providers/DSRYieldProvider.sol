@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
 import { FixedPointMathLib } from "solmate/utils/FixedPointMathLib.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
@@ -12,7 +11,6 @@ interface IDsrManager {
     function join(address usr, uint256 wad) external;
     function exit(address usr, uint256 wad) external;
     function pot() external view returns (address);
-    function daiJoin() external view returns (address);
     function pieOf(address) external view returns (uint256);
 }
 
@@ -20,10 +18,7 @@ interface IPot {
     function chi() external view returns (uint256);
     function rho() external view returns (uint256);
     function dsr() external view returns (uint256);
-}
-
-interface ILive {
-    function live() external view returns (uint256);
+    function drip() external returns (uint256);
 }
 
 interface IInsurance {
@@ -44,7 +39,7 @@ contract DSRYieldProvider is YieldProvider {
 
     /// @inheritdoc YieldProvider
     function initialize() external override onlyDelegateCall {
-        DAI.approve(address(DSR_MANAGER), type(uint256).max);
+        // DAI.approve(address(DSR_MANAGER), type(uint256).max);
     }
 
     function name() public pure override returns (string memory) {
@@ -52,14 +47,12 @@ contract DSRYieldProvider is YieldProvider {
     }
 
     /// @inheritdoc YieldProvider
-    function isStakingEnabled(address token) public view override returns (bool) {
-        return token == address(DAI) &&
-            ILive(DSR_MANAGER.pot()).live() == 1 &&
-            ILive(DSR_MANAGER.daiJoin()).live() == 1;
+    function isStakingEnabled(address token) public pure override returns (bool) {
+        return token == address(DAI);
     }
 
     /// @inheritdoc YieldProvider
-    function stakedBalance() public view override returns (uint256) {
+    function stakedValue() public view override returns (uint256) {
         IPot pot = IPot(DSR_MANAGER.pot());
         uint256 chi = FixedPointMathLib.mulDivDown(
             FixedPointMathLib.rpow(
@@ -79,7 +72,7 @@ contract DSRYieldProvider is YieldProvider {
 
     /// @inheritdoc YieldProvider
     function yield() public view override returns (int256) {
-        return SafeCast.toInt256(stakedBalance()) - SafeCast.toInt256(stakedPrincipal);
+        return int256(stakedValue()) - int256(stakedBalance);
     }
 
     /// @inheritdoc YieldProvider
@@ -89,7 +82,8 @@ contract DSRYieldProvider is YieldProvider {
 
     /// @inheritdoc YieldProvider
     function stake(uint256 amount) external override onlyDelegateCall {
-        if (amount > YIELD_MANAGER.availableBalance()) {
+        uint256 daiBalance = DAI.balanceOf(address(YIELD_MANAGER));
+        if (amount > daiBalance) {
             revert InsufficientStakableFunds();
         }
         if (amount > 0) {
@@ -98,20 +92,21 @@ contract DSRYieldProvider is YieldProvider {
     }
 
     /// @inheritdoc YieldProvider
-    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256 pending, uint256 claimed) {
+    function unstake(uint256 amount) external override onlyDelegateCall returns (uint256 pending) {
         if (amount > 0) {
             DSR_MANAGER.exit(address(YIELD_MANAGER), amount);
         }
+
         // pending amount is always 0
-        claimed = amount;
+        return 0;
     }
 
-    function _recordPending(uint256) internal pure override {
+    function recordPending(uint256 amount) external override onlyYieldManager {
         revert("DSRYieldProvider: recordPending not supported");
     }
 
-    function _recordClaimed(uint256 claimed, uint256 expected) internal override {
-        emit Claimed(id(), claimed, expected);
+    function recordClaimed(uint256 amount) external override onlyYieldManager {
+        emit Claimed(id(), amount);
     }
 
     /// @inheritdoc YieldProvider

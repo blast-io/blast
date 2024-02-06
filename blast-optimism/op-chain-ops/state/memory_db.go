@@ -210,8 +210,8 @@ func (db *MemoryStateDB) SetCode(addr common.Address, code []byte) {
 }
 
 func (db *MemoryStateDB) GetCodeSize(addr common.Address) int {
-	db.rw.RLock()
-	defer db.rw.RUnlock()
+	db.rw.Lock()
+	defer db.rw.Unlock()
 
 	account, ok := db.genesis.Alloc[addr]
 	if !ok {
@@ -263,9 +263,6 @@ func (db *MemoryStateDB) SetState(addr common.Address, key, value common.Hash) {
 }
 
 func (db *MemoryStateDB) DeleteState(addr common.Address, key common.Hash) {
-	db.rw.Lock()
-	defer db.rw.Unlock()
-
 	account, ok := db.genesis.Alloc[addr]
 	if !ok {
 		panic(fmt.Sprintf("%s not in state", addr))
