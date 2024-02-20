@@ -195,7 +195,7 @@ pre-confirm the transactions before the L1 confirms the data.
 
 A sequencer is either a [rollup node][rollup-node] ran in sequencer mode, or the operator of this rollup node.
 
-The sequencer is a priviledged actor, which receives L2 transactions from L2 users, creates L2 blocks using them, which
+The sequencer is a privileged actor, which receives L2 transactions from L2 users, creates L2 blocks using them, which
 it then submits to [data availability provider][avail-provider] (via a [batcher]). It also submits [output
 roots][l2-output] to L1.
 
@@ -455,7 +455,7 @@ batcher transaction.
 
 [batcher]: glossary.md#batcher
 
-A batcher is a software component (independant program) that is responsible to make channels available on a data
+A batcher is a software component (independent program) that is responsible to make channels available on a data
 availability provider. The batcher communicates with the rollup node in order to retrieve the channels. The channels are
 then made available using [batcher transactions][batcher-transaction].
 
@@ -492,7 +492,7 @@ The purpose of channel timeouts is dual:
   sent).
 - Bound the number of L1 blocks we have to look back in order to decode [sequencer batches][sequencer-batch] from
   channels. This is particularly relevant during L1 re-orgs, see the [Resetting Channel Buffering][reset-channel-buffer]
-  section of the L2 Chain Derivation specifiction for more information.
+  section of the L2 Chain Derivation specification for more information.
 
 [reset-channel-buffer]: derivation.md#resetting-channel-buffering
 
@@ -564,7 +564,7 @@ The state of the L2 genesis block comprises:
     how native ETH balances were stored in the storage trie.
 - [Predeployed contracts][predeploy]
 
-The timestap of the L2 genesis block must be a multiple of the [block time][block-time] (i.e. a even number, since the
+The timestamp of the L2 genesis block must be a multiple of the [block time][block-time] (i.e. a even number, since the
 block time is 2 seconds).
 
 When updating the rollup protocol to a new version, we may perform a *squash fork*, a process that entails the creation
@@ -623,7 +623,7 @@ head] a block forward, so that the oldest [unsafe L2 block][unsafe-l2-block] bec
 In order to perform consolidation, the node verifies that the [payload attributes][payload-attr] derived from the L1
 chain match the oldest unsafe L2 block exactly.
 
-See the [Engine Queue section][engine-queue] of the L2 chain derivatiaon spec for more information.
+See the [Engine Queue section][engine-queue] of the L2 chain derivation spec for more information.
 
 [engine-queue]: derivation.md#engine-queue
 
