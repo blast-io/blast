@@ -913,7 +913,7 @@ func checkUSDB(addr common.Address, client *ethclient.Client) error {
 	if err != nil {
 		return err
 	}
-	if price != 18 {
+	if decimals != 18 {
 		return fmt.Errorf("Decimals is incorrect")
 	}
 	log.Info("USDB", "decimals", decimals)
@@ -975,7 +975,7 @@ func checkWETHRebasing(addr common.Address, client *ethclient.Client) error {
 	if err != nil {
 		return err
 	}
-	if price != 18 {
+	if decimals != 18 {
 		return fmt.Errorf("Decimals is incorrect")
 	}
 	log.Info("WETHRebasing", "decimals", decimals)
