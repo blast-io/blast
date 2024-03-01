@@ -153,7 +153,7 @@ func main() {
 		lowerName := strings.ToLower(name)
 		outFile := path.Join(cwd, f.Package, lowerName+".go")
 
-		cmd := exec.Command("abigen", "--abi", abiFile, "--bin", bytecodeFile, "--pkg", f.Package, "--type", name, "--out", outFile)
+		cmd := exec.Command("../../op-geth/build/bin/abigen", "--abi", abiFile, "--bin", bytecodeFile, "--pkg", f.Package, "--type", name, "--out", outFile)
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {

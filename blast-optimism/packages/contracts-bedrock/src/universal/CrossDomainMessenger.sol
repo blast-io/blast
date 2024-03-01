@@ -108,7 +108,7 @@ abstract contract CrossDomainMessenger is
     uint64 public constant RELAY_CALL_OVERHEAD = 40_000;
 
     /// @notice Gas reserved for finalizing the execution of `relayMessage` after the safe call.
-    uint64 public constant RELAY_RESERVED_GAS = 40_000;
+    uint64 public constant RELAY_RESERVED_GAS = 60_000;
 
     /// @notice Gas reserved for the execution between the `hasMinGas` check and the external
     ///         call in `relayMessage`.
@@ -285,6 +285,9 @@ abstract contract CrossDomainMessenger is
         xDomainMsgSender = Constants.DEFAULT_L2_SENDER;
 
         if (success) {
+            // This check is identical to one above, but it ensures that the same message cannot be relayed
+            // twice, and adds a layer of protection against rentrancy.
+            assert(successfulMessages[versionedHash] == false);
             successfulMessages[versionedHash] = true;
             emit RelayedMessage(versionedHash);
         } else {
@@ -351,7 +354,13 @@ abstract contract CrossDomainMessenger is
     /// @notice Initializer.
     // solhint-disable-next-line func-name-mixedcase
     function __CrossDomainMessenger_init() internal onlyInitializing {
-        xDomainMsgSender = Constants.DEFAULT_L2_SENDER;
+        // We only want to set the xDomainMsgSender to the default value if it hasn't been initialized yet,
+        // meaning that this is a fresh contract deployment.
+        // This prevents resetting the xDomainMsgSender to the default value during an upgrade, which would enable
+        // a reentrant withdrawal to sandwich the upgrade replay a withdrawal twice.
+        if (xDomainMsgSender == address(0)) {
+            xDomainMsgSender = Constants.DEFAULT_L2_SENDER;
+        }
     }
 
     /// @notice Sends a low-level message to the other messenger. Needs to be implemented by child

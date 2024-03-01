@@ -38,6 +38,12 @@ contract L1BlastBridge is StandardBridge, ISemver {
         bool reportStakedBalance;
     }
 
+    /// @notice Numerator for dynamic overhead added to the base gas for a message.
+    uint64 public constant MIN_GAS_DYNAMIC_OVERHEAD_NUMERATOR = 64;
+
+    /// @notice Denominator for dynamic overhead added to the base gas for a message.
+    uint64 public constant MIN_GAS_DYNAMIC_OVERHEAD_DENOMINATOR = 63;
+
     /// @notice Mapping of potential deposit tokens to whether they're
     ///         approved as USD yield tokens and additional metadata.
     mapping(address => YieldToken) public usdYieldTokens;
@@ -245,6 +251,10 @@ contract L1BlastBridge is StandardBridge, ISemver {
                 usdYieldManager.recordStakedDeposit(usdYieldToken.provider, amountToMintWad);
             }
 
+            // Emit the correct events. By default this will be ERC20BridgeInitiated, but child
+            // contracts may override this function in order to emit legacy events as well.
+            _emitERC20BridgeInitiated(_localToken, _remoteToken, _from, _to, amountToMintWad, _extraData);
+
             messenger.sendMessage(
                 Predeploys.L2_BLAST_BRIDGE,
                 abi.encodeWithSelector(
@@ -259,9 +269,6 @@ contract L1BlastBridge is StandardBridge, ISemver {
                 _minGasLimit
             );
 
-            // Emit the correct events. By default this will be ERC20BridgeInitiated, but child
-            // contracts may override this function in order to emit legacy events as well.
-            _emitERC20BridgeInitiated(_localToken, _remoteToken, _from, _to, amountToMintWad, _extraData);
         } else if (ethYieldToken.approved) {
             require(_remoteToken == address(0), "L1BlastBridge: this token can only be bridged to ETH");
             IERC20(_localToken).safeTransferFrom(_from, address(ethYieldManager), _amount);
@@ -272,27 +279,41 @@ contract L1BlastBridge is StandardBridge, ISemver {
                 ethYieldManager.recordStakedDeposit(ethYieldToken.provider, _amount);
             }
 
+            uint256 amountWad = USDConversions._convertDecimals(_amount, ethYieldToken.decimals, USDConversions.WAD_DECIMALS);
+
+            // Emit the correct events. By default this will be ERC20BridgeInitiated, but child
+            // contracts may override this function in order to emit legacy events as well.
+            _emitERC20BridgeInitiated(_localToken, _remoteToken, _from, _to, amountWad, _extraData);
+
             // Message has to be sent to the OptimismPortal directly because we have to
             // request the L2 message has value without sending ETH.
             portal.depositTransaction(
                 Predeploys.L2_BLAST_BRIDGE,
-                _amount,
-                _minGasLimit,
+                amountWad,
+                baseGas(_minGasLimit),
                 false,
                 abi.encodeWithSelector(
                     L2BlastBridge.finalizeBridgeETHDirect.selector,
                     _from,
                     _to,
-                    USDConversions._convertDecimals(_amount, ethYieldToken.decimals, USDConversions.WAD_DECIMALS),
+                    amountWad,
                     _extraData
                 )
             );
-
-            // Emit the correct events. By default this will be ERC20BridgeInitiated, but child
-            // contracts may override this function in order to emit legacy events as well.
-            _emitERC20BridgeInitiated(_localToken, _remoteToken, _from, _to, _amount, _extraData);
         } else {
             revert("L1BlastBridge: bridge token is not supported");
         }
+    }
+
+    /// @notice Computes the amount of gas required to guarantee that a given deposit will be
+    ///         received on the other chain without running out of gas.
+    /// @param _minGasLimit Minimum desired gas limit when deposit goes to target.
+    /// @return Amount of gas required to guarantee deposit receipt.
+    function baseGas(uint32 _minGasLimit) public pure returns (uint64) {
+        return
+        // Constant overhead
+        RECEIVE_DEFAULT_GAS_LIMIT
+        // Dynamic overhead (EIP-150)
+        + ((_minGasLimit * MIN_GAS_DYNAMIC_OVERHEAD_NUMERATOR) / MIN_GAS_DYNAMIC_OVERHEAD_DENOMINATOR);
     }
 }

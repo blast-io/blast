@@ -192,8 +192,6 @@ jobs:
       pull-requests: write
     if: needs.state.outputs.merge == 'true'
     runs-on: ubuntu-latest
-    env:
-      MERGE_BRANCH: merge/${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -202,9 +200,7 @@ jobs:
         uses: ./.github/actions/setup
       - run: bash scripts/git-user-config.sh
       - name: Create branch to merge
-        run: |
-          git checkout -B "$MERGE_BRANCH" "$GITHUB_REF_NAME"
-          git push -f origin "$MERGE_BRANCH"
+        run: bash scripts/release/workflow/prepare-release-merge.sh
       - name: Create PR back to master
         uses: actions/github-script@v6
         with:
@@ -212,7 +208,7 @@ jobs:
             await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              head: process.env.MERGE_BRANCH,
+              head: 'merge/${{ github.ref_name }}',
               base: 'master',
               title: '${{ format('Merge {0} branch', github.ref_name) }}'
             });

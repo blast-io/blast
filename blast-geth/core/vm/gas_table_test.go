@@ -18,6 +18,7 @@ package vm
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -29,6 +30,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryGasCost(t *testing.T) {
@@ -186,4 +189,41 @@ func TestCreateGas(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestOverflowAfterBlastExpands(t *testing.T) {
+	overflowingGasFunc := makeCallVariantGasCallEIP2929(func(*EVM, *Contract, *Stack, *Memory, uint64) (uint64, error) {
+		return ((1 << 64) - 1) - params.BlastGasParamStorageGas, nil
+	}, false)
+	someone := common.HexToAddress("0x1111")
+	someoneElse := common.HexToAddress("0x1112")
+	gT := NewGasTracker()
+	config := Config{}
+	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+
+	vmctx := BlockContext{
+		CanTransfer: func(StateDB, common.Address, *big.Int) bool { return true },
+		Transfer:    func(StateDB, common.Address, common.Address, *big.Int) {},
+		BlockNumber: big.NewInt(0),
+	}
+
+	vmenv := NewEVM(vmctx, TxContext{}, statedb, params.AllEthashProtocolChanges, config)
+	vmenv.frameCount = 6
+	stk := newstack()
+	stk.push(uint256.NewInt(1))
+	stk.push(uint256.NewInt(2))
+
+	mem := NewMemory()
+	someContract := NewContract(AccountRef(someone), AccountRef(someoneElse), common.Big0, 100_000, gT)
+	gas, failed := overflowingGasFunc(vmenv, someContract, stk, mem, 0)
+	require.Equal(t, ErrGasUintOverflow, failed, fmt.Sprintf("expected overflow failure but instead got gas %v", gas))
+	t.Logf("Got a failure as expected %v %v", gas, failed)
+
+	{
+		vmenv.frameCount = 4
+		gas, failed := overflowingGasFunc(vmenv, someContract, stk, mem, 0)
+		require.Equal(t, nil, failed, fmt.Sprintf("expected NO overflow failure but instead got failure %v", failed))
+		t.Logf("Got no failure as expected %v %v", gas, failed)
+	}
+
 }

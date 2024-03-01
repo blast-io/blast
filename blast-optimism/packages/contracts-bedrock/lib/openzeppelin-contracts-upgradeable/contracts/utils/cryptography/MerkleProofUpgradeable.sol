@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.9.2) (utils/cryptography/MerkleProof.sol)
+// OpenZeppelin Contracts (last updated v4.9.0) (utils/cryptography/MerkleProof.sol)
 
 pragma solidity ^0.8.0;
 
@@ -121,11 +121,10 @@ library MerkleProofUpgradeable {
         // `hashes` array. At the end of the process, the last hash in the `hashes` array should contain the root of
         // the merkle tree.
         uint256 leavesLen = leaves.length;
-        uint256 proofLen = proof.length;
         uint256 totalHashes = proofFlags.length;
 
         // Check proof validity.
-        require(leavesLen + proofLen - 1 == totalHashes, "MerkleProof: invalid multiproof");
+        require(leavesLen + proof.length - 1 == totalHashes, "MerkleProof: invalid multiproof");
 
         // The xxxPos values are "pointers" to the next value to consume in each array. All accesses are done using
         // `xxx[xxxPos++]`, which return the current value and increment the pointer, thus mimicking a queue's "pop".
@@ -147,7 +146,6 @@ library MerkleProofUpgradeable {
         }
 
         if (totalHashes > 0) {
-            require(proofPos == proofLen, "MerkleProof: invalid multiproof");
             unchecked {
                 return hashes[totalHashes - 1];
             }
@@ -175,11 +173,10 @@ library MerkleProofUpgradeable {
         // `hashes` array. At the end of the process, the last hash in the `hashes` array should contain the root of
         // the merkle tree.
         uint256 leavesLen = leaves.length;
-        uint256 proofLen = proof.length;
         uint256 totalHashes = proofFlags.length;
 
         // Check proof validity.
-        require(leavesLen + proofLen - 1 == totalHashes, "MerkleProof: invalid multiproof");
+        require(leavesLen + proof.length - 1 == totalHashes, "MerkleProof: invalid multiproof");
 
         // The xxxPos values are "pointers" to the next value to consume in each array. All accesses are done using
         // `xxx[xxxPos++]`, which return the current value and increment the pointer, thus mimicking a queue's "pop".
@@ -201,7 +198,6 @@ library MerkleProofUpgradeable {
         }
 
         if (totalHashes > 0) {
-            require(proofPos == proofLen, "MerkleProof: invalid multiproof");
             unchecked {
                 return hashes[totalHashes - 1];
             }

@@ -19,14 +19,16 @@ contract ETHTestnetYieldProvider is TestnetYieldProvider {
     function stake(uint256 amount) external override onlyDelegateCall {
         (bool success,) = THIS.call{value: amount}("");
         require(success);
+        stakedPrincipal += amount;
     }
 
+    /// @inheritdoc YieldProvider
     function stakedBalance() public view override returns (uint256) {
-        return uint256(int256(stakedPrincipal) + yield());
+        return address(this).balance;
     }
 
-    function sendAsset(uint256 amount) external override onlyYieldManager {
-        (bool success,) = address(YIELD_MANAGER).call{value: amount}("");
+    function sendAsset(address recipient, uint256 amount) external override onlyYieldManager {
+        (bool success,) = recipient.call{value: amount}("");
         require(success);
     }
 
@@ -37,13 +39,5 @@ contract ETHTestnetYieldProvider is TestnetYieldProvider {
             (bool success,) = owner().call{value: uint256(-1 * amount)}("");
             require(success);
         }
-        _reportedYield += amount;
-    }
-
-    /// @inheritdoc YieldProvider
-    function payInsurancePremium(uint256 amount) external override onlyDelegateCall {
-        address(YIELD_MANAGER.insurance()).call{value:amount}("");
-
-        emit InsurancePremiumPaid(id(), amount);
     }
 }

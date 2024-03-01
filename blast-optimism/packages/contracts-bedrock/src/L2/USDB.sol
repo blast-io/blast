@@ -26,16 +26,6 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
     /// @notice Address of the BlastBridge on this network.
     address public immutable BRIDGE;
 
-    /// @notice Emitted whenever tokens are minted for an account.
-    /// @param account Address of the account tokens are being minted for.
-    /// @param amount  Amount of tokens minted.
-    event Mint(address indexed account, uint256 amount);
-
-    /// @notice Emitted whenever tokens are burned from an account.
-    /// @param account Address of the account tokens are being burned from.
-    /// @param amount  Amount of tokens burned.
-    event Burn(address indexed account, uint256 amount);
-
     error CallerIsNotBridge();
 
     /// @notice A modifier that only allows the bridge to call
@@ -61,7 +51,7 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
 
     /// @notice Initializer
     function initialize() public initializer {
-        __ERC20Rebasing_init("Rebasing USD", "USDB", 1e9);
+        __ERC20Rebasing_init("USDB", "USDB", 1e9);
         Blast(Predeploys.BLAST).configureContract(
             address(this),
             YieldMode.VOID,
@@ -105,7 +95,7 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
         }
 
         _deposit(_to, _amount);
-        emit Mint(_to, _amount);
+        emit Transfer(address(0), _to, _amount);
     }
 
     /// @notice Allows the StandardBridge on this network to burn tokens.
@@ -121,6 +111,6 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
         }
 
         _withdraw(_from, _amount);
-        emit Burn(_from, _amount);
+        emit Transfer(_from, address(0), _amount);
     }
 }

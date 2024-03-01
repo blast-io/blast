@@ -44,9 +44,18 @@ const (
 	defaultWSWriteTimeout        = 10 * time.Second
 	maxRequestBodyLogLen         = 2000
 	defaultMaxUpstreamBatchSize  = 10
+	defaultRateLimitHeader       = "X-Forwarded-For"
 )
 
 var emptyArrayResponse = json.RawMessage("[]")
+
+type ErrBannedTx struct {
+	TxHash string
+}
+
+func (*ErrBannedTx) Error() string {
+	return "banned tx"
+}
 
 type Server struct {
 	BackendGroups          map[string]*BackendGroup
@@ -73,9 +82,15 @@ type Server struct {
 	wsServer               *http.Server
 	cache                  RPCCache
 	srvMu                  sync.Mutex
+	rateLimitHeader        string
+	banned                 *bannedAddrs
 }
 
 type limiterFunc func(method string) bool
+
+type bannedAddrs struct {
+	rClient *redis.Client
+}
 
 func NewServer(
 	backendGroups map[string]*BackendGroup,
@@ -168,6 +183,16 @@ func NewServer(
 		senderLim = limiterFactory(time.Duration(senderRateLimitConfig.Interval), senderRateLimitConfig.Limit, "senders")
 	}
 
+	rateLimitHeader := defaultRateLimitHeader
+	if rateLimitConfig.IPHeaderOverride != "" {
+		rateLimitHeader = rateLimitConfig.IPHeaderOverride
+	}
+
+	var banned *bannedAddrs
+	if redisClient != nil {
+		banned = &bannedAddrs{redisClient}
+	}
+
 	return &Server{
 		BackendGroups:        backendGroups,
 		wsBackendGroup:       wsBackendGroup,
@@ -192,6 +217,9 @@ func NewServer(
 		allowedChainIds:        senderRateLimitConfig.AllowedChainIds,
 		limExemptOrigins:       limExemptOrigins,
 		limExemptUserAgents:    limExemptUserAgents,
+		rateLimitHeader:        rateLimitHeader,
+
+		banned: banned,
 	}, nil
 }
 
@@ -476,7 +504,12 @@ func (s *Server) handleBatchRPC(ctx context.Context, reqs []json.RawMessage, isL
 		if parsedReq.Method == "eth_sendRawTransaction" && s.senderLim != nil {
 			if err := s.rateLimitSender(ctx, parsedReq); err != nil {
 				RecordRPCError(ctx, BackendProxyd, parsedReq.Method, err)
-				responses[i] = NewRPCErrorRes(parsedReq.ID, err)
+				if bannedErr, ok := err.(*ErrBannedTx); ok {
+					responses[i] = NewRPCRes(parsedReq.ID, bannedErr.TxHash)
+				} else {
+					responses[i] = NewRPCErrorRes(parsedReq.ID, err)
+				}
+
 				continue
 			}
 		}
@@ -608,7 +641,7 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 func (s *Server) populateContext(w http.ResponseWriter, r *http.Request) context.Context {
 	vars := mux.Vars(r)
 	authorization := vars["authorization"]
-	xff := r.Header.Get("X-Forwarded-For")
+	xff := r.Header.Get(s.rateLimitHeader)
 	if xff == "" {
 		ipPort := strings.Split(r.RemoteAddr, ":")
 		if len(ipPort) == 2 {
@@ -666,6 +699,8 @@ func (s *Server) isGlobalLimit(method string) bool {
 	return s.globallyLimitedMethods[method]
 }
 
+const bannedKey = "banned_tags"
+
 func (s *Server) rateLimitSender(ctx context.Context, req *RPCReq) error {
 	var params []string
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -715,6 +750,37 @@ func (s *Server) rateLimitSender(ctx context.Context, req *RPCReq) error {
 	if !ok {
 		log.Debug("sender rate limit exceeded", "sender", msg.From.Hex(), "req_id", GetReqID(ctx))
 		return ErrOverSenderRateLimit
+	}
+
+	// TODO don't require sender rate limiting for this feature to work
+	if s.banned != nil {
+		txHash := tx.Hash().Hex()
+
+		tags := make([]string, 2, 3)
+		tags[0] = fmt.Sprintf("hash:%s", txHash)
+		tags[1] = fmt.Sprintf("from:%s", strings.ToLower(msg.From.Hex()))
+
+		if msg.To != nil {
+			tags = append(tags, fmt.Sprintf("to:%s", strings.ToLower(msg.To.Hex())))
+		}
+
+		tagFounds, err := s.banned.rClient.SMIsMember(ctx, bannedKey, tags).Result()
+		if err != nil {
+			log.Error("error checking banned", "err", err, "tx_hash", txHash)
+			return ErrInternal
+		}
+
+		bannedTags := make([]string, 0, len(tags))
+		for i, tagFound := range tagFounds {
+			if tagFound {
+				bannedTags = append(bannedTags, tags[i])
+			}
+		}
+
+		if len(bannedTags) > 0 {
+			log.Info("rejecting banned tx", "tx_hash", txHash, "tags", strings.Join(bannedTags, ","))
+			return &ErrBannedTx{TxHash: txHash}
+		}
 	}
 
 	return nil

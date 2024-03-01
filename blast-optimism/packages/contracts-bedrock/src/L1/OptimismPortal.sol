@@ -90,8 +90,9 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
 
     /// @notice Emitted when a withdrawal transaction is finalized.
     /// @param withdrawalHash Hash of the withdrawal transaction.
+    /// @param hintId is the checkpoint ID produce by YieldManager
     /// @param success        Whether the withdrawal transaction was successful.
-    event WithdrawalFinalized(bytes32 indexed withdrawalHash, bool success);
+    event WithdrawalFinalized(bytes32 indexed withdrawalHash, uint256 indexed hintId, bool success);
 
     /// @notice Emitted when the pause is triggered.
     /// @param account Address of the account triggering the pause.
@@ -137,7 +138,9 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         public
         reinitializer(Constants.INITIALIZER)
     {
-        l2Sender = Constants.DEFAULT_L2_SENDER;
+        if (l2Sender == address(0)) {
+            l2Sender = Constants.DEFAULT_L2_SENDER;
+        }
         l2Oracle = _l2Oracle;
         systemConfig = _systemConfig;
         guardian = _guardian;
@@ -386,7 +389,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
 
         // All withdrawals are immediately finalized. Replayability can
         // be achieved through contracts built on top of this contract
-        emit WithdrawalFinalized(withdrawalHash, success);
+        emit WithdrawalFinalized(withdrawalHash, hintId, success);
 
         // Reverting here is useful for determining the exact gas cost to successfully execute the
         // sub call to the target contract if the minimum gas limit specified by the user would not

@@ -37,6 +37,9 @@ target "op-stack-go" {
     GIT_COMMIT = "${GIT_COMMIT}"
     GIT_DATE = "${GIT_DATE}"
   }
+  contexts = {
+    blast-geth = "../blast-geth"
+  }
   platforms = split(",", PLATFORMS)
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-stack-go:${tag}"]
 }

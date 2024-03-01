@@ -71,9 +71,8 @@ contract L1BlastBridge_Receive_Test is Bridge_Initializer {
             )
         );
 
-        vm.prank(alice, alice);
-        (bool success,) = address(l1BlastBridge).call{ value: 100 }(hex"");
-        assertEq(success, true);
+        vm.prank(alice);
+        sendETH(address(l1BlastBridge), 100);
         assertEq(address(ethYieldManager).balance, 100);
     }
 
@@ -81,7 +80,7 @@ contract L1BlastBridge_Receive_Test is Bridge_Initializer {
         vm.etch(alice, address(L1Token).code);
         vm.expectRevert("StandardBridge: function can only be called from an EOA");
         vm.prank(alice);
-        address(l1BlastBridge).call{ value: 1 }("");
+        sendETH(address(l1BlastBridge), 1);
     }
 }
 
@@ -290,6 +289,9 @@ contract L1BlastBridge_DepositERC20_Test is Bridge_Initializer {
 
         bytes memory opaqueData = abi.encodePacked(uint256(0), uint256(0), baseGas, false, innerMessage);
 
+        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
+        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, alice, amount, extraData);
+
         // OptimismPortal emits a TransactionDeposited event on `depositTransaction` call
         vm.expectEmit(true, true, true, true, address(op));
         emit TransactionDeposited(l1MessengerAliased, address(L2Messenger), version, opaqueData);
@@ -301,9 +303,6 @@ contract L1BlastBridge_DepositERC20_Test is Bridge_Initializer {
         // SentMessageExtension1 event emitted by the CrossDomainMessenger
         vm.expectEmit(true, true, true, true, address(L1Messenger));
         emit SentMessageExtension1(address(l1BlastBridge), 0);
-
-        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
-        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, alice, amount, extraData);
 
         vm.prank(alice);
         l1BlastBridge.bridgeERC20(address(DAI), address(Usdb), amount, 10000, extraData);
@@ -354,6 +353,9 @@ contract L1BlastBridge_DepositERC20To_Test is Bridge_Initializer {
         vm.prank(alice);
         DAI.approve(address(l1BlastBridge), type(uint256).max);
 
+        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
+        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, bob, 1000, extraData);
+
         // OptimismPortal emits a TransactionDeposited event on `depositTransaction` call
         vm.expectEmit(true, true, true, true, address(op));
         emit TransactionDeposited(l1MessengerAliased, address(L2Messenger), version, opaqueData);
@@ -365,9 +367,6 @@ contract L1BlastBridge_DepositERC20To_Test is Bridge_Initializer {
         // SentMessageExtension1 event emitted by the CrossDomainMessenger
         vm.expectEmit(true, true, true, true, address(L1Messenger));
         emit SentMessageExtension1(address(l1BlastBridge), 0);
-
-        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
-        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, bob, 1000, extraData);
 
         // the L1 bridge should call L1CrossDomainMessenger.sendMessage
         vm.expectCall(
@@ -471,12 +470,12 @@ contract L1BlastBridge_BridgeStakedAsset is LidoYieldProvider_Initializer {
 
         bytes memory opaqueData = abi.encodePacked(amount, amount, uint64(200_000), false, message);
 
+        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
+        emit ERC20BridgeInitiated(address(Lido), address(0), alice, bob, amount, hex"");
+
         // OptimismPortal emits a TransactionDeposited event on `depositTransaction` call
         vm.expectEmit(true, true, true, true, address(op));
         emit TransactionDeposited(l1BlastBridgeAliased, address(l2BlastBridge), version, opaqueData);
-
-        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
-        emit ERC20BridgeInitiated(address(Lido), address(0), alice, bob, amount, hex"");
 
         vm.expectCall(
             address(Lido), abi.encodeWithSelector(ERC20.transferFrom.selector, alice, address(ethYieldManager), amount)
@@ -634,6 +633,9 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
 
         bytes memory opaqueData = abi.encodePacked(uint256(0), uint256(0), baseGas, false, innerMessage);
 
+        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
+        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, alice, amount, extraData);
+
         // OptimismPortal emits a TransactionDeposited event on `depositTransaction` call
         vm.expectEmit(true, true, true, true, address(op));
         emit TransactionDeposited(l1MessengerAliased, address(L2Messenger), version, opaqueData);
@@ -645,9 +647,6 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         // SentMessageExtension1 event emitted by the CrossDomainMessenger
         vm.expectEmit(true, true, true, true, address(L1Messenger));
         emit SentMessageExtension1(address(l1BlastBridge), 0);
-
-        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
-        emit ERC20BridgeInitiated(address(DAI), address(Usdb), alice, alice, amount, extraData);
 
         vm.prank(alice);
         l1BlastBridge.bridgeERC20(address(DAI), address(Usdb), amount, 10000, extraData);
@@ -710,6 +709,9 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
 
         bytes memory opaqueData = abi.encodePacked(uint256(0), uint256(0), baseGas, false, innerMessage);
 
+        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
+        emit ERC20BridgeInitiated(address(USDC), address(Usdb), alice, alice, amount * 1e12, extraData);
+
         // OptimismPortal emits a TransactionDeposited event on `depositTransaction` call
         vm.expectEmit(true, true, true, true, address(op));
         emit TransactionDeposited(l1MessengerAliased, address(L2Messenger), version, opaqueData);
@@ -721,9 +723,6 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         // SentMessageExtension1 event emitted by the CrossDomainMessenger
         vm.expectEmit(true, true, true, true, address(L1Messenger));
         emit SentMessageExtension1(address(l1BlastBridge), 0);
-
-        vm.expectEmit(true, true, true, true, address(l1BlastBridge));
-        emit ERC20BridgeInitiated(address(USDC), address(Usdb), alice, alice, amount * 1e12, extraData);
 
         vm.prank(alice);
         l1BlastBridge.bridgeERC20(address(USDC), address(Usdb), amount, 10000, extraData);

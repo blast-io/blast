@@ -227,8 +227,7 @@ contract OptimismPortal_CanAlwaysFinalizeAfterWindow is OptimismPortal_Invariant
     }
 
     /// @custom:invariant A withdrawal should **always** be able to be finalized
-    ///                   `FINALIZATION_PERIOD_SECONDS` after it was successfully proven
-    ///                   and ethYieldManager.finalize() has been called for the request.
+    ///                   `FINALIZATION_PERIOD_SECONDS` after it was successfully proven.
     ///
     ///                   This invariant asserts that there is no chain of calls that can
     ///                   be made that will prevent a withdrawal from being finalized

@@ -5,6 +5,7 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { Ownable2StepUpgradeable } from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import { SignedMath } from "@openzeppelin/contracts/utils/math/SignedMath.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
@@ -72,6 +73,11 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
 
     /// @notice Address of the OptimismPortal.
     OptimismPortal public portal;
+
+    /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
+    ///         A gap size of 41 was chosen here, so that the first slot used in a child contract
+    ///         would be a multiple of 50.
+    uint256[41] private __gap;
 
     struct ProviderInfo {
         bytes32 id;
@@ -280,7 +286,7 @@ abstract contract YieldManager is Ownable2StepUpgradeable, WithdrawalQueue, Dele
 
         // reflect the accumulated negative yield in totalYield
         if (accumulatedNegativeYields > 0) {
-            totalYield -= int256(accumulatedNegativeYields);
+            totalYield -= SafeCast.toInt256(accumulatedNegativeYields);
         }
 
         emit YieldReport(totalYield, totalInsurancePremiumPaid, totalInsuranceWithdrawal);

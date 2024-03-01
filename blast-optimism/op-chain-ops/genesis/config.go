@@ -29,7 +29,7 @@ import (
 // initialzedValue represents the `Initializable` contract value. It should be kept in
 // sync with the constant in `Constants.sol`.
 // https://github.com/ethereum-optimism/optimism/blob/develop/packages/contracts-bedrock/src/libraries/Constants.sol
-const initializedValue = 3
+const initializedValue = 1
 
 var (
 	ErrInvalidDeployConfig     = errors.New("invalid deploy config")
@@ -232,12 +232,14 @@ type DeployConfig struct {
 	// Account Configuration Predeploy
 	YieldContract common.Address `json:"yieldContract"`
 
-	L1BlastBridgeProxy common.Address `json:"l1BlastBridgeProxy"`
+	L1BlastBridgeProxy   common.Address `json:"l1BlastBridgeProxy"`
 	ETHYieldManagerProxy common.Address `json:"ethYieldManagerProxy"`
 	USDYieldManagerProxy common.Address `json:"usdYieldManagerProxy"`
+	ETHYieldProvider     common.Address `json:"ethYieldProvider"`
+	USDYieldProvider     common.Address `json:"usdYieldProvider"`
 
 	YieldManagerAdmin common.Address `json:"yieldManagerAdmin"`
-	USDBRemoteToken common.Address `json:"usdbRemoteToken"`
+	USDBRemoteToken   common.Address `json:"usdbRemoteToken"`
 
 	ETHInsuranceFee     *hexutil.Big `json:"ethInsuranceFee"`
 	ETHWithdrawalBuffer *hexutil.Big `json:"ethWithdrawalBuffer"`
@@ -461,6 +463,8 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 	d.USDYieldManagerProxy = deployments.USDYieldManagerProxy
 	d.ETHYieldManagerProxy = deployments.ETHYieldManagerProxy
 	d.USDBRemoteToken = deployments.USDBRemoteToken
+	d.ETHYieldProvider = deployments.ETHYieldProvider
+	d.USDYieldProvider = deployments.USDYieldProvider
 }
 
 // GetDeployedAddresses will get the deployed addresses of deployed L1 contracts
@@ -674,6 +678,8 @@ type L1Deployments struct {
 	L1BlastBridgeProxy                common.Address `json:"L1BlastBridgeProxy"`
 	USDYieldManagerProxy              common.Address `json:"USDYieldManagerProxy"`
 	ETHYieldManagerProxy              common.Address `json:"ETHYieldManagerProxy"`
+	ETHYieldProvider                  common.Address `json:"ETHYieldProvider"`
+	USDYieldProvider                  common.Address `json:"USDYieldProvider"`
 	USDBRemoteToken                   common.Address `json:"USDBRemoteToken"`
 	L2OutputOracle                    common.Address `json:"L2OutputOracle"`
 	L2OutputOracleProxy               common.Address `json:"L2OutputOracleProxy"`
@@ -842,17 +848,11 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 		"withdrawalNetwork":       config.BaseFeeVaultWithdrawalNetwork.ToUint8(),
 	}
 	immutable["Shares"] = immutables.ImmutableValues{
-		"price":    config.SharesPrice,
 		"reporter": config.ETHYieldManagerProxy,
 	}
 
 	immutable["Gas"] = immutables.ImmutableValues{
 		"admin":          config.GasAdmin,
-		"zeroClaimRate":  config.ZeroClaimRate,
-		"baseGasSeconds": config.BaseGasSeconds,
-		"baseClaimRate":  config.BaseClaimRate,
-		"ceilGasSeconds": config.CeilGasSeconds,
-		"ceilClaimRate":  config.CeilClaimRate,
 	}
 
 	immutable["Blast"] = immutables.ImmutableValues{
@@ -861,7 +861,8 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 
 	immutable["USDB"] = immutables.ImmutableValues{
 		"usdYieldManager": config.USDYieldManagerProxy,
-		"remoteToken":	   config.USDBRemoteToken,
+		"remoteToken":     config.USDBRemoteToken,
+		"decimals":        18,
 	}
 
 	immutable["L2BlastBridge"] = immutables.ImmutableValues{
@@ -907,15 +908,6 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"l1FeeOverhead":  config.GasPriceOracleOverhead,
 		"l1FeeScalar":    config.GasPriceOracleScalar,
 	}
-	storage["LegacyERC20ETH"] = state.StorageValues{
-		"_name":   "Ether",
-		"_symbol": "ETH",
-	}
-	storage["WETH9"] = state.StorageValues{
-		"name":     "Wrapped Ether",
-		"symbol":   "WETH",
-		"decimals": 18,
-	}
 	if config.EnableGovernance {
 		storage["GovernanceToken"] = state.StorageValues{
 			"_name":   config.GovernanceTokenName,
@@ -938,6 +930,8 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 	}
 	storage["Shares"] = state.StorageValues{
 		"price": config.SharesPrice.ToInt(),
+		"_initialized":  initializedValue,
+		"_initializing": false,
 	}
 
 	storage["Gas"] = state.StorageValues{
@@ -946,25 +940,37 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"baseClaimRate":  config.BaseClaimRate.ToInt(),
 		"ceilGasSeconds": config.CeilGasSeconds.ToInt(),
 		"ceilClaimRate":  config.CeilClaimRate.ToInt(),
+		"_initialized":  initializedValue,
+		"_initializing": false,
 	}
 	governorMap := make(map[any]any)
+	governorMap[predeploys.L2BlastBridgeAddr.String()] = "0xdead"
+	governorMap[predeploys.L2StandardBridgeAddr.String()] = "0xdead"
+	governorMap[predeploys.SharesAddr.String()] = "0xdead"
 	governorMap[predeploys.USDBAddr.String()] = "0xdead"
 	governorMap[predeploys.WETHRebasingAddr.String()] = "0xdead"
-	governorMap[predeploys.L2ToL1MessagePasserAddr.String()] = "0xdead"
+	governorMap[predeploys.L2CrossDomainMessengerAddr.String()] = "0xdead"
 	storage["Blast"] = state.StorageValues{
+		"_initialized":  initializedValue,
+		"_initializing": false,
 		"governorMap": governorMap,
 	}
 	storage["WETHRebasing"] = state.StorageValues{
-		"_initialized":  1,
+		"_initialized":  initializedValue,
 		"_initializing": false,
+		"price":         config.SharesPrice.ToInt(),
+		"name":	         "Wrapped Ether",
+		"symbol":        "WETH",
 	}
 	storage["USDB"] = state.StorageValues{
-		"_initialized":  1,
+		"_initialized":  initializedValue,
 		"_initializing": false,
-		"price": config.SharesPrice.ToInt(),
+		"price":         config.SharesPrice.ToInt(),
+		"name":          "USDB",
+		"symbol":        "USDB",
 	}
 	storage["L2BlastBridge"] = state.StorageValues{
-		"_initialized":  1,
+		"_initialized":  initializedValue,
 		"_initializing": false,
 		"messenger":     predeploys.L2CrossDomainMessengerAddr,
 	}

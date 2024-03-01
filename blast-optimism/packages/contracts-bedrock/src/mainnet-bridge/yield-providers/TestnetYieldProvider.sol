@@ -3,17 +3,20 @@ pragma solidity 0.8.15;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
+
+interface IInsurance {
+    function coverLoss(address token, uint256 amount) external;
+}
 
 /// @title TestnetYieldProvider
 /// @notice Provider for simulating a yield source on testnet.
 abstract contract TestnetYieldProvider is YieldProvider, Ownable {
     IERC20 immutable TOKEN;
     address immutable THIS;
-
-    int256 internal _reportedYield;
 
     /// @param _yieldManager Address of the yield manager for the underlying
     ///        yield asset of this provider.
@@ -37,13 +40,8 @@ abstract contract TestnetYieldProvider is YieldProvider, Ownable {
     }
 
     /// @inheritdoc YieldProvider
-    function stakedBalance() public view virtual override returns (uint256) {
-        return TOKEN.balanceOf(address(YIELD_MANAGER));
-    }
-
-    /// @inheritdoc YieldProvider
     function yield() public view override returns (int256) {
-        return _reportedYield;
+        return SafeCast.toInt256(stakedBalance()) - SafeCast.toInt256(stakedPrincipal);
     }
 
     /// @inheritdoc YieldProvider
@@ -53,13 +51,21 @@ abstract contract TestnetYieldProvider is YieldProvider, Ownable {
 
     /// @inheritdoc YieldProvider
     function unstake(uint256 amount) external override onlyDelegateCall returns (uint256, uint256) {
-        TestnetYieldProvider(THIS).sendAsset(amount);
-        return (0, 0);
+        TestnetYieldProvider(THIS).sendAsset(address(YIELD_MANAGER), amount);
+        return (0, amount);
     }
 
-    function sendAsset(uint256 amount) external virtual;
-
-    function _afterCommitYield() internal override {
-        _reportedYield = 0;
+    /// @inheritdoc YieldProvider
+    function payInsurancePremium(uint256 amount) external override onlyDelegateCall {
+        TestnetYieldProvider(THIS).sendAsset(address(YIELD_MANAGER.insurance()), amount);
     }
+
+    /// @notice Withdraw insurance funds to cover yield losses during a yield report.
+    ///         Must be called via `delegatecall` from the YieldManager.
+    function withdrawFromInsurance(uint256 amount) external override onlyDelegateCall {
+        require(supportsInsurancePayment(), "insurance not supported");
+        IInsurance(YIELD_MANAGER.insurance()).coverLoss(address(TOKEN), amount);
+    }
+
+    function sendAsset(address recipient, uint256 amount) external virtual;
 }

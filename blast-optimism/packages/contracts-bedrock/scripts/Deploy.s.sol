@@ -120,6 +120,7 @@ contract Deploy is Deployer {
         initializeL1BlastBridge();
         initializeETHYieldManager();
         initializeUSDYieldManager();
+        initializeInsurance();
         initializeL1ERC721Bridge();
         initializeOptimismMintableERC20Factory();
         initializeL1CrossDomainMessenger();
@@ -686,7 +687,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the Insurance
     function deployInsurance() public broadcast {
         Insurance ethInsurance = new Insurance{ salt: implSalt() }(YieldManager(mustGetAddress("ETHYieldManagerProxy")));
-        Insurance usdInsurance = new Insurance{ salt: implSalt() }(YieldManager(mustGetAddress("L1BlastBridgeProxy")));
+        Insurance usdInsurance = new Insurance{ salt: implSalt() }(YieldManager(mustGetAddress("USDYieldManagerProxy")));
 
         save("ETHInsurance", address(ethInsurance));
         save("USDInsurance", address(usdInsurance));
@@ -933,15 +934,24 @@ contract Deploy is Deployer {
             _proxy: payable(ethYieldManagerProxy),
             _implementation: ethYieldManager,
             _innerCallData: abi.encodeCall(
-                ETHYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), msg.sender)
+                ETHYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
             )
         });
 
         ETHYieldManager ym = ETHYieldManager(payable(ethYieldManagerProxy));
 
-        ym.setAdmin(cfg.yieldManagerAdmin());
-        ym.setBlastBridge(mustGetAddress("L1BlastBridgeProxy"));
-        ym.setInsurance(insuranceProxy, cfg.ethInsuranceFee(), cfg.ethWithdrawalBuffer());
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin()))
+        });
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setBlastBridge, (mustGetAddress("L1BlastBridgeProxy")))
+        });
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setInsurance, (address(insuranceProxy), cfg.ethInsuranceFee(), cfg.ethWithdrawalBuffer()))
+        });
 
         string memory version = ym.version();
         console.log("ETHYieldManager version: %s", version);
@@ -964,22 +974,75 @@ contract Deploy is Deployer {
         }
         require(uint256(proxyAdmin.proxyType(usdYieldManagerProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
 
+        Safe safe = Safe(mustGetAddress("SystemOwnerSafe"));
         _upgradeAndCallViaSafe({
             _proxy: payable(usdYieldManagerProxy),
             _implementation: usdYieldManager,
             _innerCallData: abi.encodeCall(
-                USDYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), msg.sender)
+                USDYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
             )
         });
 
         USDYieldManager ym = USDYieldManager(payable(usdYieldManagerProxy));
 
-        ym.setAdmin(cfg.yieldManagerAdmin());
-        ym.setBlastBridge(mustGetAddress("L1BlastBridgeProxy"));
-        ym.setInsurance(insuranceProxy, cfg.usdInsuranceFee(), cfg.usdWithdrawalBuffer());
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin()))
+        });
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setBlastBridge, (mustGetAddress("L1BlastBridgeProxy")))
+        });
+        _callViaSafe({
+            _target: address(ym),
+            _data: abi.encodeCall(YieldManager.setInsurance, (address(insuranceProxy), cfg.usdInsuranceFee(), cfg.usdWithdrawalBuffer()))
+        });
 
         string memory version = ym.version();
         console.log("USDYieldManager version: %s", version);
+    }
+
+    /// @notice Initialize Insurance
+    function initializeInsurance() public broadcast {
+        ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
+        address ethInsuranceProxy = mustGetAddress("ETHInsuranceProxy");
+        address usdInsuranceProxy = mustGetAddress("USDInsuranceProxy");
+        address ethInsurance = mustGetAddress("ETHInsurance");
+        address usdInsurance = mustGetAddress("USDInsurance");
+
+        uint256 proxyType = uint256(proxyAdmin.proxyType(ethInsuranceProxy));
+        if (proxyType != uint256(ProxyAdmin.ProxyType.CHUGSPLASH)) {
+            _callViaSafe({
+                _target: address(proxyAdmin),
+                _data: abi.encodeCall(ProxyAdmin.setProxyType, (ethInsuranceProxy, ProxyAdmin.ProxyType.CHUGSPLASH))
+            });
+        }
+        require(uint256(proxyAdmin.proxyType(ethInsuranceProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(ethInsuranceProxy),
+            _implementation: ethInsurance,
+            _innerCallData: abi.encodeCall(
+                Insurance.initialize, (mustGetAddress("SystemOwnerSafe"))
+            )
+        });
+
+        proxyType = uint256(proxyAdmin.proxyType(usdInsuranceProxy));
+        if (proxyType != uint256(ProxyAdmin.ProxyType.CHUGSPLASH)) {
+            _callViaSafe({
+                _target: address(proxyAdmin),
+                _data: abi.encodeCall(ProxyAdmin.setProxyType, (usdInsuranceProxy, ProxyAdmin.ProxyType.CHUGSPLASH))
+            });
+        }
+        require(uint256(proxyAdmin.proxyType(usdInsuranceProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(usdInsuranceProxy),
+            _implementation: usdInsurance,
+            _innerCallData: abi.encodeCall(
+                Insurance.initialize, (mustGetAddress("SystemOwnerSafe"))
+            )
+        });
     }
 
     /// @notice Initialize the L1ERC721Bridge
@@ -1083,7 +1146,7 @@ contract Deploy is Deployer {
                     cfg.l2OutputOracleStartingBlockNumber(),
                     cfg.l2OutputOracleStartingTimestamp(),
                     cfg.l2OutputOracleProposer(),
-                    cfg.l2OutputOracleChallenger()
+                    mustGetAddress("SystemOwnerSafe")
                 )
                 )
         });
@@ -1098,8 +1161,8 @@ contract Deploy is Deployer {
         require(oracle.l2BlockTime() == cfg.l2BlockTime());
         require(oracle.PROPOSER() == cfg.l2OutputOracleProposer());
         require(oracle.proposer() == cfg.l2OutputOracleProposer());
-        require(oracle.CHALLENGER() == cfg.l2OutputOracleChallenger());
-        require(oracle.challenger() == cfg.l2OutputOracleChallenger());
+        require(oracle.CHALLENGER() == mustGetAddress("SystemOwnerSafe"));
+        require(oracle.challenger() == mustGetAddress("SystemOwnerSafe"));
         require(oracle.FINALIZATION_PERIOD_SECONDS() == cfg.finalizationPeriodSeconds());
         require(oracle.finalizationPeriodSeconds() == cfg.finalizationPeriodSeconds());
         require(oracle.startingBlockNumber() == cfg.l2OutputOracleStartingBlockNumber());
@@ -1114,17 +1177,12 @@ contract Deploy is Deployer {
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address payable ethYieldManagerProxy = mustGetAddress("ETHYieldManagerProxy");
 
-        address guardian = cfg.portalGuardian();
-        if (guardian.code.length == 0) {
-            console.log("Portal guardian has no code: %s", guardian);
-        }
-
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
             _implementation: optimismPortal,
             _innerCallData: abi.encodeCall(
                 OptimismPortal.initialize,
-                (L2OutputOracle(l2OutputOracleProxy), guardian, SystemConfig(systemConfigProxy), false, ETHYieldManager(payable(ethYieldManagerProxy)))
+                (L2OutputOracle(l2OutputOracleProxy), mustGetAddress("SystemOwnerSafe"), SystemConfig(systemConfigProxy), false, ETHYieldManager(payable(ethYieldManagerProxy)))
                 )
         });
 
@@ -1134,7 +1192,7 @@ contract Deploy is Deployer {
         console.log("OptimismPortal version: %s", version);
 
         require(address(portal.L2_ORACLE()) == l2OutputOracleProxy);
-        require(portal.GUARDIAN() == cfg.portalGuardian());
+        require(portal.GUARDIAN() == mustGetAddress("SystemOwnerSafe"));
         require(address(portal.SYSTEM_CONFIG()) == systemConfigProxy);
         require(portal.paused() == false);
     }
@@ -1143,7 +1201,7 @@ contract Deploy is Deployer {
         address protocolVersionsProxy = mustGetAddress("ProtocolVersionsProxy");
         address protocolVersions = mustGetAddress("ProtocolVersions");
 
-        address finalSystemOwner = cfg.finalSystemOwner();
+        address finalSystemOwner = mustGetAddress("SystemOwnerSafe");
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
 
@@ -1243,53 +1301,70 @@ contract Deploy is Deployer {
     function _setETHYieldToken(address token, bool approved, uint8 decimals, address provider, bool reportStakedBalance) internal {
         L1BlastBridge l1BlastBridge = L1BlastBridge(payable(mustGetAddress("L1BlastBridgeProxy")));
 
-        l1BlastBridge.setETHYieldToken(token, approved, decimals, provider, reportStakedBalance);
+        _callViaSafe({
+            _target: address(l1BlastBridge),
+            _data: abi.encodeCall(L1BlastBridge.setETHYieldToken, (token, approved, decimals, provider, reportStakedBalance))
+        });
     }
 
     function _setUSDYieldToken(address token, bool approved, uint8 decimals, address provider, bool reportStakedBalance) internal {
         L1BlastBridge l1BlastBridge = L1BlastBridge(payable(mustGetAddress("L1BlastBridgeProxy")));
 
-        l1BlastBridge.setUSDYieldToken(token, approved, decimals, provider, reportStakedBalance);
+        _callViaSafe({
+            _target: address(l1BlastBridge),
+            _data: abi.encodeCall(L1BlastBridge.setUSDYieldToken, (token, approved, decimals, provider, reportStakedBalance))
+        });
     }
 
     function addETHYieldProviders() public broadcast {
         ETHYieldManager yieldManager = ETHYieldManager(payable(mustGetAddress("ETHYieldManagerProxy")));
+        address yieldProvider;
 
         if (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84.code.length > 0) { // if Lido exists
+            yieldProvider = address(new LidoYieldProvider(yieldManager));
             _addYieldProvider(
                 "LidoYieldProvider",
-                address(new LidoYieldProvider(yieldManager)),
+                yieldProvider,
                 address(yieldManager)
             );
         } else {
+             yieldProvider = address(new ETHTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("ETHYieldToken")));
             _addYieldProvider(
                 "ETHTestnetYieldProvider",
-                address(new ETHTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("ETHYieldToken"))),
+                yieldProvider,
                 address(yieldManager)
             );
         }
+        save("ETHYieldProvider", yieldProvider);
     }
 
     function addUSDYieldProviders() public broadcast {
         USDYieldManager yieldManager = USDYieldManager(payable(mustGetAddress("USDYieldManagerProxy")));
+        address yieldProvider;
 
         if (address(USDConversions.DAI).code.length > 0) { // if DAI exists
+            yieldProvider = address(new DSRYieldProvider(yieldManager));
             _addYieldProvider(
                 "DSRYieldProvider",
-                address(new DSRYieldProvider(yieldManager)),
+                yieldProvider,
                 address(yieldManager)
             );
         } else {
+            yieldProvider = address(new USDTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("USDToken")));
             _addYieldProvider(
                 "USDTestnetYieldProvider",
-                address(new USDTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("USDToken"))),
+                yieldProvider,
                 address(yieldManager)
             );
         }
+        save("USDYieldProvider", yieldProvider);
     }
 
     function _addYieldProvider(string memory _name, address yieldProvider, address yieldManager) internal {
-        YieldManager(yieldManager).addProvider(yieldProvider);
+        _callViaSafe({
+            _target: yieldManager,
+            _data: abi.encodeCall(YieldManager.addProvider, (yieldProvider))
+        });
         save(_name, yieldProvider);
     }
 

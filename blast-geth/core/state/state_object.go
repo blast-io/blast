@@ -537,6 +537,7 @@ func (s *stateObject) SubClaimableAmount(amount *big.Int) {
 	prevShares := new(big.Int).Set(s.data.Shares)
 	s.db.journal.append(balanceValuesChange{
 		account:       &s.address,
+		prevFlags:     s.data.Flags,
 		prevFixed:     new(big.Int).Set(s.data.Fixed),
 		prevShares:    prevShares,
 		prevRemainder: new(big.Int).Set(s.data.Remainder),

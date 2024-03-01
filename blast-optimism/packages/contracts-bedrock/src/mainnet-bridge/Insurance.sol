@@ -39,13 +39,11 @@ contract Insurance is Initializable, Semver {
 
     constructor(YieldManager _yieldManager) Semver(1, 0, 0) {
         YIELD_MANAGER = _yieldManager;
-        initialize();
+        initialize(address(0));
     }
 
-    receive() external payable {}
-
-    function initialize() public initializer {
-        admin = msg.sender;
+    function initialize(address _admin) public initializer {
+        admin = _admin;
     }
 
     function setAdmin(address _admin) external onlyAdmin {

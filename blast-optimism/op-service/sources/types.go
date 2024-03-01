@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
 
@@ -75,12 +76,27 @@ func (h headerInfo) BaseFee() *big.Int {
 	return h.Header.BaseFee
 }
 
+func (h headerInfo) BlobBaseFee() *big.Int {
+	if h.Header.ExcessBlobGas == nil {
+		return nil
+	}
+	return eip4844.CalcBlobFee(*h.Header.ExcessBlobGas)
+}
+
 func (h headerInfo) ReceiptHash() common.Hash {
 	return h.Header.ReceiptHash
 }
 
 func (h headerInfo) GasUsed() uint64 {
 	return h.Header.GasUsed
+}
+
+func (h headerInfo) GasLimit() uint64 {
+	return h.Header.GasLimit
+}
+
+func (h headerInfo) ParentBeaconRoot() *common.Hash {
+	return h.Header.ParentBeaconRoot
 }
 
 func (h headerInfo) HeaderRLP() ([]byte, error) {

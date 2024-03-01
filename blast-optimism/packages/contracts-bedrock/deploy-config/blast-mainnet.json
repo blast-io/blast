@@ -1,0 +1,79 @@
+{
+  "finalSystemOwner": "0x7c4682f89313810582fb77cf6a4a388a6c77f3af",
+  "portalGuardian": "0x7c4682f89313810582fb77cf6a4a388a6c77f3af",
+
+  "l1StartingBlockTag": "0xfcfb8d586bdae763f1189988789211c69eb893a895e7ba48be3ca6289f0941b7",
+
+  "l1ChainID": 1,
+  "l2ChainID": 81457,
+  "l2BlockTime": 2,
+  "l1BlockTime": 12,
+
+  "maxSequencerDrift": 600,
+  "sequencerWindowSize": 3600,
+  "channelTimeout": 300,
+
+  "p2pSequencerAddress": "0x164768144c688bf2bda28e4072b2b30ab705d568",
+  "batchInboxAddress": "0xff00000000000000000000000000000000081457",
+  "batchSenderAddress": "0x415c8893d514f9bc5211d36eeda4183226b84aa7",
+
+  "l2OutputOracleSubmissionInterval": 1800,
+  "l2OutputOracleStartingBlockNumber": 0,
+  "l2OutputOracleStartingTimestamp": 1708809815,
+
+  "l2OutputOracleProposer": "0x082b616ec99167b2fedee053f07db6795d4da821",
+  "l2OutputOracleChallenger": "0x7c4682f89313810582fb77cf6a4a388a6c77f3af",
+
+  "finalizationPeriodSeconds": 1036800,
+
+  "proxyAdminOwner": "0x7c4682f89313810582fb77cf6a4a388a6c77f3af",
+  "baseFeeVaultRecipient": "0x00e9fff4109d3bee41619973aafc479148099990",
+  "l1FeeVaultRecipient": "0x00e9fff4109d3bee41619973aafc479148099990",
+  "sequencerFeeVaultRecipient": "0x00e9fff4109d3bee41619973aafc479148099990",
+
+  "baseFeeVaultMinimumWithdrawalAmount": "0x8ac7230489e80000",
+  "l1FeeVaultMinimumWithdrawalAmount": "0x8ac7230489e80000",
+  "sequencerFeeVaultMinimumWithdrawalAmount": "0x8ac7230489e80000",
+  "baseFeeVaultWithdrawalNetwork": 0,
+  "l1FeeVaultWithdrawalNetwork": 0,
+  "sequencerFeeVaultWithdrawalNetwork": 0,
+
+  "gasPriceOracleOverhead": 188,
+  "gasPriceOracleScalar": 684000,
+
+  "enableGovernance": false,
+  "governanceTokenSymbol": "OP",
+  "governanceTokenName": "Optimism",
+  "governanceTokenOwner": "0x7c4682f89313810582fb77cf6a4a388a6c77f3af",
+
+  "l2GenesisBlockGasLimit": "0x1c9c380",
+  "l2GenesisBlockBaseFeePerGas": "0x3b9aca00",
+  "l2GenesisRegolithTimeOffset": "0x0",
+  "l2GenesisCanyonTimeOffset": "0x0",
+
+  "eip1559Denominator": 50,
+  "eip1559DenominatorCanyon": 250,
+  "eip1559Elasticity": 6,
+
+  "systemConfigStartBlock": 0,
+
+  "requiredProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "recommendedProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
+
+  "sharesPrice": "0x3b9aca00",
+
+  "gasAdmin": "0xB9ca260493a0a6F9CfC1c2931FAcA48ac4AF0937",
+  "yieldContract": "0x0000000000000000000000000000000000000100",
+  "yieldManagerAdmin": "0xf0218c491421b5830cbf96804cd9680b56ef70bd",
+
+  "zeroClaimRate": "0x0",
+  "baseClaimRate": "0x1388",
+  "ceilClaimRate": "0x2710",
+  "baseGasSeconds": "0x1",
+  "ceilGasSeconds": "0x278d00",
+
+  "ethInsuranceFee": "0x3e8",
+  "ethWithdrawalBuffer": "0xa",
+  "usdInsuranceFee": "0x3e8",
+  "usdWithdrawalBuffer": "0x0"
+}

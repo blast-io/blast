@@ -90,8 +90,15 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		}
 	}
 
+	// custom blast behaviors
 	// set flag for weth rebasing contract to automatic on genesis
 	db.SetFlags(predeploys.WETHRebasingAddr, 0)
+
+	// deploy create 2 contract
+	err = deployCreateTwo(db)
+	if err != nil {
+		return nil, err
+	}
 
 	return db.Genesis(), nil
 }

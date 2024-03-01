@@ -157,7 +157,7 @@ func gasEip2929AccountCheck(evm *EVM, contract *Contract, stack *Stack, mem *Mem
 	return 0, nil
 }
 
-func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
+func makeCallVariantGasCallEIP2929(oldCalculator gasFunc, isProxiedCall bool) gasFunc {
 	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 		addr := common.Address(stack.Back(1).Bytes20())
 		// Check slot presence in the access list
@@ -178,7 +178,8 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		}
 
 		var blastGasCost uint64
-		if evm.frameCount > params.BlastMaxFrameCount && contract.gasTracker.GetGasUsedByContract(addr) == 0 {
+		isNewFrame := contract.gasTracker.GetGasUsedByContract(addr) == 0 && isProxiedCall == false
+		if evm.frameCount > params.BlastMaxFrameCount && isNewFrame {
 			blastGasCost = params.BlastGasParamStorageGas
 			if !contract.UseGasNatively(blastGasCost) {
 				return 0, ErrOutOfGas
@@ -207,15 +208,21 @@ func makeCallVariantGasCallEIP2929(oldCalculator gasFunc) gasFunc {
 		contract.Gas += additionalGasCost
 		contract.gasTracker.RefundGas(contract.Address(), additionalGasCost)
 		evm.coldCostTemp = additionalGasCost
-		return gas + additionalGasCost, nil
+		var overflow bool
+
+		if gas, overflow = math.SafeAdd(gas, additionalGasCost); overflow {
+			return 0, ErrGasUintOverflow
+		}
+
+		return gas, nil
 	}
 }
 
 var (
-	gasCallEIP2929         = makeCallVariantGasCallEIP2929(gasCall)
-	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall)
-	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall)
-	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode)
+	gasCallEIP2929         = makeCallVariantGasCallEIP2929(gasCall, false)
+	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall, true)
+	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall, false)
+	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode, true)
 	gasSelfdestructEIP2929 = makeSelfdestructGasFn(true)
 	// gasSelfdestructEIP3529 implements the changes in EIP-2539 (no refunds)
 	gasSelfdestructEIP3529 = makeSelfdestructGasFn(false)

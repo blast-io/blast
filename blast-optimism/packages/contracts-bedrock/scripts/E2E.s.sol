@@ -2,7 +2,8 @@
 pragma solidity ^0.8.0;
 
 import { Script } from "forge-std/Script.sol";
-
+import { MerkleTrie } from "src/libraries/trie/MerkleTrie.sol";
+import { Vm } from "forge-std/Test.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -11,6 +12,8 @@ import { Executables } from "scripts/Executables.sol";
 
 import { Deployer } from "scripts/Deployer.sol";
 
+import { Types } from "src/libraries/Types.sol";
+import { Hashing } from "src/libraries/Hashing.sol";
 import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
 import { AddressManager } from "src/legacy/AddressManager.sol";
 import { Proxy } from "src/universal/Proxy.sol";
@@ -18,7 +21,6 @@ import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { USDB } from "src/L2/USDB.sol";
 import { Shares } from "src/L2/Shares.sol";
-import { Blast, YieldMode, GasMode } from "src/L2/Blast.sol";
 import { USDConversions } from "src/mainnet-bridge/USDConversions.sol";
 import { L1BlastBridge } from "src/mainnet-bridge/L1BlastBridge.sol";
 import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
@@ -41,100 +43,198 @@ import { ETHTestnetYieldProvider } from "src/mainnet-bridge/yield-providers/ETHT
 import { USDTestnetYieldProvider } from "src/mainnet-bridge/yield-providers/USDTestnetYieldProvider.sol";
 import { E2EInitializer } from "scripts/CommonE2E.s.sol";
 
-contract E2E is E2EInitializer {
-    // Blast contract stubs
-    function configureContract(address contractAddress, YieldMode _yield, GasMode gasMode, address governor) public onlyL2 broadcast {
-        b.configureContract(contractAddress, _yield, gasMode, governor);
+contract WithdrawE2E is E2EInitializer {
+    event WithdrawalRequested(
+        uint256 indexed requestId,
+        address indexed requestor,
+        address indexed recipient,
+        uint256 amount
+    );
+
+    event MessagePassed(
+        uint256 indexed nonce,
+        address indexed sender,
+        address indexed target,
+        uint256 value,
+        uint256 gasLimit,
+        bytes data,
+        bytes32 withdrawalHash
+    );
+
+    function _loadWithdrawalTx() internal view returns (Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber, uint256 requestId) {
+        string memory json = vm.readFile("withdrawal.json");
+        l2BlockNumber = uint32(vm.parseJsonUint(json, "$.l2BlockNumber"));
+        requestId = vm.parseJsonUint(json, "$.requestId");
+        _tx = Types.WithdrawalTransaction({
+            nonce: vm.parseJsonUint(json, "$.nonce"),
+            sender: vm.parseJsonAddress(json, "$.sender"),
+            target: vm.parseJsonAddress(json, "$.target"),
+            value: vm.parseJsonUint(json, "$.value"),
+            gasLimit: vm.parseJsonUint(json, "$.gasLimit"),
+            data: vm.parseJsonBytes(json, "$.data")
+        });
     }
 
-    function configure(YieldMode _yield, GasMode gasMode, address governor) public onlyL2 broadcast {
-        b.configure(_yield, gasMode, governor);
+    function _storeWithdrawalTx(Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber, uint256 requestId) internal {
+        string memory json = "";
+        vm.serializeUint(json, "l2BlockNumber", l2BlockNumber);
+        vm.serializeUint(json, "nonce", _tx.nonce);
+        vm.serializeAddress(json, "sender", _tx.sender);
+        vm.serializeAddress(json, "target", _tx.target);
+        vm.serializeUint(json, "value", _tx.value);
+        vm.serializeUint(json, "gasLimit", _tx.gasLimit);
+        vm.serializeBytes(json, "data", _tx.data);
+        json = vm.serializeUint(json, "requestId", requestId);
+        vm.writeJson({ json: json, path: "withdrawal.json" });
     }
 
-    function configureClaimableYield() public onlyL2 broadcast {
-        b.configureClaimableYield();
+    function _proveWithdrawal(Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber) internal {
+        bytes32 messageHash = Hashing.hashWithdrawal(_tx);
+        bytes32 slot = keccak256(abi.encode(messageHash, uint256(0)));
+        uint256 l2OutputIndex = L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).getL2OutputIndexAfter(l2BlockNumber);
+        uint32 l2BlockNumber2 = uint32(L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).getL2Output(l2OutputIndex).l2BlockNumber);
+        (bytes32 stateRoot, bytes32 blockHash, bytes32 storageHash, bytes[] memory proof) = _getWithdrawalProof(slot, l2BlockNumber2);
+        op.proveWithdrawalTransaction(
+            _tx,
+            l2OutputIndex,
+            Types.OutputRootProof({
+                version: bytes32(0),
+                stateRoot: stateRoot,
+                messagePasserStorageRoot: storageHash,
+                latestBlockhash: blockHash
+            }),
+            proof
+        );
     }
 
-    function configureClaimableYieldOnBehalf(address contractAddress) public onlyL2 broadcast {
-        b.configureClaimableYieldOnBehalf(contractAddress);
+    function _getWithdrawalProof(
+        bytes32 slot,
+        uint32 l2BlockNumber
+    ) internal returns (bytes32 stateRoot, bytes32 blockHash, bytes32 storageHash, bytes[] memory proof) {
+        string[] memory cmd = new string[](3);
+        cmd[0] = Executables.bash;
+        cmd[1] = "-c";
+        cmd[2] = string.concat(
+            "./scripts/proof.sh ",
+            Strings.toHexString(uint256(slot)),
+            " ",
+            Strings.toString(l2BlockNumber),
+            " | jq"
+        );
+        string memory res = string(vm.ffi(cmd));
+        stateRoot = stdJson.readBytes32(res, "$.stateRoot");
+        blockHash = stdJson.readBytes32(res, "$.hash");
+        storageHash = stdJson.readBytes32(res, "$.storageHash");
+        proof = stdJson.readBytesArray(res, "$.proof");
     }
 
-    function configureAutomaticYield() public onlyL2 broadcast {
-        b.configureAutomaticYield();
+}
+
+contract WithdrawE2ETest is WithdrawE2E {
+    function check() external view override returns (bool) {
+        string memory json = vm.readFile("withdrawal.json");
+        (Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber,) = _loadWithdrawalTx();
+        bytes32 hash = Hashing.hashWithdrawal(_tx);
+        (, uint128 timestamp,,) = op.provenWithdrawals(hash);
+        if (timestamp == 0) {
+            return L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).latestBlockNumber() >= l2BlockNumber;
+        } else {
+            uint256 l2OutputIndex = L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).getL2OutputIndexAfter(l2BlockNumber);
+            return op.isOutputFinalized(l2OutputIndex);
+        }
     }
 
-    function configureAutomaticYieldOnBehalf(address contractAddress) public onlyL2 broadcast {
-        b.configureAutomaticYieldOnBehalf(contractAddress);
+    function testWithdrawETH(uint256 amount) public {
+        if (_chainIsL1()) {
+            (Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber,uint256 requestId) = _loadWithdrawalTx();
+            if (l1State.numCalls == 0) {
+                _incrementL1NumCalls();
+                vm.startBroadcast();
+                vm.recordLogs();
+                _proveWithdrawal(_tx, l2BlockNumber);
+                Vm.Log memory log = _getLog(vm.getRecordedLogs(), WithdrawalRequested.selector);
+                _storeWithdrawalTx(_tx, l2BlockNumber, uint256(log.topics[1]));
+                vm.stopBroadcast();
+            } else {
+                vm.startBroadcast();
+                eym.finalize(requestId);
+                op.finalizeWithdrawalTransaction{gas: 1_000_000}(eym.findCheckpointHint(requestId, 1, eym.getLastCheckpointId()), _tx);
+                vm.stopBroadcast();
+            }
+        } else {
+            vm.startBroadcast();
+            vm.recordLogs();
+            l2bb.bridgeETH{value: amount}(200_000, hex"");
+            Vm.Log memory log = _getLog(vm.getRecordedLogs(), MessagePassed.selector);
+            (uint256 value, uint256 gasLimit, bytes memory data,) = abi.decode(log.data, (uint256, uint256, bytes, bytes32));
+            Types.WithdrawalTransaction memory _tx = Types.WithdrawalTransaction({
+                nonce: uint256(log.topics[1]),
+                sender: address(uint160(uint256(log.topics[2]))),
+                target: address(uint160(uint256(log.topics[3]))),
+                value: value,
+                gasLimit: gasLimit,
+                data: data
+            });
+            _storeWithdrawalTx(_tx, uint32(block.number), 0);
+            vm.stopBroadcast();
+        }
+    }
+}
+
+contract WithdrawUSDE2ETest is WithdrawE2E {
+    function check() external view override returns (bool) {
+        string memory json = vm.readFile("withdrawal.json");
+        (Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber,) = _loadWithdrawalTx();
+        bytes32 hash = Hashing.hashWithdrawal(_tx);
+        (, uint128 timestamp,,) = op.provenWithdrawals(hash);
+        if (timestamp == 0) {
+            return L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).latestBlockNumber() >= l2BlockNumber;
+        } else {
+            uint256 l2OutputIndex = L2OutputOracle(mustGetAddress("L2OutputOracleProxy")).getL2OutputIndexAfter(l2BlockNumber);
+            return op.isOutputFinalized(l2OutputIndex);
+        }
     }
 
-    function configureVoidYield() public onlyL2 broadcast {
-        b.configureVoidYield();
+    function testWithdrawUSD(uint256 amount) public {
+        if (_chainIsL1()) {
+            (Types.WithdrawalTransaction memory _tx, uint32 l2BlockNumber,) = _loadWithdrawalTx();
+            if (l1State.numCalls == 0) {
+                _incrementL1NumCalls();
+                vm.startBroadcast();
+                _proveWithdrawal(_tx, l2BlockNumber);
+                _storeWithdrawalTx(_tx, l2BlockNumber, 0);
+                vm.stopBroadcast();
+            } else if (l1State.numCalls == 1) {
+                vm.startBroadcast();
+                vm.recordLogs();
+                op.finalizeWithdrawalTransaction{gas: 1_000_000}(0, _tx);
+                Vm.Log memory log = _getLog(vm.getRecordedLogs(), WithdrawalRequested.selector);
+                uint256 requestId = uint256(log.topics[1]);
+                uym.finalize(requestId);
+                uym.claimWithdrawal(requestId, uym.findCheckpointHint(requestId, 1, uym.getLastCheckpointId()));
+                vm.stopBroadcast();
+            }
+        } else {
+            vm.startBroadcast();
+            vm.recordLogs();
+            l2bb.bridgeERC20(address(usdb), usdb.REMOTE_TOKEN(), amount, 200_000, hex"");
+            Vm.Log memory log = _getLog(vm.getRecordedLogs(), MessagePassed.selector);
+            (uint256 value, uint256 gasLimit, bytes memory data,) = abi.decode(log.data, (uint256, uint256, bytes, bytes32));
+            Types.WithdrawalTransaction memory _tx = Types.WithdrawalTransaction({
+                nonce: uint256(log.topics[1]),
+                sender: address(uint160(uint256(log.topics[2]))),
+                target: address(uint160(uint256(log.topics[3]))),
+                value: value,
+                gasLimit: gasLimit,
+                data: data
+            });
+            _storeWithdrawalTx(_tx, uint32(block.number), 0);
+            vm.stopBroadcast();
+        }
     }
+}
 
-    function configureVoidYieldOnBehalf(address contractAddress) public onlyL2 broadcast {
-        b.configureVoidYieldOnBehalf(contractAddress);
-    }
-
-    function configureClaimableGas() public onlyL2 broadcast {
-        b.configureClaimableGas();
-    }
-
-    function configureClaimableGasOnBehalf(address contractAddress) public onlyL2 broadcast {
-        b.configureClaimableGasOnBehalf(contractAddress);
-    }
-
-    function configureVoidGas() public onlyL2 broadcast {
-        b.configureVoidGas();
-    }
-
-    function configureVoidGasOnBehalf(address contractAddress) public onlyL2 broadcast {
-        b.configureVoidGasOnBehalf(contractAddress);
-    }
-
-    function configureGovernor(address _governor) public onlyL2 broadcast {
-        b.configureGovernor(_governor);
-    }
-
-    function configureGovernorOnBehalf(address _newGovernor, address contractAddress) public onlyL2 broadcast {
-        b.configureGovernorOnBehalf(_newGovernor, contractAddress);
-    }
-
-    function claimAllGas(address contractAddress, address recipientOfGas) public onlyL2 broadcast returns (uint256) {
-        return b.claimAllGas(contractAddress, recipientOfGas);
-    }
-
-    function claimGasAtMinClaimRate(address contractAddress, address recipientOfGas, uint256 minClaimRateBips) public onlyL2 broadcast returns (uint256) {
-        return b.claimGasAtMinClaimRate(contractAddress, recipientOfGas, minClaimRateBips);
-    }
-
-    function claimMaxGas(address contractAddress, address recipientOfGas) public onlyL2 broadcast returns (uint256) {
-        return b.claimMaxGas(contractAddress, recipientOfGas);
-    }
-
-    function claimGas(address contractAddress, address recipientOfGas, uint256 gasToClaim, uint256 gasSecondsToConsume) public onlyL2 broadcast returns (uint256) {
-        return b.claimGas(contractAddress, recipientOfGas, gasToClaim, gasSecondsToConsume);
-    }
-
-    function readClaimableYield(address a) public onlyL2 broadcast returns (uint256) {
-        return b.readClaimableYield(a);
-    }
-
-    function readYieldConfiguration(address contractAddress) external view returns (uint8) {
-        return b.readYieldConfiguration(contractAddress);
-    }
-
-    function claimYield(address contractAddress, address beneficiary, uint256 amount) public onlyL2 broadcast returns (uint256) {
-        return b.claimYield(contractAddress, beneficiary, amount);
-    }
-
-    function claimAllYield(address contractAddress, address beneficiary) public onlyL2 broadcast returns (uint256) {
-        return b.claimAllYield(contractAddress, beneficiary);
-    }
-
-    function readGasParams(address contractAddress) external view returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode) {
-        return b.readGasParams(contractAddress);
-    }
-
+contract DepositE2E is E2EInitializer {
     function depositETHDirect(uint256 amount) public onlyL1 broadcast {
         sendETH(address(op), amount);
     }
@@ -166,46 +266,9 @@ contract E2E is E2EInitializer {
         bytes memory extraData = abi.encodePacked(uint256(amount));
         l1bb.bridgeERC20To(address(steth), address(0), to, amount, 100_000, extraData);
     }
+}
 
-    function fakeUSDYield(int256 amount) public onlyL1 broadcast {
-        if (_isFork()) {
-            revert("Not supported");
-        } else {
-            usd.approve(address(uyp), uint256(amount));
-            uyp.recordYield(amount);
-        }
-    }
-    function fakeETHYield(int256 amount) public onlyL1 broadcast {
-        if (_isFork()) {
-            if (amount < 0) {
-                lido.transferFrom(address(eym), address(this), uint256(-1 * amount));
-            } else {
-                lido.submit{value: uint256(amount)}(address(0));
-                lido.transfer(address(eym), uint256(amount));
-            }
-        } else {
-            if (amount < 0) {
-                eyp.recordYield(amount);
-            } else {
-                eyp.recordYield{value: uint256(amount)}(amount);
-            }
-        }
-    }
-
-    function commitETHYieldReport(bool insurance) public onlyL1 {
-        vm.startBroadcast(eym.admin());
-        eym.commitYieldReport(insurance);
-        vm.stopBroadcast();
-    }
-    function commitUSDYieldReport(bool insurance) public onlyL1 {
-        vm.startBroadcast(uym.admin());
-        uym.commitYieldReport(insurance);
-        vm.stopBroadcast();
-    }
-
-    /*/////////////////////////////
-            DEPOSIT ETH
-    /////////////////////////////*/
+contract TestDepositE2E is DepositE2E {
     function testDepositETHDirect(uint256 amount) public {
         if (_chainIsL1()) {
             depositETHDirect(amount);
@@ -262,10 +325,6 @@ contract E2E is E2EInitializer {
             require(alice.balance == l2State.aliceETHBalance + amount, "Alice L2 ETH balance incorrect");
         }
     }
-
-    /*/////////////////////////////
-            DEPOSIT USD
-    /////////////////////////////*/
     function testDepositUSD(uint256 amount) public {
         if (_chainIsL1()) {
             vm.startBroadcast();
@@ -334,11 +393,51 @@ contract E2E is E2EInitializer {
             require(usdb.balanceOf(user) == l2State.userUSDBBalance + amountWad, "User USDB balance incorrect");
         }
     }
+}
 
+contract YieldE2E is E2EInitializer {
+    function fakeUSDYield(int256 amount) public onlyL1 broadcast {
+        if (_isFork()) {
+            revert("Not supported");
+        } else {
+            usd.approve(address(uyp), uint256(amount));
+            uyp.recordYield(amount);
+        }
+    }
+    function fakeETHYield(int256 amount) public onlyL1 broadcast {
+        if (_isFork()) {
+            if (amount < 0) {
+                lido.transferFrom(address(eym), address(this), uint256(-1 * amount));
+            } else {
+                lido.submit{value: uint256(amount)}(address(0));
+                lido.transfer(address(eym), uint256(amount));
+            }
+        } else {
+            if (amount < 0) {
+                eyp.recordYield(amount);
+            } else {
+                eyp.recordYield{value: uint256(amount)}(amount);
+            }
+        }
+    }
 
-    /*///////////////////////////////////////////////////////
-                            ETH Yield
-    ///////////////////////////////////////////////////////*/
+    function commitETHYieldReport(bool insurance) public onlyL1 {
+        vm.startBroadcast(eym.admin());
+        eym.commitYieldReport(insurance);
+        vm.stopBroadcast();
+    }
+    function commitUSDYieldReport(bool insurance) public onlyL1 {
+        vm.startBroadcast(uym.admin());
+        uym.commitYieldReport(insurance);
+        vm.stopBroadcast();
+    }
+}
+
+contract YieldE2ETest is YieldE2E {
+
+    /*//////////////////////////////////
+                ETH Yield
+    //////////////////////////////////*/
 
     function testCommitYieldETH(uint256 yield) public {
         if (_chainIsL1()) {
@@ -362,10 +461,10 @@ contract E2E is E2EInitializer {
 
             if (_isFork()) {
                 require(lyp.yield() == 0, "LidoYieldProvider yield is not zero");
-                require(lido.balanceOf(address(ei)) == yield / 10, "Insurance not correct");
+                require(lido.balanceOf(address(ei)) == yield * eym.insuranceFeeBips() / 10_000, "Insurance not correct");
             } else {
                 require(eyp.yield() == 0, "ETHYieldProvider yield is not zero");
-                // require(uyt.balanceOf(address(ei)) == yield / 10, "Insurance not correct");
+                require(steth.balanceOf(address(ei)) == yield * uym.insuranceFeeBips() / 10_000, "Insurance not correct");
             }
         } else {
             require((l2State.ethSharePrice - shares.price()) * shares.count() + shares.pending() - l2State.ethPending == yield, "ETH share price did not increase");
@@ -374,16 +473,16 @@ contract E2E is E2EInitializer {
 
     function testCommitYieldETH_paysOffDebt(uint256 yield) public {
         if (_chainIsL1()) {
-            fakeETHYield(int256(yield));
-            commitETHYieldReport(false);
-
-            fakeETHYield(-1 * int256(yield));
-            commitETHYieldReport(false);
+            require(eym.accumulatedNegativeYields() > 0, "no debt to pay off");
 
             fakeETHYield(int256(yield));
             commitETHYieldReport(false);
 
-            require(lyp.yield() == 0, "ETHYieldManager yield is not zero");
+            if (_isFork()) {
+                require(lyp.yield() == 0, "ETHYieldManager yield is not zero");
+            } else {
+                require(eyp.yield() == 0, "ETHYieldManager yield is not zero");
+            }
             require(eym.accumulatedNegativeYields() == 0, "ETHYieldManager negative yield is not zero");
         } else {
             require(l2State.ethSharePrice == shares.price() && shares.pending() == l2State.ethPending, "ETH share price changed");
@@ -392,6 +491,11 @@ contract E2E is E2EInitializer {
 
     function testCommitYieldETH_negative(uint256 yield) public {
         if (_chainIsL1()) {
+            if (_isFork()) {
+                require(lyp.stakedPrincipal() > yield, "Insufficient balance to simulate negative yield");
+            } else {
+                require(eyp.stakedPrincipal() > yield, "Insufficient balance to simulate negative yield");
+            }
             fakeETHYield(-1 * int256(yield));
             commitETHYieldReport(false);
 
@@ -408,10 +512,15 @@ contract E2E is E2EInitializer {
 
     function testCommitYieldETH_negative_takeFromInsurance(uint256 yield) public {
         if (_chainIsL1()) {
-            fakeETHYield(int256(yield));
-            commitETHYieldReport(true);
+            if (_isFork()) {
+                require(lyp.stakedPrincipal() > yield, "Insufficient balance to simulate negative yield");
+                require(lyp.insuranceBalance() > yield, "Insufficient insurance to pay negative yield");
+            } else {
+                require(eyp.stakedPrincipal() > yield, "Insufficient balance to simulate negative yield");
+                require(eyp.insuranceBalance() > yield, "Insufficient insurance to pay negative yield");
+            }
 
-            fakeETHYield(-1 * int256(yield)/10);
+            fakeETHYield(-1 * int256(yield));
             commitETHYieldReport(true);
 
             if (_isFork()) {
@@ -425,9 +534,10 @@ contract E2E is E2EInitializer {
         }
     }
 
-    /*/////////////////////
-          USD Yield
-    /////////////////////*/
+    /*//////////////////////////////////
+                USD Yield
+    //////////////////////////////////*/
+
     function testCommitYieldUSD(uint256 yield) public {
         if (_chainIsL1()) {
             fakeUSDYield(int256(yield));
@@ -439,29 +549,6 @@ contract E2E is E2EInitializer {
             }
         } else {
             require(l2State.usdSharePrice < usdb.price(), "USD share price did not increase");
-        }
-    }
-
-    /*/////////////////////////////////////
-          Claiming Yield on BLAST
-    /////////////////////////////////////*/
-
-    // expects l2 -> l1 -> l2
-    // blast e2e devnet 212 "function testIncreaseSharePriceAndClaimYield()"
-    function testIncreaseSharePriceAndClaimYield() public {
-        if (_chainIsL1()) {
-            fakeETHYield(int256(100*1e18));
-            commitETHYieldReport(false);
-        } else if (step.t == 0) {
-            configureClaimableYield();
-            require(user.balance > 0, "user balance must be > 0");
-        } else {
-            uint256 yield = readClaimableYield(msg.sender);
-            require(yield > 0, "yield must be non-negative");
-            uint256 bal = user.balance;
-            uint256 yieldClaimed = claimAllYield(user, user);
-            require(yieldClaimed == yield, "yield claimed must be identical");
-            require(user.balance - bal == yieldClaimed, "yield was claimed");
         }
     }
 }

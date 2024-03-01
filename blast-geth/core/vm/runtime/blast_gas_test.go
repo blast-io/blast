@@ -640,3 +640,32 @@ func TestMaxGasParameters(t *testing.T) {
 func getMaxValueForBytes(numberBytes int64) *big.Int {
 	return new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(numberBytes*8), nil), common.Big1)
 }
+
+func TestGasPenaltyOnDelegateCall(t *testing.T) {
+	db := setupDbWithoutGenesis(t)
+	addr := deployTestContract(db, delegateCallContractPath, t)
+
+	abi := getAbi(delegateCallContractPath, t)
+	input, err := abi.Pack("call")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tp := TransactionParams{
+		sender: EOA_ADDR,
+		input:  input,
+		to:     &addr,
+	}
+	result := stateTransition(&tp, db, t)
+	if result.Err != nil {
+		t.Fatal(result.Err)
+	}
+	// USED GAS iff max frame count is 1024
+	// 807592
+
+	// USED GAS iff max frame count is 5 w/ delegate call on penalty bug
+	// 2625192
+	if result.UsedGas != 807592 {
+		t.Fatalf("unexpected gas used")
+	}
+}

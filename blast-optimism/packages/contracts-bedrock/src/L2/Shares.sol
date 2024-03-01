@@ -72,13 +72,6 @@ abstract contract SharesBase is Initializable {
         _tryDistributePending();
     }
 
-    /// @notice Distribute pending yields.
-    function distributePending() external {
-        if (!_tryDistributePending()) {
-            revert DistributeFailed(count(), pending);
-        }
-    }
-
     /// @notice Attempt to distribute pending yields if there
     ///         are sufficient pending yields to increase the
     ///         share price.

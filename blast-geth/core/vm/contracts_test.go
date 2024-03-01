@@ -406,3 +406,81 @@ func BenchmarkPrecompiledBLS12381G2MultiExpWorstCase(b *testing.B) {
 	}
 	benchmarkPrecompiled("0f", testcase, b)
 }
+
+func TestBlastPrecompiledDoesNotChargeGas(t *testing.T) {
+	db, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+
+	// Caller must be Blast predeploy
+	caller := common.HexToAddress("0x4300000000000000000000000000000000000002")
+
+	// Call `configure(0x0000000000000000000000000000000000001111, 2)`
+	in := common.Hex2Bytes("3bdbe9a500000000000000000000000000000000000000000000000000000000000011110000000000000000000000000000000000000000000000000000000000000002")
+
+	// Send 100 startGas in the call (could be less, even 0)
+	var startGas uint64 = 150_000
+	_, endGas, err := RunPrecompiledContract(&blast{}, caller, in, db, false, startGas)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the precompile hasn't charged any gas
+	if endGas == startGas {
+		t.Fatal("Precompile failed to charge gas")
+	}
+	if endGas != startGas-100_000 {
+		t.Fatal("100_000 gas not charged")
+	}
+
+	// `getConfiguration(0x0000000000000000000000000000000000001111)``
+	in = common.Hex2Bytes("c44b11f70000000000000000000000000000000000000000000000000000000000001111")
+	res, endGas, err := RunPrecompiledContract(&blast{}, caller, in, db, false, startGas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res[len(res)-1] != 2 {
+		t.Fatal("Unexpected configuration value")
+	}
+	if endGas != startGas-9300 {
+		t.Fatal("not expected gas")
+	}
+}
+
+func TestBlastPrecompileCallerAuthorization(t *testing.T) {
+	db, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+
+	// Caller is not blast predeploy
+	caller := common.HexToAddress("0x4300000000000000000000000000000000000001")
+
+	// Call `configure(0x0000000000000000000000000000000000001111, 2)`
+	in := common.Hex2Bytes("3bdbe9a500000000000000000000000000000000000000000000000000000000000011110000000000000000000000000000000000000000000000000000000000000002")
+
+	// Send 100 startGas in the call (could be less, even 0)
+	var startGas uint64 = 150_000
+	_, _, err := RunPrecompiledContract(&blast{}, caller, in, db, false, startGas)
+
+	if err != ErrExecutionReverted {
+		t.Fatal("authorization should revert execution")
+	}
+}
+
+func TestBlastPrecompileOnInvalidInput(t *testing.T) {
+	db, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+
+	// Caller must be Blast predeploy
+	caller := common.HexToAddress("0x4300000000000000000000000000000000000002")
+
+	// call arbitrary piece of input
+	in := common.Hex2Bytes("3cdbe9a500000000000000000000000000000000000000000000000000000000000011110000000000000000000000000000000000000000000000000000000000000002")
+
+	// Send 100 startGas in the call (could be less, even 0)
+	var startGas uint64 = 150_000
+	_, endGas, err := RunPrecompiledContract(&blast{}, caller, in, db, false, startGas)
+
+	if err != ErrExecutionReverted {
+		t.Fatal("err not execution reverted")
+	}
+	if endGas != 50_000 {
+		t.Fatal("default gas not consumed")
+	}
+}

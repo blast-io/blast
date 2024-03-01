@@ -16,7 +16,9 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 contract USDYieldManager is YieldManager, Semver {
     /// @param _token Address of withdrawal token. It is assumed that the token
     ///               has 18 decimals.
-    constructor(address _token) YieldManager(_token) Semver(1, 0, 0) {}
+    constructor(address _token) YieldManager(_token) Semver(1, 0, 0) {
+        _disableInitializers();
+    }
 
     /// @notice initializer
     /// @param _portal Address of the OptimismPortal.

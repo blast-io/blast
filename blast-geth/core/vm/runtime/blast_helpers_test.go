@@ -333,6 +333,11 @@ func setupDb(t *testing.T) *state.StateDB {
 	return state
 }
 
+func setupDbWithoutGenesis(t *testing.T) *state.StateDB {
+	state, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	return state
+}
+
 type TransactionParams struct {
 	sender      common.Address
 	to          *common.Address

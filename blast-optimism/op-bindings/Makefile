@@ -6,9 +6,10 @@ contracts-dir := $(monorepo-base)/packages/contracts-bedrock
 
 all: version mkdir bindings
 
+# If missing abigen, do `make all` in op-geth
 version:
 	forge --version
-	abigen --version
+	../../op-geth/build/bin/abigen --version
 
 compile:
 	cd $(contracts-dir) && \

@@ -10,8 +10,7 @@ import { YieldMode } from "src/L2/Blast.sol";
 import { GasMode } from "src/L2/Gas.sol";
 
 contract USDB_Test is Bridge_Initializer {
-    event Mint(address indexed account, uint256 amount);
-    event Burn(address indexed account, uint256 amount);
+    event Transfer(address indexed from, address indexed to, uint256 value);
     event NewPrice(uint256 price);
 
     error CallerIsNotBridge();
@@ -84,7 +83,7 @@ contract USDB_Test is Bridge_Initializer {
 
     function test_mint_succeeds() external {
         vm.expectEmit(true, true, true, true);
-        emit Mint(alice, 100);
+        emit Transfer(address(0), alice, 100);
 
         vm.prank(address(l2BlastBridge));
         Usdb.mint(alice, 100);
@@ -104,7 +103,7 @@ contract USDB_Test is Bridge_Initializer {
         Usdb.mint(alice, 100);
 
         vm.expectEmit(true, true, true, true);
-        emit Burn(alice, 100);
+        emit Transfer(alice, address(0), 100);
 
         vm.prank(address(l2BlastBridge));
         Usdb.burn(alice, 100);

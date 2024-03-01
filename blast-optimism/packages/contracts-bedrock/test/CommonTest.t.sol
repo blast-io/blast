@@ -70,14 +70,8 @@ contract MockGas is Gas {
     constructor(
         address _admin,
         address _blastConfigurationContract,
-        address _blastFeeVault,
-        uint256 _zeroClaimRate,
-        uint256 _baseGasSeconds,
-        uint256 _baseClaimRate,
-        uint256 _ceilGasSeconds,
-        uint256 _ceilClaimRate
-    ) Gas(_admin, _blastConfigurationContract, _blastFeeVault, _zeroClaimRate, _baseGasSeconds, _baseClaimRate, _ceilGasSeconds, _ceilClaimRate) {
-    }
+        address _blastFeeVault
+    ) Gas(_admin, _blastConfigurationContract, _blastFeeVault) {}
 
     function updateGasParams(address contractAddress, uint256 etherSeconds, uint256 etherBalance, GasMode mode) external {
         _updateGasParams(contractAddress, etherSeconds, etherBalance, mode);
@@ -121,6 +115,11 @@ contract CommonTest is Test {
         vm.fee(1000000000);
 
         ffi = new FFIInterface();
+    }
+
+    function sendETH(address to, uint256 amount) internal {
+        (bool success,) = to.call{value: amount}(hex"");
+        assertEq(success, true);
     }
 
     function emitTransactionDeposited(
@@ -233,15 +232,11 @@ contract L2OutputOracle_Initializer is CommonTest {
         vm.etch(Predeploys.L2_TO_L1_MESSAGE_PASSER, address(new L2ToL1MessagePasser()).code);
         vm.label(Predeploys.L2_TO_L1_MESSAGE_PASSER, "L2ToL1MessagePasser");
 
-        MockGas mockGas = new MockGas({ _admin: address(0x0), 
-                            _blastConfigurationContract: address(Predeploys.BLAST),
-                            _blastFeeVault: address(Predeploys.BASE_FEE_VAULT),
-                            _zeroClaimRate: 0x1F4, // 5000 = 5%
-                            _baseClaimRate: 0x7D0, // 20000 = 20%
-                            _ceilClaimRate: 0x2710, // 10_000 = 100%
-                            _baseGasSeconds: 0x1, // 1s
-                            _ceilGasSeconds: 0xC8 // 200s
-                            });
+        MockGas mockGas = new MockGas({
+            _admin: address(0x0),
+            _blastConfigurationContract: address(Predeploys.BLAST),
+            _blastFeeVault: address(Predeploys.BASE_FEE_VAULT)
+        });
         vm.etch(Predeploys.GAS, address(mockGas).code);
         gas = MockGas(Predeploys.GAS);
         vm.label(address(gas), "GAS");
@@ -262,6 +257,7 @@ contract MockYield {
     }
     function configure(address x, uint8 mode) external returns (uint256) {
         configurations[x] = mode;
+        return 0;
     }
     function claim(address, address, uint256) external returns (uint256) {}
 }
@@ -278,7 +274,7 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
     ERC20 USDT;
     ERC20 DAI;
 
-    event WithdrawalFinalized(bytes32 indexed withdrawalHash, bool success);
+    event WithdrawalFinalized(bytes32 indexed withdrawalHash, uint256 indexed requestId, bool success);
     event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to, uint256 requestId);
 
     function setUp() public virtual override {
@@ -716,13 +712,13 @@ contract LidoYieldProvider_Initializer is Bridge_Initializer {
     Insurance internal insurance;
 
     ILido Lido = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-    IWithdrawalQueue WithdrawalQueue = IWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+    IWithdrawalQueue withdrawalQueue = IWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
 
     function finalizeWithdrawals() internal {
-        uint256[] memory _requestIds = WithdrawalQueue.getWithdrawalRequests(address(ethYieldManager));
+        uint256[] memory _requestIds = withdrawalQueue.getWithdrawalRequests(address(ethYieldManager));
         uint256 shareRate = Lido.getPooledEthByShares(1e27);
         vm.prank(address(Lido));
-        WithdrawalQueue.finalize(_requestIds[_requestIds.length-1], shareRate);
+        withdrawalQueue.finalize(_requestIds[_requestIds.length-1], shareRate);
     }
 
     function setUp() public virtual override {
@@ -733,7 +729,7 @@ contract LidoYieldProvider_Initializer is Bridge_Initializer {
         vm.label(address(lidoProvider), "LidoYieldProvider");
 
         vm.label(address(Lido), "Lido");
-        vm.label(address(WithdrawalQueue), "LidoWithdrawalQueue");
+        vm.label(address(withdrawalQueue), "LidoWithdrawalQueue");
 
         L1ChugSplashProxy proxy = new L1ChugSplashProxy(multisig);
         vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
@@ -741,7 +737,7 @@ contract LidoYieldProvider_Initializer is Bridge_Initializer {
         proxy.setCode(address(new Insurance(ethYieldManager)).code);
         vm.clearMockedCalls();
         insurance = Insurance(payable(address(proxy)));
-        insurance.initialize();
+        insurance.initialize(address(multisig));
         vm.label(address(insurance), "Insurance");
         vm.stopPrank();
 
@@ -800,9 +796,15 @@ contract DSRYieldProvider_Initializer is Bridge_Initializer {
         dsrProvider = new DSRYieldProvider(usdYieldManager);
         vm.label(address(dsrProvider), "DSRYieldProvider");
 
-        vm.prank(multisig);
-        insurance = new Insurance(usdYieldManager);
+        L1ChugSplashProxy proxy = new L1ChugSplashProxy(multisig);
+        vm.mockCall(multisig, abi.encodeWithSelector(IL1ChugSplashDeployer.isUpgrading.selector), abi.encode(true));
+        vm.startPrank(multisig);
+        proxy.setCode(address(new Insurance(usdYieldManager)).code);
+        vm.clearMockedCalls();
+        insurance = Insurance(payable(address(proxy)));
+        insurance.initialize(address(multisig));
         vm.label(address(insurance), "Insurance");
+        vm.stopPrank();
 
         vm.startPrank(multisig);
         usdYieldManager.addProvider(address(dsrProvider));

@@ -39,9 +39,9 @@ contract WithdrawalQueue is Initializable {
     uint256 private lockedBalance;
 
     /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
-    ///         A gap size of 44 was chosen here, so that the first slot used in a child contract
+    ///         A gap size of 42 was chosen here, so that the first slot used in a child contract
     ///         would be a multiple of 50.
-    uint256[44] private __gap;
+    uint256[42] private __gap;
 
     /// @notice structure representing a request for withdrawal
     struct WithdrawalRequest {
@@ -360,7 +360,7 @@ contract WithdrawalQueue is Initializable {
             false
         );
         _requests.push(newRequest);
-        _requestsByOwner[recipient].add(amount);
+        _requestsByOwner[recipient].add(requestId);
 
         emit WithdrawalRequested(requestId, msg.sender, recipient, amount);
     }

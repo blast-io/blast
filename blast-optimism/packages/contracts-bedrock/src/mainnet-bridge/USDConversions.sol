@@ -43,7 +43,7 @@ library USDConversions {
 
     error InsufficientBalance();
     error MinimumAmountNotMet();
-    error MaximumAmountExceeded();
+    error IncorrectInputAmountUsed();
     error UnsupportedToken();
     error InvalidExtraData();
     error InvalidTokenIndex();
@@ -82,8 +82,8 @@ library USDConversions {
                 uint256 beforeInputBalance = _tokenBalance(inputToken);
                 PSM.buyGem(address(this), _wadToUSD(minOutputAmountWad)); // buyGem expects the input amount in USDC
                 uint256 amountSent = beforeInputBalance - _tokenBalance(inputToken);
-                if (amountSent > inputAmountWad) {
-                    revert MaximumAmountExceeded();
+                if (amountSent != inputAmountWad) {
+                    revert IncorrectInputAmountUsed();
                 }
             } else {
                 CURVE_3POOL.exchange(

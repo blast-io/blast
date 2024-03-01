@@ -18,10 +18,16 @@ contract USDTestnetYieldProvider is TestnetYieldProvider {
     /// @inheritdoc YieldProvider
     function stake(uint256 amount) external override onlyDelegateCall {
         TOKEN.transfer(THIS, amount);
+        stakedPrincipal += amount;
     }
 
-    function sendAsset(uint256 amount) external override onlyYieldManager {
-        TOKEN.transfer(address(YIELD_MANAGER), amount);
+    /// @inheritdoc YieldProvider
+    function stakedBalance() public view override returns (uint256) {
+        return TOKEN.balanceOf(address(YIELD_MANAGER));
+    }
+
+    function sendAsset(address recipient, uint256 amount) external override onlyYieldManager {
+        TOKEN.transfer(recipient, amount);
     }
 
     function recordYield(int256 amount) external onlyOwner {
@@ -30,13 +36,5 @@ contract USDTestnetYieldProvider is TestnetYieldProvider {
         } else {
             TOKEN.transfer(owner(), uint256(-1 * amount));
         }
-        _reportedYield += amount;
-    }
-
-    /// @inheritdoc YieldProvider
-    function payInsurancePremium(uint256 amount) external override onlyDelegateCall {
-        TOKEN.transfer(YIELD_MANAGER.insurance(), amount);
-
-        emit InsurancePremiumPaid(id(), amount);
     }
 }

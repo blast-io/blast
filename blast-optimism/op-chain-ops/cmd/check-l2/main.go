@@ -227,11 +227,6 @@ func checkPredeployConfig(client *ethclient.Client, name string) error {
 				return err
 			}
 
-		case predeploys.WETH9Addr:
-			if err := checkWETH9(p, client); err != nil {
-				return err
-			}
-
 		case predeploys.GovernanceTokenAddr:
 			if err := checkGovernanceToken(p, client); err != nil {
 				return err
@@ -274,6 +269,36 @@ func checkPredeployConfig(client *ethclient.Client, name string) error {
 
 		case predeploys.EASAddr:
 			if err := checkEAS(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.SharesAddr:
+			if err := checkShares(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.WETHRebasingAddr:
+			if err := checkWETHRebasing(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.USDBAddr:
+			if err := checkUSDB(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.L2BlastBridgeAddr:
+			if err := checkL2BlastBridge(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.GasAddr:
+			if err := checkGas(p, client); err != nil {
+				return err
+			}
+
+		case predeploys.BlastAddr:
+			if err := checkBlast(p, client); err != nil {
 				return err
 			}
 		}
@@ -485,40 +510,6 @@ func checkGovernanceToken(addr common.Address, client *ethclient.Client) error {
 		log.Info("GovernanceToken", "totalSupply", totalSupply)
 	} else {
 		log.Info("No code at GovernanceToken")
-	}
-	return nil
-}
-
-func checkWETH9(addr common.Address, client *ethclient.Client) error {
-	contract, err := bindings.NewWETH9(addr, client)
-	if err != nil {
-		return err
-	}
-	name, err := contract.Name(&bind.CallOpts{})
-	if err != nil {
-		return err
-	}
-	log.Info("WETH9", "name", name)
-	if name != "Wrapped Ether" {
-		return fmt.Errorf("WETH9 name should be 'Wrapped Ether', got %s", name)
-	}
-
-	symbol, err := contract.Symbol(&bind.CallOpts{})
-	if err != nil {
-		return err
-	}
-	log.Info("WETH9", "symbol", symbol)
-	if symbol != "WETH" {
-		return fmt.Errorf("WETH9 symbol should be 'WETH', got %s", symbol)
-	}
-
-	decimals, err := contract.Decimals(&bind.CallOpts{})
-	if err != nil {
-		return err
-	}
-	log.Info("WETH9", "decimals", decimals)
-	if decimals != 18 {
-		return fmt.Errorf("WETH9 decimals should be 18, got %d", decimals)
 	}
 	return nil
 }
@@ -856,6 +847,350 @@ func checkEAS(addr common.Address, client *ethclient.Client) error {
 		return err
 	}
 	log.Info("EAS version", "version", version)
+	return nil
+}
+
+func checkShares(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewShares(addr, client)
+	if err != nil {
+		return err
+	}
+
+	price, err := contract.Price(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if price == 0 {
+		return fmt.Errorf("Price is unset")
+	}
+	log.Info("Shares", "price", price)
+
+	initialized, err := getInitialized("Shares", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Shares", "_initialized", initialized)
+
+	initializing, err := getInitializing("Shares", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Shares", "_initializing", initializing)
+
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("Shares version", "version", version)
+	return nil
+}
+
+func checkUSDB(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewUSDB(addr, client)
+	if err != nil {
+		return err
+	}
+
+	name, err := contract.Name(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if name != "USDB" {
+		return fmt.Errorf("Name is incorrect")
+	}
+	log.Info("USDB", "name", name)
+
+	symbol, err := contract.Symbol(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if symbol != "USDB" {
+		return fmt.Errorf("Symbol is incorrect")
+	}
+	log.Info("USDB", "symbol", symbol)
+
+	decimals, err := contract.Decimals(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if price != 18 {
+		return fmt.Errorf("Decimals is incorrect")
+	}
+	log.Info("USDB", "decimals", decimals)
+
+	price, err := contract.Price(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if price == 0 {
+		return fmt.Errorf("Price is unset")
+	}
+	log.Info("USDB", "price", price)
+
+	initialized, err := getInitialized("USDB", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("USDB", "_initialized", initialized)
+
+	initializing, err := getInitializing("USDB", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("USDB", "_initializing", initializing)
+
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("USDB version", "version", version)
+	return nil
+}
+
+func checkWETHRebasing(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewWETHRebasing(addr, client)
+	if err != nil {
+		return err
+	}
+
+	name, err := contract.Name(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if name != "Wrapped Ether" {
+		return fmt.Errorf("Name is incorrect")
+	}
+	log.Info("WETHRebasing", "name", name)
+
+	symbol, err := contract.Symbol(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if symbol != "WETH" {
+		return fmt.Errorf("Symbol is incorrect")
+	}
+	log.Info("WETHRebasing", "symbol", symbol)
+
+	decimals, err := contract.Decimals(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if price != 18 {
+		return fmt.Errorf("Decimals is incorrect")
+	}
+	log.Info("WETHRebasing", "decimals", decimals)
+
+	price, err := contract.Price(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if price == 0 {
+		return fmt.Errorf("Price is unset")
+	}
+	log.Info("WETHRebasing", "price", price)
+
+	initialized, err := getInitialized("WETHRebasing", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("WETHRebasing", "_initialized", initialized)
+
+	initializing, err := getInitializing("WETHRebasing", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("WETHRebasing", "_initializing", initializing)
+
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("WETHRebasing version", "version", version)
+	return nil
+}
+
+func checkBlast(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewBlast(addr, client)
+	if err != nil {
+		return err
+	}
+
+	gas, err := contract.GAS_CONTRACT(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if gas == predeploys.GasAddr {
+		return fmt.Errorf("Incorrect Gas address %s", gas)
+	}
+	log.Info("Blast", "gas", gas)
+
+	yield, err := contract.YIELD_CONTRACT(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if yield == predeploys.YieldAddr {
+		return fmt.Errorf("Incorrect Yield address %s", yield)
+	}
+	log.Info("Blast", "yield", yield)
+
+	initialized, err := getInitialized("Blast", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Blast", "_initialized", initialized)
+
+	initializing, err := getInitializing("Blast", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Blast", "_initializing", initializing)
+
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("Blast version", "version", version)
+	return nil
+}
+
+func checkGas(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewGas(addr, client)
+	if err != nil {
+		return err
+	}
+
+	admin, err := contract.Admin(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if admin == (common.Address{}) {
+		return fmt.Errorf("Admin should not be address(0)")
+	}
+	log.Info("Gas", "Admin", admin.Hex())
+
+	blast, err := contract.BlastConfigurationContract(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if blast != predeploys.BlastAddr {
+		return fmt.Errorf("Incorrect Blast address %s", blast.Hex())
+	}
+	log.Info("Gas", "BlastConfigurationContract", blast)
+
+	blastFeeVault, err := contract.BlastFeeVault(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if blastFeeVault != predeploys.BaseFeeVault {
+		return fmt.Errorf("Incorrect BlastFeeVault address %s", blastFeeVault.Hex())
+	}
+	log.Info("Gas", "BlastFeeVault", blastFeeVault)
+
+	zeroClaimRate, err := contract.ZeroClaimRate(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if zeroClaimRate == 0 {
+		return fmt.Errorf("zeroClaimRate unset")
+	}
+	log.Info("Gas", "ZeroClaimRate", zeroClaimRate)
+
+	baseGasSeconds, err := contract.BaseGasSeconds(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if baseGasSeconds == 0 {
+		return fmt.Errorf("baseGasSeconds unset")
+	}
+	log.Info("Gas", "BaseGasSeconds", baseGasSeconds)
+
+	baseClaimRate, err := contract.BaseClaimRate(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if baseClaimRate == 0 {
+		return fmt.Errorf("baseClaimRate unset")
+	}
+	log.Info("Gas", "BaseClaimRate", baseClaimRate)
+
+	ceilGasSeconds, err := contract.CeilGasSeconds(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if ceilGasSeconds == 0 {
+		return fmt.Errorf("ceilGasSeconds unset")
+	}
+	log.Info("Gas", "CeilGasSeconds", ceilGasSeconds)
+
+	ceilClaimRate, err := contract.CeilClaimRate(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if ceilClaimRate == 0 {
+		return fmt.Errorf("ceilClaimRate unset")
+	}
+	log.Info("Gas", "CeilClaimRate", ceilClaimRate)
+
+	initialized, err := getInitialized("Gas", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Gas", "_initialized", initialized)
+
+	initializing, err := getInitializing("Gas", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("Gas", "_initializing", initializing)
+
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("Gas version", "version", version)
+	return nil
+}
+
+func checkL2BlastBridge(addr common.Address, client *ethclient.Client) error {
+	contract, err := bindings.NewL2BlastBridge(addr, client)
+	if err != nil {
+		return err
+	}
+	otherBridge, err := contract.OTHERBRIDGE(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	if otherBridge == (common.Address{}) {
+		return errors.New("OTHERBRIDGE should not be address(0)")
+	}
+	log.Info("L2BlastBridge", "OTHERBRIDGE", otherBridge.Hex())
+
+	messenger, err := contract.MESSENGER(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	log.Info("L2BlastBridge", "MESSENGER", messenger.Hex())
+	if messenger != predeploys.L2CrossDomainMessengerAddr {
+		return fmt.Errorf("L2BlastBridge MESSENGER should be %s, got %s", predeploys.L2CrossDomainMessengerAddr, messenger)
+	}
+	version, err := contract.Version(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+
+	initialized, err := getInitialized("L2BlastBridge", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("L2BlastBridge", "_initialized", initialized)
+
+	initializing, err := getInitializing("L2BlastBridge", addr, client)
+	if err != nil {
+		return err
+	}
+	log.Info("L2BlastBridge", "_initializing", initializing)
+
+	log.Info("L2BlastBridge version", "version", version)
 	return nil
 }
 

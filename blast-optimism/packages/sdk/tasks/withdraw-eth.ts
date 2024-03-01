@@ -238,7 +238,7 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
     if (args.bridge === 'blast') {
       const tx = await l2Signer.sendTransaction({
         to: L2BlastBridge.address,
-        value: withdrawAmount 
+        value: withdrawAmount
       });
       console.log(`Transaction hash: ${tx.hash}`)
       ethWithdrawReceipt = await tx.wait();
@@ -246,7 +246,7 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
     } else if (args.bridge === 'standard'){
       const tx = await l2Signer.sendTransaction({
         to: L2StandardBridge.address,
-        value: withdrawAmount 
+        value: withdrawAmount
       });
       console.log(`Transaction hash: ${tx.hash}`)
       ethWithdrawReceipt = await tx.wait();
@@ -363,7 +363,6 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
 
      let requestId
      for (const log of ethProveReceipt.logs) {
-      console.log(log)
        switch (log.address.toLowerCase()) {
          case OptimismPortal.address.toLowerCase(): {
            const parsed = OptimismPortal.interface.parseLog(log)
@@ -386,7 +385,7 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
 
     console.log('Fulfilling withdrawal request...')
      const ethFulfill = await OptimismPortal.connect(adminSigner).finalizeWithdrawalTransaction(
-       hint, 
+       hint,
        {nonce: wt.nonce, sender: wt.sender, target: wt.target, value: wt.value, gasLimit: wt.gasLimit, data: wt.data}
     )
      console.log(`Transaction hash: ${ethFulfill.hash}`)

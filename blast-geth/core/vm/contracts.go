@@ -1192,18 +1192,19 @@ var (
 
 func (b *blast) RequiredGas(input []byte) uint64 {
 	solidityInput := newSolidityInput(input)
-	if selector, err := solidityInput.readFunctionSelector(); err != nil {
+	if selector, err := solidityInput.readFunctionSelector(); err == nil {
 		if bytes.Equal(selector, claimSelector) {
-			return 50000
+			return 50_000
 		} else if bytes.Equal(selector, configureSelector) {
-			return 100000 // high cost to changing account configuration
+			return 100_000 // high cost to changing account configuration
 		} else if bytes.Equal(selector, getClaimableAmountSelector) {
-			return 12100
+			return 12_100
 		} else if bytes.Equal(selector, getConfigurationSelector) {
-			return 9300
+			return 9_300
 		}
 	}
-	return 0
+	// default gas cost of precompile so reverts consume all gas
+	return 100_000
 }
 
 func (b *blast) Run(caller common.Address, input []byte, db StateDB, readOnly bool) ([]byte, error) {

@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
+import { Semver } from "src/universal/Semver.sol";
 import { GasMode, IGas } from "src/L2/Gas.sol";
 
 enum YieldMode {
@@ -40,6 +44,7 @@ interface IBlast{
 
     // claim gas
     function claimAllGas(address contractAddress, address recipientOfGas) external returns (uint256);
+    // NOTE: can be off by 1 bip
     function claimGasAtMinClaimRate(address contractAddress, address recipientOfGas, uint256 minClaimRateBips) external returns (uint256);
     function claimMaxGas(address contractAddress, address recipientOfGas) external returns (uint256);
     function claimGas(address contractAddress, address recipientOfGas, uint256 gasToClaim, uint256 gasSecondsToConsume) external returns (uint256);
@@ -50,16 +55,22 @@ interface IBlast{
     function readGasParams(address contractAddress) external view returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode);
 }
 
-contract Blast is IBlast {
-    mapping(address => address) public governorMap;
-
+/// @custom:predeploy 0x4300000000000000000000000000000000000002
+/// @title Blast
+contract Blast is IBlast, Initializable, Semver {
     address public immutable YIELD_CONTRACT;
     address public immutable GAS_CONTRACT;
 
-    constructor(address _gasContract, address _yieldContract) {
+    mapping(address => address) public governorMap;
+
+    constructor(address _gasContract, address _yieldContract) Semver(1, 0, 0) {
         GAS_CONTRACT = _gasContract;
         YIELD_CONTRACT = _yieldContract;
+        _disableInitializers();
     }
+
+    function initialize() public initializer {}
+
     /**
      * @notice Checks if the caller is the governor of the contract
      * @param contractAddress The address of the contract
@@ -260,7 +271,7 @@ contract Blast is IBlast {
     }
 
     /**
-     * @notice Claims gas at a minimum claim rate for a specific contract. Called by an authorized user
+     * @notice Claims gas at a minimum claim rate for a specific contract, with error rate '1'. Called by an authorized user
      * @param contractAddress The address of the contract for which gas is to be claimed
      * @param recipientOfGas The address of the recipient of the gas
      * @param minClaimRateBips The minimum claim rate in basis points

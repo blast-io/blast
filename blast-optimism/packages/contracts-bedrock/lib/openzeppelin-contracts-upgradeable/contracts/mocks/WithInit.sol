@@ -273,39 +273,6 @@ contract CrossChainEnabledPolygonChildMockUpgradeableWithInit is CrossChainEnabl
 
     }
 }
-import "./docs/governance/MyGovernorUpgradeable.sol";
-
-contract MyGovernorUpgradeableWithInit is MyGovernorUpgradeable {
-    constructor(
-        IVotesUpgradeable _token,
-        TimelockControllerUpgradeable _timelock
-    ) payable initializer {
-        __MyGovernor_init(_token, _timelock);
-    }
-}
-import "./docs/governance/MyTokenUpgradeable.sol";
-
-contract MyTokenUpgradeableWithInit is MyTokenUpgradeable {
-    constructor() payable initializer {
-        __MyToken_init();
-    }
-}
-import "./docs/governance/MyTokenTimestampBasedUpgradeable.sol";
-
-contract MyTokenTimestampBasedUpgradeableWithInit is MyTokenTimestampBasedUpgradeable {
-    constructor() payable initializer {
-        __MyTokenTimestampBased_init();
-    }
-}
-import "./docs/governance/MyTokenWrappedUpgradeable.sol";
-
-contract MyTokenWrappedUpgradeableWithInit is MyTokenWrappedUpgradeable {
-    constructor(
-        IERC20Upgradeable wrappedToken
-    ) payable initializer {
-        __MyTokenWrapped_init(wrappedToken);
-    }
-}
 import "./DummyImplementationUpgradeable.sol";
 
 contract DummyImplementationUpgradeableWithInit is DummyImplementationUpgradeable {
@@ -598,12 +565,12 @@ contract MyGovernor2UpgradeableWithInit is MyGovernor2Upgradeable {
 }
 import "./wizard/MyGovernor3Upgradeable.sol";
 
-contract MyGovernor3UpgradeableWithInit is MyGovernor3Upgradeable {
+contract MyGovernorUpgradeableWithInit is MyGovernorUpgradeable {
     constructor(
         IVotesUpgradeable _token,
         TimelockControllerUpgradeable _timelock
     ) payable initializer {
-        __MyGovernor3_init(_token, _timelock);
+        __MyGovernor_init(_token, _timelock);
     }
 }
 import "../proxy/ERC1967/ERC1967UpgradeUpgradeable.sol";

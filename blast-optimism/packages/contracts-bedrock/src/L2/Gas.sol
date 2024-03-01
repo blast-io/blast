@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
+import { Semver } from "src/universal/Semver.sol";
 
 enum GasMode {
     VOID,
@@ -17,7 +21,9 @@ interface IGas {
     function claim(address contractAddress, address recipient, uint256 gasToClaim, uint256 gasSecondsToConsume) external returns (uint256);
 }
 
-contract Gas is IGas {
+/// @custom:predeploy 0x4300000000000000000000000000000000000001
+/// @title Gas
+contract Gas is IGas, Initializable, Semver {
     address public immutable admin;
 
     // Blast.sol --> controls all dAPP accesses to Gas.sol
@@ -45,31 +51,39 @@ contract Gas is IGas {
      * @param _admin The address of the admin.
      * @param _blastConfigurationContract The address of the Blast configuration contract.
      * @param _blastFeeVault The address of the Blast fee vault.
+    */
+    constructor (
+        address _admin,
+        address _blastConfigurationContract,
+        address _blastFeeVault
+    ) Semver(1, 0, 0) {
+        admin =  _admin;
+        blastConfigurationContract = _blastConfigurationContract;
+        blastFeeVault = _blastFeeVault;
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initializer.
      * @param _zeroClaimRate The zero claim rate.
      * @param _baseGasSeconds The base gas seconds.
      * @param _baseClaimRate The base claim rate.
      * @param _ceilGasSeconds The ceiling gas seconds.
      * @param _ceilClaimRate The ceiling claim rate.
      */
-    constructor(
-        address _admin,
-        address _blastConfigurationContract,
-        address _blastFeeVault,
+    function initialize(
         uint256 _zeroClaimRate,
         uint256 _baseGasSeconds,
         uint256 _baseClaimRate,
         uint256 _ceilGasSeconds,
         uint256 _ceilClaimRate
-    ) {
+    ) public initializer {
         require(_zeroClaimRate < _baseClaimRate, "zero claim rate must be < base claim rate");
         require(_baseClaimRate < _ceilClaimRate, "base claim rate must be < ceil claim rate");
         require(_baseGasSeconds < _ceilGasSeconds, "base gas seconds must be < ceil gas seconds");
         require(_baseGasSeconds > 0, "base gas seconds must be > 0");
         require(_ceilClaimRate <= 10000, "ceil claim rate must be less than or equal to 10_000 bips");
         // admin vars
-        admin =  _admin;
-        blastConfigurationContract = _blastConfigurationContract;
-        blastFeeVault = _blastFeeVault;
         zeroClaimRate = _zeroClaimRate;
         baseGasSeconds = _baseGasSeconds;
         baseClaimRate = _baseClaimRate;
@@ -143,7 +157,7 @@ contract Gas is IGas {
     }
 
     /**
-     * @notice Allows a user to claim gas at a minimum claim rate
+     * @notice Allows a user to claim gas at a minimum claim rate (error = 1 bip)
      * @param contractAddress The address of the contract
      * @param recipientOfGas The address of the recipient of the gas
      * @param minClaimRateBips The minimum claim rate in basis points

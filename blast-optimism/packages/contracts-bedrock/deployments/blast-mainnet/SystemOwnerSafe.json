@@ -1,0 +1,15 @@
+{
+  "abi": [],
+  "address": "0x4f72ee94B8ba3Be7F886565d3583A7F636c58B05",
+  "args": [],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "numDeployments": 1,
+  "receipt": "",
+  "solcInputHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "storageLayout": {
+    "storage": [],
+    "types": {}
+  },
+  "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+}

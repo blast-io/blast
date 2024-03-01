@@ -14,6 +14,7 @@ var selfConfigureContractPath = filepath.Join(basePath, "./blast_contract_tests/
 var interleaveContractPath = filepath.Join(basePath, "./blast_contract_tests/interleave_contract/InterleaveContract.json")
 var simulateContractPath = filepath.Join(basePath, "./blast_contract_tests/simulate_contract_test/SimulateContract.json")
 var recursiveContractPath = filepath.Join(basePath, "./blast_contract_tests/recursive_contract_tests/D1.json")
+var delegateCallContractPath = filepath.Join(basePath, "./blast_contract_tests/delegate_call_test/DelegateCaller.json")
 
 func TestDeployNewContract(t *testing.T) {
 	state := setupDb(t) // -> puts env vars in db

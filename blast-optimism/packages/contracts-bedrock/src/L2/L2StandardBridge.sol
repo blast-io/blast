@@ -99,6 +99,7 @@ contract L2StandardBridge is StandardBridge, ISemver {
         virtual
         onlyEOA
     {
+        require(_l2Token != Predeploys.USDB, "L2StandardBridge: USDB cannot be withdrawn through this bridge");
         _initiateWithdrawal(_l2Token, msg.sender, msg.sender, _amount, _minGasLimit, _extraData);
     }
 
@@ -126,6 +127,7 @@ contract L2StandardBridge is StandardBridge, ISemver {
         payable
         virtual
     {
+        require(_l2Token != Predeploys.USDB, "L2StandardBridge: USDB cannot be withdrawn through this bridge");
         _initiateWithdrawal(_l2Token, msg.sender, _to, _amount, _minGasLimit, _extraData);
     }
 

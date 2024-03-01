@@ -31,6 +31,7 @@ fs_permissions = [
   { access='read-write', path='./l1state.json' },
   { access='read-write', path='./l2state.json' },
   { access='read-write', path='./step.json' },
+  { access='read-write', path='./withdrawal.json' },
   { access='read-write', path='./deployments/' },
   { access='read', path='./deploy-config/' },
   { access='read', path='./periphery-deploy-config/' },

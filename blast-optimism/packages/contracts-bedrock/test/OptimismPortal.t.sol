@@ -552,7 +552,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Bridge_Initializer {
         assertEq(sharePriceBeforeFinalize, sharePriceAfterFinalize);
 
         vm.expectEmit(true, true, false, true);
-        emit WithdrawalFinalized(_withdrawalHash, true);
+        emit WithdrawalFinalized(_withdrawalHash, 1, true);
         op.finalizeWithdrawalTransaction(1, _defaultTx);
 
         assert(address(bob).balance == bobBalanceBefore + 100);
@@ -704,7 +704,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Bridge_Initializer {
 
         vm.warp(block.timestamp + oracle.FINALIZATION_PERIOD_SECONDS() + 1);
         vm.expectEmit(true, true, true, true);
-        emit WithdrawalFinalized(_withdrawalHash, false);
+        emit WithdrawalFinalized(_withdrawalHash, 1, false);
         op.finalizeWithdrawalTransaction(1, _defaultTx);
 
         assert(address(bob).balance == bobBalanceBefore);
@@ -740,7 +740,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Bridge_Initializer {
 
         vm.warp(block.timestamp + oracle.FINALIZATION_PERIOD_SECONDS() + 1);
         vm.expectEmit(true, true, true, true);
-        emit WithdrawalFinalized(_withdrawalHash, true);
+        emit WithdrawalFinalized(_withdrawalHash, 1, true);
         op.finalizeWithdrawalTransaction(1, _defaultTx);
 
         vm.expectRevert("OptimismPortal: withdrawal has already been finalized");
@@ -839,7 +839,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Bridge_Initializer {
         vm.warp(block.timestamp + oracle.FINALIZATION_PERIOD_SECONDS() + 1);
         vm.expectCall(address(this), _testTx.data);
         vm.expectEmit(true, true, true, true);
-        emit WithdrawalFinalized(withdrawalHash, true);
+        emit WithdrawalFinalized(withdrawalHash, 1, true);
         op.finalizeWithdrawalTransaction(1, _testTx);
 
         // Ensure that bob's balance was not changed by the reentrant call.
