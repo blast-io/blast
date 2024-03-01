@@ -1,7 +1,7 @@
 Blast
 ==
 
-This repo contains Blast's fork of optimism and op-geth. This initial release is primarily for security researchers participating in our audit competition (see: https://twitter.com/cantinaxyz/status/1750926669131440519). If you're interested in running a Blast Sepolia Testnet node, more details and instructions will follow soon.
+This repo contains Blast's fork of optimism and op-geth. If you're interested in self hosting a Blast node for either mainnet or testnet, check out the docs [here](https://safe-violet-16b.notion.site/Blast-Deployment-Docs-b2f2b7b3c9a645fe8d6ce49fb963a467). 
 
 ## Running Blast locally (against a local L1)
 
