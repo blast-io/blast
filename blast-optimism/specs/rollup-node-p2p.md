@@ -398,7 +398,7 @@ A `res = 0` response should be verified to:
       override any previous chain, until the final L2 chain can be reproduced from L1 data.
 
 A `res > 0` response code should not be accepted. The result code is helpful for debugging,
-but the client should regard any error like any any other unanswered request, as the responding peer cannot be trusted.
+but the client should regard any error like any other unanswered request, as the responding peer cannot be trusted.
 
 ----
 
