@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 // Importing from the legacy contracts package causes issues with the build of the contract bindings
