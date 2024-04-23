@@ -94,9 +94,15 @@ func (mbv *MockBridgeTransfersView) L2BridgeWithdrawalsByAddress(address common.
 	}, nil
 }
 func TestHealthz(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
-	api := NewApi(logger, &MockBridgeTransfersView{}, apiConfig, metricsConfig)
-	request, err := http.NewRequest("GET", "/healthz", nil)
+	logger := testlog.Logger(t, log.LevelInfo)
+	cfg := &Config{
+		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
+		HTTPServer:    apiConfig,
+		MetricsServer: metricsConfig,
+	}
+	api, err := NewApi(context.Background(), logger, cfg)
+	require.NoError(t, err)
+	request, err := http.NewRequest("GET", "http://"+api.Addr()+"/healthz", nil)
 	assert.Nil(t, err)
 
 	responseRecorder := httptest.NewRecorder()
@@ -106,9 +112,15 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestL1BridgeDepositsHandler(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
-	api := NewApi(logger, &MockBridgeTransfersView{}, apiConfig, metricsConfig)
-	request, err := http.NewRequest("GET", fmt.Sprintf("/api/v0/deposits/%s", mockAddress), nil)
+	logger := testlog.Logger(t, log.LevelInfo)
+	cfg := &Config{
+		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
+		HTTPServer:    apiConfig,
+		MetricsServer: metricsConfig,
+	}
+	api, err := NewApi(context.Background(), logger, cfg)
+	require.NoError(t, err)
+	request, err := http.NewRequest("GET", fmt.Sprintf("http://"+api.Addr()+"/api/v0/deposits/%s", mockAddress), nil)
 	assert.Nil(t, err)
 
 	responseRecorder := httptest.NewRecorder()
@@ -129,9 +141,15 @@ func TestL1BridgeDepositsHandler(t *testing.T) {
 }
 
 func TestL2BridgeWithdrawalsByAddressHandler(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
-	api := NewApi(logger, &MockBridgeTransfersView{}, apiConfig, metricsConfig)
-	request, err := http.NewRequest("GET", fmt.Sprintf("/api/v0/withdrawals/%s", mockAddress), nil)
+	logger := testlog.Logger(t, log.LevelInfo)
+	cfg := &Config{
+		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
+		HTTPServer:    apiConfig,
+		MetricsServer: metricsConfig,
+	}
+	api, err := NewApi(context.Background(), logger, cfg)
+	require.NoError(t, err)
+	request, err := http.NewRequest("GET", fmt.Sprintf("http://"+api.Addr()+"/api/v0/withdrawals/%s", mockAddress), nil)
 	assert.Nil(t, err)
 
 	responseRecorder := httptest.NewRecorder()

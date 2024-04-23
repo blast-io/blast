@@ -199,6 +199,71 @@ func (api *DebugAPI) AccountRange(blockNrOrHash rpc.BlockNumberOrHash, start hex
 	return stateDb.IteratorDump(opts), nil
 }
 
+// AccountRange enumerates all accounts in the given block and start point in paging request
+func (api *DebugAPI) AccountStats(blockNrOrHash rpc.BlockNumberOrHash, start hexutil.Bytes, maxResults int, nocode, nostorage, incompletes bool) (state.BlastDebugDump, error) {
+	var stateDb *state.StateDB
+	var err error
+
+	if number, ok := blockNrOrHash.Number(); ok {
+		if number == rpc.PendingBlockNumber {
+			// If we're dumping the pending state, we need to request
+			// both the pending block as well as the pending state from
+			// the miner and operate on those
+			_, stateDb = api.eth.miner.Pending()
+			if stateDb == nil {
+				return state.BlastDebugDump{}, errors.New("pending state is not available")
+			}
+		} else {
+			var header *types.Header
+			switch number {
+			case rpc.LatestBlockNumber:
+				header = api.eth.blockchain.CurrentBlock()
+			case rpc.FinalizedBlockNumber:
+				header = api.eth.blockchain.CurrentFinalBlock()
+			case rpc.SafeBlockNumber:
+				header = api.eth.blockchain.CurrentSafeBlock()
+			default:
+				block := api.eth.blockchain.GetBlockByNumber(uint64(number))
+				if block == nil {
+					return state.BlastDebugDump{}, fmt.Errorf("block #%d not found", number)
+				}
+				header = block.Header()
+			}
+			if header == nil {
+				return state.BlastDebugDump{}, fmt.Errorf("block #%d not found", number)
+			}
+			stateDb, err = api.eth.BlockChain().StateAt(header.Root)
+			if err != nil {
+				return state.BlastDebugDump{}, err
+			}
+		}
+	} else if hash, ok := blockNrOrHash.Hash(); ok {
+		block := api.eth.blockchain.GetBlockByHash(hash)
+		if block == nil {
+			return state.BlastDebugDump{}, fmt.Errorf("block %s not found", hash.Hex())
+		}
+		stateDb, err = api.eth.BlockChain().StateAt(block.Root())
+		if err != nil {
+			return state.BlastDebugDump{}, err
+		}
+	} else {
+		return state.BlastDebugDump{}, errors.New("either block number or block hash must be specified")
+	}
+
+	opts := &state.DumpConfig{
+		SkipCode:          nocode,
+		SkipStorage:       nostorage,
+		OnlyWithAddresses: !incompletes,
+		Start:             start,
+		Max:               uint64(maxResults),
+	}
+
+	if maxResults > AccountRangeMaxResults || maxResults <= 0 {
+		opts.Max = AccountRangeMaxResults
+	}
+	return stateDb.BlastDebugDump(opts), nil
+}
+
 // StorageRangeResult is the result of a debug_storageRangeAt API call.
 type StorageRangeResult struct {
 	Storage storageMap   `json:"storage"`

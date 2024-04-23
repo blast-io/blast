@@ -15,11 +15,15 @@ import (
 	"github.com/ethereum-optimism/optimism/indexer/database"
 
 	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
+	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
+
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +53,13 @@ type E2ETestSuite struct {
 	L2Client *ethclient.Client
 }
 
+func init() {
+	// Disable the global logger. Ideally we'd like to dump geth
+	// logs per-test but that's possible when running tests in
+	// parallel as the root logger is shared.
+	oplog.SetGlobalLogHandler(log.DiscardHandler())
+}
+
 // createE2ETestSuite ... Create a new E2E test suite
 func createE2ETestSuite(t *testing.T) E2ETestSuite {
 	dbUser := os.Getenv("DB_USER")
@@ -63,7 +74,8 @@ func createE2ETestSuite(t *testing.T) E2ETestSuite {
 		t.Log("set env 'ENABLE_ROLLUP_LOGS' to show rollup logs")
 		for name, logger := range opCfg.Loggers {
 			t.Logf("discarding logs for %s", name)
-			logger.SetHandler(log.DiscardHandler())
+			noopLog := log.NewLogger(log.DiscardHandler())
+			opCfg.Loggers[name] = noopLog
 		}
 	}
 
@@ -102,36 +114,24 @@ func createE2ETestSuite(t *testing.T) E2ETestSuite {
 		MetricsServer: config.ServerConfig{Host: "127.0.0.1", Port: 0},
 	}
 
-	// E2E tests can run on the order of magnitude of minutes. Once
-	// the system is running, mark this test for Parallel execution
-	t.Parallel()
-
-	// provide a DB for the unit test. disable logging
-	silentLog := testlog.Logger(t, log.LvlInfo)
-	silentLog.SetHandler(log.DiscardHandler())
-	db, err := database.NewDB(silentLog, indexerCfg.DB)
-	require.NoError(t, err)
-	t.Cleanup(func() { db.Close() })
-
-	indexerLog := testlog.Logger(t, log.LvlInfo).New("role", "indexer")
-	indexer, err := indexer.NewIndexer(indexerLog, db, indexerCfg.Chain, indexerCfg.RPCs, indexerCfg.HTTPServer, indexerCfg.MetricsServer)
-	require.NoError(t, err)
-
-	indexerCtx, indexerStop := context.WithCancel(context.Background())
-	go func() {
-		err := indexer.Run(indexerCtx)
-		if err != nil { // panicking here ensures that the test will exit
-			// during service failure. Using t.Fail() wouldn't be caught
-			// until all awaiting routines finish which would never happen.
-			panic(err)
+	indexerLog := testlog.Logger(t, log.LevelInfo).New("role", "indexer")
+	ix, err := indexer.NewIndexer(context.Background(), indexerLog, indexerCfg, func(cause error) {
+		if cause != nil {
+			t.Fatalf("indexer shut down with critical error: %v", cause)
 		}
-	}()
+	})
+	require.NoError(t, err)
+	require.NoError(t, ix.Start(context.Background()), "cleanly start indexer")
+	t.Cleanup(func() {
+		require.NoError(t, ix.Stop(context.Background()), "cleanly shut down indexer")
+	})
 
-	apiLog := testlog.Logger(t, log.LvlInfo).New("role", "indexer_api")
-
-	apiCfg := config.ServerConfig{
-		Host: "127.0.0.1",
-		Port: 0,
+	// API Configuration and Start
+	apiLog := testlog.Logger(t, log.LevelInfo).New("role", "indexer_api")
+	apiCfg := &api.Config{
+		DB:            &api.TestDBConnector{BridgeTransfers: ix.DB.BridgeTransfers}, // reuse the same DB
+		HTTPServer:    config.ServerConfig{Host: "127.0.0.1", Port: 0},
+		MetricsServer: config.ServerConfig{Host: "127.0.0.1", Port: 0},
 	}
 
 	mCfg := config.ServerConfig{
@@ -201,9 +201,8 @@ func setupTestDatabase(t *testing.T) string {
 		Password: "",
 	}
 
-	silentLog := log.New()
-	silentLog.SetHandler(log.DiscardHandler())
-	db, err := database.NewDB(silentLog, dbConfig)
+	noopLog := log.NewLogger(log.DiscardHandler())
+	db, err := database.NewDB(context.Background(), noopLog, dbConfig)
 	require.NoError(t, err)
 	defer db.Close()
 

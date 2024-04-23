@@ -98,7 +98,7 @@ func (cr *ChannelInReader) NextBatch(ctx context.Context) (Batch, error) {
 		}
 		return singularBatch, nil
 	case SpanBatchType:
-		if origin := cr.Origin(); !cr.cfg.IsSpanBatch(origin.Time) {
+		if origin := cr.Origin(); !cr.cfg.IsDelta(origin.Time) {
 			return nil, NewTemporaryError(fmt.Errorf("cannot accept span batch in L1 block %s at time %d", origin, origin.Time))
 		}
 		rawSpanBatch, ok := batchData.inner.(*RawSpanBatch)

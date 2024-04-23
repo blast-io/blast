@@ -262,9 +262,19 @@ var (
 		Usage:    "Manually specify the Verkle fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
-	OverrideOptimismCanyon = &flags.BigFlag{
+	OverrideOptimismCanyon = &cli.Uint64Flag{
 		Name:     "override.canyon",
-		Usage:    "Manually specify the Optimsim Canyon fork timestamp, overriding the bundled setting",
+		Usage:    "Manually specify the Optimism Canyon fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismEcotone = &cli.Uint64Flag{
+		Name:     "override.ecotone",
+		Usage:    "Manually specify the Optimism Ecotone fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismInterop = &cli.Uint64Flag{
+		Name:     "override.interop",
+		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
@@ -2329,9 +2339,10 @@ func MakeConsolePreloads(ctx *cli.Context) []string {
 }
 
 // MakeTrieDatabase constructs a trie database based on the configured scheme.
-func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool) *trie.Database {
+func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool, isVerkle bool) *trie.Database {
 	config := &trie.Config{
 		Preimages: preimage,
+		IsVerkle:  isVerkle,
 	}
 	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), disk)
 	if err != nil {

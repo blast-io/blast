@@ -251,8 +251,43 @@ If the Regolith upgrade is active, some fields are overridden:
 1. `gasLimit` is set to 1,000,000
 2. `isSystemTx` is set to `false`
 
-This system-initiated transaction for L1 attributes is not charged any ETH for its allocated `gasLimit`,
-as it is effectively part of the state-transition processing.
+#### Bedrock, Canyon, Delta
+
+The `data` field of the L1 attributes deposited transaction is an [ABI][ABI] encoded call to the
+`setL1BlockValues()` function with correct values associated with the corresponding L1 block
+(cf.  [reference implementation][l1-attr-ref-implem]).
+
+#### Ecotone
+
+On the Ecotone activation block, and if Ecotone is not activated at Genesis,
+the L1 Attributes Transaction includes a call to `setL1BlockValues()`
+because the L1 Attributes transaction precedes the [Ecotone Upgrade Transactions][ecotone-upgrade-txs],
+meaning that `setL1BlockValuesEcotone` is not guaranteed to exist yet.
+
+Every subsequent L1 Attributes transaction should include a call to the `setL1BlockValuesEcotone()` function.
+The input args are no longer ABI encoded function parameters,
+but are instead packed into 5 32-byte aligned segments (starting after the function selector).
+Each unsigned integer argument is encoded as big-endian using a number of bytes corresponding to the underlying type.
+The overall calldata layout is as follows:
+
+[ecotone-upgrade-txs]: derivation.md#network-upgrade-automation-transactions
+
+| Input arg         | Type        | Calldata bytes | Segment |
+| ----------------- | ----------- | -------------- | --------|
+| {0x440a5e20}      |             | 0-3            | n/a     |
+| basefeeScalar     | uint32      | 4-7            | 1       |
+| blobBasefeeScalar | uint32      | 8-11           |         |
+| sequenceNumber    | uint64      | 12-19          |         |
+| l1BlockTimestamp  | uint64      | 20-27          |         |
+| l1BlockNumber     | uint64      | 28-35          |         |
+| basefee           | uint256     | 36-67          | 2       |
+| blobBasefee       | uint256     | 68-99          | 3       |
+| l1BlockHash       | bytes32     | 100-131        | 4       |
+| batcherHash       | bytes32     | 132-163        | 5       |
+
+Total calldata length MUST be exactly 164 bytes, implying the sixth and final segment is only
+partially filled. This helps to slow database growth as every L2 block includes a L1 Attributes
+deposit transaction.
 
 ## Special Accounts on L2
 
@@ -291,6 +326,13 @@ The predeploy stores the following values:
   - `batcherHash` (`bytes32`): A versioned commitment to the batch-submitter(s) currently operating.
   - `overhead` (`uint256`): The L1 fee overhead to apply to L1 cost computation of transactions in this L2 block.
   - `scalar` (`uint256`): The L1 fee scalar to apply to L1 cost computation of transactions in this L2 block.
+- With the Ecotone upgrade, the predeploy additionally stores:
+  - `blobBasefee` (`uint256`)
+  - `basefeeScalar` (`uint32`): system configurable to scale the `basefee` in the Ecotone l1 cost computation
+  - `blobBasefeeScalar` (`uint32`): system configurable to scale the `blobBasefee` in the Ecotone l1 cost computation
+
+Following the Ecotone upgrade, `overhead` and `scalar` are frozen at the values they had on the
+block immediately prior to the fork.
 
 The contract implements an authorization scheme, such that it only accepts state-changing calls from
 the [depositor account][depositor-account].
@@ -311,6 +353,25 @@ A reference implementation of the L1 Attributes predeploy contract can be found 
 After running `pnpm build` in the `packages/contracts-bedrock` directory, the bytecode to add to
 the genesis file will be located in the `deployedBytecode` field of the build artifacts file at
 `/packages/contracts-bedrock/forge-artifacts/L1Block.sol/L1Block.json`.
+
+#### Ecotone L1Block upgrade
+
+The L1 Attributes Predeployed contract, `L1Block.sol`, is upgraded as part of the Ecotone upgrade.
+The version is incremented to `1.2.0`, one new storage slot is introduced, and one existing slot
+begins to store additional data:
+
+- `blobBasefee` (`uint256`): The L1 basefee for blob transactions.
+- `blobBasefeeScalar` (`uint32`): The scalar value applied to the L1 blob base fee portion of the L1 cost.
+- `basefeeScalar` (`uint32`): The scalar value applied to the L1 base fee portion of the L1 cost.
+
+Additionally, the `setL1BlockValues` function is deprecated and MUST never be called when the L2 block number
+is greater than the Ecotone activation block number. `setL1BlockValues` MUST be called on the Ecotone hardfork
+activation block, except if activated at genesis.
+The `setL1BlockValuesEcotone` MUST be called when the L2 block number is greater than the Ecotone hardfork
+activation block.
+
+`setL1BlockValuesEcotone` uses a tightly packed encoding for its parameters, which is described in
+[L1 Attributes Deposited Transaction Calldata](#l1-attributes-deposited-transaction-calldata).
 
 ## User-Deposited Transactions
 

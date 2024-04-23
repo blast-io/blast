@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ethereum/go-ethereum/rpc"
@@ -23,8 +24,8 @@ type IterativeBatchCall[K any, V any] struct {
 	batchSize    int
 
 	makeRequest func(K) (V, rpc.BatchElem)
-	getBatch    BatchCallContextFn
-	getSingle   CallContextFn
+	getBatch    batching.BatchCallContextFn
+	getSingle   batching.CallContextFn
 
 	requestsValues []V
 	scheduled      chan rpc.BatchElem
@@ -35,8 +36,8 @@ type IterativeBatchCall[K any, V any] struct {
 func NewIterativeBatchCall[K any, V any](
 	requestsKeys []K,
 	makeRequest func(K) (V, rpc.BatchElem),
-	getBatch BatchCallContextFn,
-	getSingle CallContextFn,
+	getBatch batching.BatchCallContextFn,
+	getSingle batching.CallContextFn,
 	batchSize int) *IterativeBatchCall[K, V] {
 
 	if len(requestsKeys) < batchSize {

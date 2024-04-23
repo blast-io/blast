@@ -10,7 +10,9 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/immutables"
+	"github.com/ethereum-optimism/optimism/op-chain-ops/squash"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/state"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -42,8 +44,13 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		return nil, err
 	}
 
-	// Set up the proxies
+	// Set up base optimism proxies
 	err = setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
+	if err != nil {
+		return nil, err
+	}
+	// set up blast proxies
+	err = setProxies(db, predeploys.ProxyAdminAddr, BlastBigL2PredeployNamespace, 2048)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +79,10 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		} else if db.Exist(addr) {
 			db.DeleteState(addr, AdminSlot)
 		} else {
+			// TODO(p): this is kinda weird. maybe we can just make a custom namespace so this behaves correctly
 			db.CreateAccount(addr)
 		}
+
 		if err := setupPredeploy(db, deployResults, storage, name, addr, codeAddr); err != nil {
 			return nil, err
 		}
@@ -86,5 +95,35 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 		}
 	}
 
+	// custom blast behaviors
+	// set flag for weth rebasing contract to automatic on genesis
+	db.SetFlags(predeploys.WETHRebasingAddr, 0)
+
+	// deploy create 2 contract
+	err = deployCreateTwo(db)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := PerformUpgradeTxs(db); err != nil {
+		return nil, fmt.Errorf("failed to perform upgrade txs: %w", err)
+	}
+
 	return db.Genesis(), nil
+}
+
+func PerformUpgradeTxs(db *state.MemoryStateDB) error {
+	// Only the Ecotone upgrade is performed with upgrade-txs.
+	if !db.Genesis().Config.IsEcotone(db.Genesis().Timestamp) {
+		return nil
+	}
+	sim := squash.NewSimulator(db)
+	ecotone, err := derive.EcotoneNetworkUpgradeTransactions()
+	if err != nil {
+		return fmt.Errorf("failed to build ecotone upgrade txs: %w", err)
+	}
+	if err := sim.AddUpgradeTxs(ecotone); err != nil {
+		return fmt.Errorf("failed to apply ecotone upgrade txs: %w", err)
+	}
+	return nil
 }

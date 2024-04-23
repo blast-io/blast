@@ -18,8 +18,12 @@ var (
 	codeNamespace = common.HexToAddress("0xc0D3C0d3C0d3C0D3c0d3C0d3c0D3C0d3c0d30000")
 	// l2PredeployNamespace represents the namespace of L2 predeploys
 	l2PredeployNamespace = common.HexToAddress("0x4200000000000000000000000000000000000000")
+	// blastl2PredeployNamespace represents the namespace of blast L2 predeploys
+	blastl2PredeployNamespace = common.HexToAddress("0x4300000000000000000000000000000000000000")
 	// bigL2PredeployNamespace represents the predeploy namespace as a big.Int
 	BigL2PredeployNamespace = new(big.Int).SetBytes(l2PredeployNamespace.Bytes())
+	// BlastBigL2PredeployNamespace represents the blast predeploy namespace as a big.Int
+	BlastBigL2PredeployNamespace = new(big.Int).SetBytes(blastl2PredeployNamespace.Bytes())
 	// bigCodeNamespace represents the predeploy namespace as a big.Int
 	bigCodeNameSpace = new(big.Int).SetBytes(codeNamespace.Bytes())
 	// implementationSlot represents the EIP 1967 implementation storage slot
@@ -68,13 +72,15 @@ func AddressToCodeNamespace(addr common.Address) (common.Address, error) {
 	if !IsL2DevPredeploy(addr) {
 		return common.Address{}, fmt.Errorf("cannot handle non predeploy: %s", addr)
 	}
-	bigAddress := new(big.Int).SetBytes(addr[18:])
+	// must account for prefix (0x42 or 0x43)
+	truncatedAddr := append(addr[0:2], addr[18:]...)
+	bigAddress := new(big.Int).SetBytes(truncatedAddr)
 	num := new(big.Int).Or(bigCodeNameSpace, bigAddress)
 	return common.BigToAddress(num), nil
 }
 
 func IsL2DevPredeploy(addr common.Address) bool {
-	return bytes.Equal(addr[0:2], []byte{0x42, 0x00})
+	return bytes.Equal(addr[0:2], []byte{0x42, 0x00}) || bytes.Equal(addr[0:2], []byte{0x43, 0x00})
 }
 
 // GetBlockFromTag will resolve a Block given an rpc block tag

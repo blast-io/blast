@@ -20,6 +20,7 @@ import (
 // This test ensures no op-node config-loading behavior changes before
 // the superchain-registry is no longer deemed experimental.
 func TestGetRollupConfig(t *testing.T) {
+	t.Skip("Not applicable to blast")
 	var configsByName = map[string]rollup.Config{
 		"goerli":  goerliCfg,
 		"mainnet": mainnetCfg,

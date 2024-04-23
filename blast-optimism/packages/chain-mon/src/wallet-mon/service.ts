@@ -10,8 +10,7 @@ import { getChainId, compareAddrs } from '@eth-optimism/core-utils'
 import { Provider, TransactionResponse } from '@ethersproject/abstract-provider'
 import mainnetConfig from '@eth-optimism/contracts-bedrock/deploy-config/mainnet.json'
 import goerliConfig from '@eth-optimism/contracts-bedrock/deploy-config/goerli.json'
-import l2OutputOracleArtifactsMainnet from '@eth-optimism/contracts-bedrock/deployments/mainnet/L2OutputOracleProxy.json'
-import l2OutputOracleArtifactsGoerli from '@eth-optimism/contracts-bedrock/deployments/goerli/L2OutputOracleProxy.json'
+import l2OutputOracleArtifactsMainnet from '@eth-optimism/contracts-bedrock/deployments/blast-mainnet/L2OutputOracleProxy.json'
 
 import { version } from '../../package.json'
 
@@ -29,22 +28,6 @@ const networks = {
         label: 'Batcher',
         wallet: mainnetConfig.batchSenderAddress,
         target: mainnetConfig.batchInboxAddress,
-      },
-    ],
-  },
-  10: {
-    name: 'goerli',
-    l1StartingBlockTag: goerliConfig.l1StartingBlockTag,
-    accounts: [
-      {
-        label: 'Proposer',
-        wallet: goerliConfig.l2OutputOracleProposer,
-        target: l2OutputOracleArtifactsGoerli.address,
-      },
-      {
-        label: 'Batcher',
-        wallet: goerliConfig.batchSenderAddress,
-        target: goerliConfig.batchInboxAddress,
       },
     ],
   },

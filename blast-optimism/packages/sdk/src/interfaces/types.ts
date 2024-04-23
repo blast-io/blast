@@ -14,7 +14,6 @@ import { IBridgeAdapter } from './bridge-adapter'
  */
 export enum L1ChainID {
   MAINNET = 1,
-  GOERLI = 5,
   SEPOLIA = 11155111,
   HARDHAT_LOCAL = 31337,
   BEDROCK_LOCAL_DEVNET = 900,
@@ -24,16 +23,14 @@ export enum L1ChainID {
  * L2 network chain IDs
  */
 export enum L2ChainID {
+  BLAST = 81457,
   OPTIMISM = 10,
-  OPTIMISM_GOERLI = 420,
   OPTIMISM_SEPOLIA = 11155420,
   OPTIMISM_HARDHAT_LOCAL = 31337,
   OPTIMISM_HARDHAT_DEVNET = 17,
   OPTIMISM_BEDROCK_ALPHA_TESTNET = 28528,
-  BASE_GOERLI = 84531,
   BASE_SEPOLIA = 84532,
   BASE_MAINNET = 8453,
-  ZORA_GOERLI = 999,
   ZORA_MAINNET = 7777777,
 }
 
@@ -67,6 +64,12 @@ export interface OEL2Contracts {
   OVM_SequencerFeeVault: Contract
   WETH: Contract
   BedrockMessagePasser: Contract
+  Blast: Contract
+  Shares: Contract
+  Gas: Contract
+  USDB: Contract
+  WETHRebasing: Contract
+  L2BlastBridge: Contract
 }
 
 /**

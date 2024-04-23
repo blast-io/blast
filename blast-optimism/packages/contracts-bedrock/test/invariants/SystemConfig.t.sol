@@ -8,11 +8,6 @@ import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { Constants } from "src/libraries/Constants.sol";
 
 contract SystemConfig_GasLimitLowerBound_Invariant is Test {
-    struct FuzzInterface {
-        address target;
-        string[] artifacts;
-    }
-
     SystemConfig public config;
 
     function setUp() external {
@@ -57,21 +52,8 @@ contract SystemConfig_GasLimitLowerBound_Invariant is Test {
         // that can modify the gas limit within the SystemConfig.
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = config.setGasLimit.selector;
-        FuzzSelector memory selector = FuzzSelector({ addr: address(config), selectors: selectors });
+        FuzzSelector memory selector = FuzzSelector({ addr: address(configImpl), selectors: selectors });
         targetSelector(selector);
-    }
-
-    /// @dev Allows the SystemConfig contract to be the target of the invariant test
-    ///      when it is behind a proxy. Foundry calls this function under the hood to
-    ///      know the ABI to use when calling the target contract.
-    function targetInterfaces() public view returns (FuzzInterface[] memory) {
-        require(address(config) != address(0), "SystemConfig not initialized");
-
-        FuzzInterface[] memory targets = new FuzzInterface[](1);
-        string[] memory artifacts = new string[](1);
-        artifacts[0] = "SystemConfig";
-        targets[0] = FuzzInterface(address(config), artifacts);
-        return targets;
     }
 
     /// @custom:invariant The gas limit of the `SystemConfig` contract can never be lower

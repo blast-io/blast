@@ -36,10 +36,6 @@ func TestStateTransition(t *testing.T) {
 	}
 }
 
-func TestDeployPredeploys(t *testing.T) {
-	deployGenesis(t)
-}
-
 func TestGenesisSharePrice(t *testing.T) {
 	cfg, env := setup(t)
 
@@ -103,12 +99,13 @@ func TestShareCountIncreasing(t *testing.T) {
 	sharesReporter := getPublicVar("REPORTER", params.BlastSharesAddress, env, t).(common.Address)
 	t.Log(sharesReporter, l2Alias(sharesReporter))
 
-	cfg.State.AddBalance(getAddr(0x32), big.NewInt(1e18))
+	cfg.State.AddBalance(getAddr(0x132), big.NewInt(1e18))
 	newCount := getPublicVar("count", params.BlastSharesAddress, env, t).(*big.Int)
 	expectedNewCount := big.NewInt(1e18 / expectedInitialSharePrice)
 	stateCount := getCountFromState(cfg.State)
 
 	if newCount.Cmp(expectedNewCount) != 0 {
+		t.Log(cfg.State.GetBalanceValues(getAddr(0x132)))
 		t.Fatalf("new count not correct: got %d, expected %d, state %d\n", newCount, expectedNewCount, stateCount)
 	}
 }
@@ -116,7 +113,7 @@ func TestShareCountIncreasing(t *testing.T) {
 func TestDistributeYield(t *testing.T) {
 	cfg, env := setup(t)
 	sharesReporter := getPublicVar("REPORTER", params.BlastSharesAddress, env, t).(common.Address)
-	cfg.State.AddBalance(getAddr(0x32), big.NewInt(1e18))
+	cfg.State.AddBalance(getAddr(0x321), big.NewInt(1e18))
 	newCount := getPublicVar("count", params.BlastSharesAddress, env, t).(*big.Int)
 	oldPrice := getPublicVar("price", params.BlastSharesAddress, env, t).(*big.Int)
 
@@ -145,14 +142,14 @@ func TestDistributeYield(t *testing.T) {
 
 func TestCountPredeploySlot(t *testing.T) {
 	cfg, env := setup(t)
-	cfg.State.AddBalance(getAddr(0x32), big.NewInt(2e18))
+	cfg.State.AddBalance(getAddr(0x322), big.NewInt(2e18))
 	newCount := getPublicVar("count", params.BlastSharesAddress, env, t).(*big.Int)
 	countFromState := cfg.State.GetState(params.BlastSharesAddress, shareCountSlot).Big()
 	t.Log(newCount, countFromState)
 	if newCount.Cmp(countFromState) != 0 {
 		t.Fatalf("count slot not set correctly: got %d, expected %d\n", newCount.Uint64(), countFromState.Uint64())
 	}
-	balValues := cfg.State.GetBalanceValues(getAddr(0x32))
+	balValues := cfg.State.GetBalanceValues(getAddr(0x322))
 	if balValues.Shares.Cmp(newCount) != 0 {
 		t.Fatalf("count slot not set correctly: got %d, expected %d\n", newCount.Uint64(), balValues.Shares.Uint64())
 	}

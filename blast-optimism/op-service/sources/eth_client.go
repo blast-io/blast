@@ -63,7 +63,9 @@ type EthClientConfig struct {
 	// If this is 0 then the client does not fall back to less optimal but available methods.
 	MethodResetDuration time.Duration
 
-	// [OPTIONAL] The reth DB path to fetch receipts from
+	// [OPTIONAL] The reth DB path to fetch receipts from.
+	// If it is specified, the rethdb receipts fetcher will be used
+	// and the RPC configuration parameters don't need to be set.
 	RethDBPath string
 }
 
@@ -79,6 +81,15 @@ func (c *EthClientConfig) Check() error {
 	}
 	if c.PayloadsCacheSize < 0 {
 		return fmt.Errorf("invalid payloads cache size: %d", c.PayloadsCacheSize)
+	}
+	if c.RethDBPath != "" {
+		if buildRethdb {
+			// If the rethdb path is set, we use the rethdb receipts fetcher and skip creating
+			// an RCP receipts fetcher, so below rpc config parameters don't need to be checked.
+			return nil
+		} else {
+			return fmt.Errorf("rethdb path specified, but built without rethdb support")
+		}
 	}
 	if c.MaxConcurrentRequests < 1 {
 		return fmt.Errorf("expected at least 1 concurrent request, but max is %d", c.MaxConcurrentRequests)
@@ -96,20 +107,13 @@ func (c *EthClientConfig) Check() error {
 type EthClient struct {
 	client client.RPC
 
-	maxBatchSize int
+	recProvider ReceiptsProvider
 
 	trustRPC bool
 
 	mustBePostMerge bool
 
-	provKind RPCProviderKind
-
 	log log.Logger
-
-	// cache receipts in bundles per block hash
-	// We cache the receipts fetching job to not lose progress when we have to retry the `Fetch` call
-	// common.Hash -> *receiptsFetchingJob
-	receiptsCache *caching.LRUCache[common.Hash, *receiptsFetchingJob]
 
 	// cache transactions in bundles per block hash
 	// common.Hash -> types.Transactions
@@ -121,47 +125,7 @@ type EthClient struct {
 
 	// cache payloads by hash
 	// common.Hash -> *eth.ExecutionPayload
-	payloadsCache *caching.LRUCache[common.Hash, *eth.ExecutionPayload]
-
-	// availableReceiptMethods tracks which receipt methods can be used for fetching receipts
-	// This may be modified concurrently, but we don't lock since it's a single
-	// uint64 that's not critical (fine to miss or mix up a modification)
-	availableReceiptMethods ReceiptsFetchingMethod
-
-	// lastMethodsReset tracks when availableReceiptMethods was last reset.
-	// When receipt-fetching fails it falls back to available methods,
-	// but periodically it will try to reset to the preferred optimal methods.
-	lastMethodsReset time.Time
-
-	// methodResetDuration defines how long we take till we reset lastMethodsReset
-	methodResetDuration time.Duration
-
-	// [OPTIONAL] The reth DB path to fetch receipts from
-	rethDbPath string
-}
-
-func (s *EthClient) PickReceiptsMethod(txCount uint64) ReceiptsFetchingMethod {
-	if now := time.Now(); now.Sub(s.lastMethodsReset) > s.methodResetDuration {
-		m := AvailableReceiptsFetchingMethods(s.provKind)
-		if s.availableReceiptMethods != m {
-			s.log.Warn("resetting back RPC preferences, please review RPC provider kind setting", "kind", s.provKind.String())
-		}
-		s.availableReceiptMethods = m
-		s.lastMethodsReset = now
-	}
-	return PickBestReceiptsFetchingMethod(s.provKind, s.availableReceiptMethods, txCount)
-}
-
-func (s *EthClient) OnReceiptsMethodErr(m ReceiptsFetchingMethod, err error) {
-	if unusableMethod(err) {
-		// clear the bit of the method that errored
-		s.availableReceiptMethods &^= m
-		s.log.Warn("failed to use selected RPC method for receipt fetching, temporarily falling back to alternatives",
-			"provider_kind", s.provKind, "failed_method", m, "fallback", s.availableReceiptMethods, "err", err)
-	} else {
-		s.log.Debug("failed to use selected RPC method for receipt fetching, but method does appear to be available, so we continue to use it",
-			"provider_kind", s.provKind, "failed_method", m, "fallback", s.availableReceiptMethods&^m, "err", err)
-	}
+	payloadsCache *caching.LRUCache[common.Hash, *eth.ExecutionPayloadEnvelope]
 }
 
 // NewEthClient returns an [EthClient], wrapping an RPC with bindings to fetch ethereum data with added error logging,
@@ -170,22 +134,18 @@ func NewEthClient(client client.RPC, log log.Logger, metrics caching.Metrics, co
 	if err := config.Check(); err != nil {
 		return nil, fmt.Errorf("bad config, cannot create L1 source: %w", err)
 	}
+
 	client = LimitRPC(client, config.MaxConcurrentRequests)
+	recProvider := newRecProviderFromConfig(client, log, metrics, config)
 	return &EthClient{
-		client:                  client,
-		maxBatchSize:            config.MaxRequestsPerBatch,
-		trustRPC:                config.TrustRPC,
-		mustBePostMerge:         config.MustBePostMerge,
-		provKind:                config.RPCProviderKind,
-		log:                     log,
-		receiptsCache:           caching.NewLRUCache[common.Hash, *receiptsFetchingJob](metrics, "receipts", config.ReceiptsCacheSize),
-		transactionsCache:       caching.NewLRUCache[common.Hash, types.Transactions](metrics, "txs", config.TransactionsCacheSize),
-		headersCache:            caching.NewLRUCache[common.Hash, eth.BlockInfo](metrics, "headers", config.HeadersCacheSize),
-		payloadsCache:           caching.NewLRUCache[common.Hash, *eth.ExecutionPayload](metrics, "payloads", config.PayloadsCacheSize),
-		availableReceiptMethods: AvailableReceiptsFetchingMethods(config.RPCProviderKind),
-		lastMethodsReset:        time.Now(),
-		methodResetDuration:     config.MethodResetDuration,
-		rethDbPath:              config.RethDBPath,
+		client:            client,
+		recProvider:       recProvider,
+		trustRPC:          config.TrustRPC,
+		mustBePostMerge:   config.MustBePostMerge,
+		log:               log,
+		transactionsCache: caching.NewLRUCache[common.Hash, types.Transactions](metrics, "txs", config.TransactionsCacheSize),
+		headersCache:      caching.NewLRUCache[common.Hash, eth.BlockInfo](metrics, "headers", config.HeadersCacheSize),
+		payloadsCache:     caching.NewLRUCache[common.Hash, *eth.ExecutionPayloadEnvelope](metrics, "payloads", config.PayloadsCacheSize),
 	}, nil
 }
 
@@ -227,7 +187,7 @@ func (n numberID) CheckID(id eth.BlockID) error {
 }
 
 func (s *EthClient) headerCall(ctx context.Context, method string, id rpcBlockID) (eth.BlockInfo, error) {
-	var header *rpcHeader
+	var header *RPCHeader
 	err := s.client.CallContext(ctx, &header, method, id.Arg(), false) // headers are just blocks without txs
 	if err != nil {
 		return nil, err
@@ -247,7 +207,7 @@ func (s *EthClient) headerCall(ctx context.Context, method string, id rpcBlockID
 }
 
 func (s *EthClient) blockCall(ctx context.Context, method string, id rpcBlockID) (eth.BlockInfo, types.Transactions, error) {
-	var block *rpcBlock
+	var block *RPCBlock
 	err := s.client.CallContext(ctx, &block, method, id.Arg(), true)
 	if err != nil {
 		return nil, nil, err
@@ -267,8 +227,8 @@ func (s *EthClient) blockCall(ctx context.Context, method string, id rpcBlockID)
 	return info, txs, nil
 }
 
-func (s *EthClient) payloadCall(ctx context.Context, method string, id rpcBlockID) (*eth.ExecutionPayload, error) {
-	var block *rpcBlock
+func (s *EthClient) payloadCall(ctx context.Context, method string, id rpcBlockID) (*eth.ExecutionPayloadEnvelope, error) {
+	var block *RPCBlock
 	err := s.client.CallContext(ctx, &block, method, id.Arg(), true)
 	if err != nil {
 		return nil, err
@@ -276,15 +236,15 @@ func (s *EthClient) payloadCall(ctx context.Context, method string, id rpcBlockI
 	if block == nil {
 		return nil, ethereum.NotFound
 	}
-	payload, err := block.ExecutionPayload(s.trustRPC)
+	envelope, err := block.ExecutionPayloadEnvelope(s.trustRPC)
 	if err != nil {
 		return nil, err
 	}
-	if err := id.CheckID(payload.ID()); err != nil {
+	if err := id.CheckID(envelope.ExecutionPayload.ID()); err != nil {
 		return nil, fmt.Errorf("fetched payload does not match requested ID: %w", err)
 	}
-	s.payloadsCache.Add(payload.BlockHash, payload)
-	return payload, nil
+	s.payloadsCache.Add(envelope.ExecutionPayload.BlockHash, envelope)
+	return envelope, nil
 }
 
 // ChainID fetches the chain id of the internal RPC.
@@ -333,18 +293,18 @@ func (s *EthClient) InfoAndTxsByLabel(ctx context.Context, label eth.BlockLabel)
 	return s.blockCall(ctx, "eth_getBlockByNumber", label)
 }
 
-func (s *EthClient) PayloadByHash(ctx context.Context, hash common.Hash) (*eth.ExecutionPayload, error) {
+func (s *EthClient) PayloadByHash(ctx context.Context, hash common.Hash) (*eth.ExecutionPayloadEnvelope, error) {
 	if payload, ok := s.payloadsCache.Get(hash); ok {
 		return payload, nil
 	}
 	return s.payloadCall(ctx, "eth_getBlockByHash", hashID(hash))
 }
 
-func (s *EthClient) PayloadByNumber(ctx context.Context, number uint64) (*eth.ExecutionPayload, error) {
+func (s *EthClient) PayloadByNumber(ctx context.Context, number uint64) (*eth.ExecutionPayloadEnvelope, error) {
 	return s.payloadCall(ctx, "eth_getBlockByNumber", numberID(number))
 }
 
-func (s *EthClient) PayloadByLabel(ctx context.Context, label eth.BlockLabel) (*eth.ExecutionPayload, error) {
+func (s *EthClient) PayloadByLabel(ctx context.Context, label eth.BlockLabel) (*eth.ExecutionPayloadEnvelope, error) {
 	return s.payloadCall(ctx, "eth_getBlockByNumber", label)
 }
 
@@ -354,24 +314,14 @@ func (s *EthClient) PayloadByLabel(ctx context.Context, label eth.BlockLabel) (*
 func (s *EthClient) FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error) {
 	info, txs, err := s.InfoAndTxsByHash(ctx, blockHash)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("querying block: %w", err)
 	}
-	// Try to reuse the receipts fetcher because is caches the results of intermediate calls. This means
-	// that if just one of many calls fail, we only retry the failed call rather than all of the calls.
-	// The underlying fetcher uses the receipts hash to verify receipt integrity.
-	var job *receiptsFetchingJob
-	if v, ok := s.receiptsCache.Get(blockHash); ok {
-		job = v
-	} else {
-		txHashes := eth.TransactionsToHashes(txs)
-		job = NewReceiptsFetchingJob(s, s.client, s.maxBatchSize, eth.ToBlockID(info), info.ReceiptHash(), txHashes, s.rethDbPath)
-		s.receiptsCache.Add(blockHash, job)
-	}
-	receipts, err := job.Fetch(ctx)
+
+	txHashes, _ := eth.TransactionsToHashes(txs), eth.ToBlockID(info)
+	receipts, err := s.recProvider.FetchReceipts(ctx, info, txHashes)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return info, receipts, nil
 }
 

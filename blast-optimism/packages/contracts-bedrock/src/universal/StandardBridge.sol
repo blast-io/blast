@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -238,6 +238,7 @@ abstract contract StandardBridge is Initializable {
     )
         public
         payable
+        virtual
         onlyOtherBridge
     {
         require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");

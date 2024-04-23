@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
 pragma solidity 0.8.15;
 
 import { OptimismMintableERC721 } from "src/universal/OptimismMintableERC721.sol";

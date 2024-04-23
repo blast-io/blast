@@ -29,7 +29,7 @@ import (
 // initialzedValue represents the `Initializable` contract value. It should be kept in
 // sync with the constant in `Constants.sol`.
 // https://github.com/ethereum-optimism/optimism/blob/develop/packages/contracts-bedrock/src/libraries/Constants.sol
-const initializedValue = 3
+const initializedValue = 1
 
 var (
 	ErrInvalidDeployConfig     = errors.New("invalid deploy config")
@@ -116,10 +116,19 @@ type DeployConfig struct {
 	L2GenesisRegolithTimeOffset *hexutil.Uint64 `json:"l2GenesisRegolithTimeOffset,omitempty"`
 	// L2GenesisCanyonTimeOffset is the number of seconds after genesis block that Canyon hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Canyon.
-	L2GenesisCanyonTimeOffset *hexutil.Uint64 `json:"L2GenesisCanyonTimeOffset,omitempty"`
-	// L2GenesisSpanBatchTimeOffset is the number of seconds after genesis block that Span Batch hard fork activates.
-	// Set it to 0 to activate at genesis. Nil to disable SpanBatch.
-	L2GenesisSpanBatchTimeOffset *hexutil.Uint64 `json:"l2GenesisSpanBatchTimeOffset,omitempty"`
+	L2GenesisCanyonTimeOffset *hexutil.Uint64 `json:"l2GenesisCanyonTimeOffset,omitempty"`
+	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Delta hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisDeltaTimeOffset *hexutil.Uint64 `json:"l2GenesisDeltaTimeOffset,omitempty"`
+	// L2GenesisEcotoneTimeOffset is the number of seconds after genesis block that Eclipse hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisEcotoneTimeOffset *hexutil.Uint64 `json:"l2GenesisEcotoneTimeOffset,omitempty"`
+	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Fjord hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisFjordTimeOffset *hexutil.Uint64 `json:"l2GenesisFjordTimeOffset,omitempty"`
+	// L2GenesisInteropTimeOffset is the number of seconds after genesis block that the Interop hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Interop.
+	L2GenesisInteropTimeOffset *hexutil.Uint64 `json:"l2GenesisInteropTimeOffset,omitempty"`
 	// L2GenesisBlockExtraData is configurable extradata. Will default to []byte("BEDROCK") if left unspecified.
 	L2GenesisBlockExtraData []byte `json:"l2GenesisBlockExtraData"`
 	// ProxyAdminOwner represents the owner of the ProxyAdmin predeploy on L2.
@@ -234,9 +243,22 @@ type DeployConfig struct {
 	CeilGasSeconds *hexutil.Big   `json:"ceilGasSeconds"`
 
 	// Account Configuration Predeploy
-	YieldContract common.Address `json:"yieldContract"`
+	YieldContract        common.Address `json:"yieldContract"`
+	L1BlastBridgeProxy   common.Address `json:"l1BlastBridgeProxy"`
+	ETHYieldManagerProxy common.Address `json:"ethYieldManagerProxy"`
+	USDYieldManagerProxy common.Address `json:"usdYieldManagerProxy"`
+	ETHYieldProvider     common.Address `json:"ethYieldProvider"`
+	USDYieldProvider     common.Address `json:"usdYieldProvider"`
 
-	L1BlastBridgeProxy common.Address `json:"l1BlastBridgeProxy"`
+	USDBRemoteToken common.Address `json:"usdbRemoteToken"`
+
+	ETHInsuranceFee     *hexutil.Big `json:"ethInsuranceFee"`
+	ETHWithdrawalBuffer *hexutil.Big `json:"ethWithdrawalBuffer"`
+	USDInsuranceFee     *hexutil.Big `json:"usdInsuranceFee"`
+	USDWithdrawalBuffer *hexutil.Big `json:"usdWithdrawalBuffer"`
+
+	// When Cancun activates. Relative to L1 genesis.
+	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -378,6 +400,7 @@ func (d *DeployConfig) Check() error {
 	if d.SharesPrice == nil {
 		return fmt.Errorf("%w: SharesPrice cannot be nil", ErrInvalidDeployConfig)
 	}
+
 	if d.SharesReporter == (common.Address{}) {
 		return fmt.Errorf("%w: SharesReporter cannot be nil", ErrInvalidDeployConfig)
 	}
@@ -386,6 +409,7 @@ func (d *DeployConfig) Check() error {
 	if d.YieldContract == (common.Address{}) {
 		return fmt.Errorf("%w: Yield Contract cannot be nil", ErrInvalidDeployConfig)
 	}
+
 	// Gas Contract
 	if d.GasAdmin == (common.Address{}) {
 		return fmt.Errorf("%w: Gas Admin cannot be nil", ErrInvalidDeployConfig)
@@ -402,6 +426,40 @@ func (d *DeployConfig) Check() error {
 	if d.CeilClaimRate == nil {
 		return fmt.Errorf("%w: Ceil Claim Rate cannot be nil", ErrInvalidDeployConfig)
 	}
+
+	if d.ZeroClaimRate == nil {
+		return fmt.Errorf("%w: Zero Claim Rate cannot be nil", ErrInvalidDeployConfig)
+	}
+
+	// checkFork checks that fork A is before or at the same time as fork B
+	checkFork := func(a, b *hexutil.Uint64, aName, bName string) error {
+		if a == nil && b == nil {
+			return nil
+		}
+		if a == nil && b != nil {
+			return fmt.Errorf("fork %s set (to %d), but prior fork %s missing", bName, *b, aName)
+		}
+		if a != nil && b == nil {
+			return nil
+		}
+		if *a > *b {
+			return fmt.Errorf("fork %s set to %d, but prior fork %s has higher offset %d", bName, *b, aName, *a)
+		}
+		return nil
+	}
+	if err := checkFork(d.L2GenesisRegolithTimeOffset, d.L2GenesisCanyonTimeOffset, "regolith", "canyon"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisCanyonTimeOffset, d.L2GenesisDeltaTimeOffset, "canyon", "delta"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisDeltaTimeOffset, d.L2GenesisEcotoneTimeOffset, "delta", "ecotone"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisEcotoneTimeOffset, d.L2GenesisFjordTimeOffset, "ecotone", "fjord"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -428,6 +486,20 @@ func (d *DeployConfig) CheckAddresses() error {
 	if d.L1BlastBridgeProxy == (common.Address{}) {
 		return fmt.Errorf("%w: L1BlastBridgeProxy cannot be address(0)", ErrInvalidDeployConfig)
 	}
+
+	if d.USDYieldManagerProxy == (common.Address{}) {
+		return fmt.Errorf("%w: USDYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.ETHYieldManagerProxy == (common.Address{}) {
+		return fmt.Errorf("%w: ETHYieldManagerProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.YieldManagerAdmin == (common.Address{}) {
+		return fmt.Errorf("%w: YieldManagerAdmin cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.USDBRemoteToken == (common.Address{}) {
+		return fmt.Errorf("%w: USDBRemoteToken cannot be address(0)", ErrInvalidDeployConfig)
+	}
+
 	return nil
 }
 
@@ -439,6 +511,11 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 	d.SystemConfigProxy = deployments.SystemConfigProxy
 	d.OptimismPortalProxy = deployments.OptimismPortalProxy
 	d.L1BlastBridgeProxy = deployments.L1BlastBridgeProxy
+	d.USDYieldManagerProxy = deployments.USDYieldManagerProxy
+	d.ETHYieldManagerProxy = deployments.ETHYieldManagerProxy
+	d.USDBRemoteToken = deployments.USDBRemoteToken
+	d.ETHYieldProvider = deployments.ETHYieldProvider
+	d.USDYieldProvider = deployments.USDYieldProvider
 }
 
 // GetDeployedAddresses will get the deployed addresses of deployed L1 contracts
@@ -506,6 +583,33 @@ func (d *DeployConfig) GetDeployedAddresses(hh *hardhat.Hardhat) error {
 		d.L1BlastBridgeProxy = l1BlastBridgeProxyDeployment.Address
 	}
 
+	if d.USDYieldManagerProxy == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		usdYieldManagerProxyDeployment, err := hh.GetDeployment("USDYieldManagerProxy")
+		if err != nil {
+			return err
+		}
+		d.USDYieldManagerProxy = usdYieldManagerProxyDeployment.Address
+	}
+
+	if d.ETHYieldManagerProxy == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		ethYieldManagerProxyDeployment, err := hh.GetDeployment("ETHYieldManagerProxy")
+		if err != nil {
+			return err
+		}
+		d.ETHYieldManagerProxy = ethYieldManagerProxyDeployment.Address
+	}
+
+	if d.USDBRemoteToken == (common.Address{}) {
+		// There is no legacy deployment of this contract
+		usdbRemoteTokenDeployment, err := hh.GetDeployment("USDBRemoteToken")
+		if err != nil {
+			return err
+		}
+		d.USDBRemoteToken = usdbRemoteTokenDeployment.Address
+	}
+
 	return nil
 }
 
@@ -531,12 +635,46 @@ func (d *DeployConfig) CanyonTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
-func (d *DeployConfig) SpanBatchTime(genesisTime uint64) *uint64 {
-	if d.L2GenesisSpanBatchTimeOffset == nil {
+func (d *DeployConfig) DeltaTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisDeltaTimeOffset == nil {
 		return nil
 	}
 	v := uint64(0)
-	if offset := *d.L2GenesisSpanBatchTimeOffset; offset > 0 {
+
+	if offset := *d.L2GenesisDeltaTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) EcotoneTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisEcotoneTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisEcotoneTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) FjordTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisFjordTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisFjordTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) InteropTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisInteropTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisInteropTimeOffset; offset > 0 {
 		v = genesisTime + uint64(offset)
 	}
 	return &v
@@ -580,7 +718,10 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		L1SystemConfigAddress:  d.SystemConfigProxy,
 		RegolithTime:           d.RegolithTime(l1StartBlock.Time()),
 		CanyonTime:             d.CanyonTime(l1StartBlock.Time()),
-		SpanBatchTime:          d.SpanBatchTime(l1StartBlock.Time()),
+		DeltaTime:              d.DeltaTime(l1StartBlock.Time()),
+		EcotoneTime:            d.EcotoneTime(l1StartBlock.Time()),
+		FjordTime:              d.FjordTime(l1StartBlock.Time()),
+		InteropTime:            d.InteropTime(l1StartBlock.Time()),
 	}, nil
 }
 
@@ -623,6 +764,11 @@ type L1Deployments struct {
 	L1StandardBridge                  common.Address `json:"L1StandardBridge"`
 	L1StandardBridgeProxy             common.Address `json:"L1StandardBridgeProxy"`
 	L1BlastBridgeProxy                common.Address `json:"L1BlastBridgeProxy"`
+	USDYieldManagerProxy              common.Address `json:"USDYieldManagerProxy"`
+	ETHYieldManagerProxy              common.Address `json:"ETHYieldManagerProxy"`
+	ETHYieldProvider                  common.Address `json:"ETHYieldProvider"`
+	USDYieldProvider                  common.Address `json:"USDYieldProvider"`
+	USDBRemoteToken                   common.Address `json:"USDBRemoteToken"`
 	L2OutputOracle                    common.Address `json:"L2OutputOracle"`
 	L2OutputOracleProxy               common.Address `json:"L2OutputOracleProxy"`
 	OptimismMintableERC20Factory      common.Address `json:"OptimismMintableERC20Factory"`
@@ -651,7 +797,7 @@ func (d *L1Deployments) GetName(addr common.Address) string {
 }
 
 // Check will ensure that the L1Deployments are sane
-func (d *L1Deployments) Check() error {
+func (d *L1Deployments) Check(*DeployConfig) error {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -724,6 +870,47 @@ func NewStateDump(path string) (*gstate.Dump, error) {
 	return &dump, nil
 }
 
+// ForgeDump is a simple alias for state.Dump that can read "nonce" as a hex string.
+// It appears as if updates to foundry have changed the serialization of the state dump.
+type ForgeDump gstate.Dump
+
+func (d *ForgeDump) UnmarshalJSON(b []byte) error {
+	type forgeDumpAccount struct {
+		Balance     string                 `json:"balance"`
+		Nonce       hexutil.Uint64         `json:"nonce"`
+		Root        hexutil.Bytes          `json:"root"`
+		CodeHash    hexutil.Bytes          `json:"codeHash"`
+		Code        hexutil.Bytes          `json:"code,omitempty"`
+		Storage     map[common.Hash]string `json:"storage,omitempty"`
+		Address     *common.Address        `json:"address,omitempty"`
+		AddressHash hexutil.Bytes          `json:"key,omitempty"`
+	}
+	type forgeDump struct {
+		Root     string                      `json:"root"`
+		Accounts map[string]forgeDumpAccount `json:"accounts"`
+	}
+	var dump forgeDump
+	if err := json.Unmarshal(b, &dump); err != nil {
+		return err
+	}
+
+	d.Root = dump.Root
+	d.Accounts = make(map[common.Address]gstate.DumpAccount)
+	for addr, acc := range dump.Accounts {
+		d.Accounts[common.HexToAddress(addr)] = gstate.DumpAccount{
+			Balance:  acc.Balance,
+			Nonce:    (uint64)(acc.Nonce),
+			Root:     acc.Root,
+			CodeHash: acc.CodeHash,
+			Code:     acc.Code,
+			Storage:  acc.Storage,
+			Address:  acc.Address,
+			// AddressHash: acc.AddressHash,
+		}
+	}
+	return nil
+}
+
 // NewL2ImmutableConfig will create an ImmutableConfig given an instance of a
 // DeployConfig and a block.
 func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.ImmutableConfig, error) {
@@ -735,6 +922,17 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	if config.L1BlastBridgeProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1BlastBridgeProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
+
+	if config.USDYieldManagerProxy == (common.Address{}) {
+		return immutable, fmt.Errorf("USDYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+	if config.ETHYieldManagerProxy == (common.Address{}) {
+		return immutable, fmt.Errorf("ETHYieldManagerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+	if config.USDBRemoteToken == (common.Address{}) {
+		return immutable, fmt.Errorf("USDBRemoteToken cannot be address(0): %w", ErrInvalidImmutablesConfig)
+	}
+
 	if config.L1CrossDomainMessengerProxy == (common.Address{}) {
 		return immutable, fmt.Errorf("L1CrossDomainMessengerProxy cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
@@ -799,8 +997,10 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	}
 
 	immutable["USDB"] = immutables.ImmutableValues{
-		"bridge":      config.L1BlastBridgeProxy,
-		"remoteToken": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+		"bridge":          config.L1BlastBridgeProxy,
+		"remoteToken":     "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+		"usdYieldManager": config.USDYieldManagerProxy,
+		"decimals":        18,
 	}
 
 	immutable["L2BlastBridge"] = immutables.ImmutableValues{
@@ -846,15 +1046,6 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"l1FeeOverhead":  config.GasPriceOracleOverhead,
 		"l1FeeScalar":    config.GasPriceOracleScalar,
 	}
-	storage["LegacyERC20ETH"] = state.StorageValues{
-		"_name":   "Ether",
-		"_symbol": "ETH",
-	}
-	storage["WETH9"] = state.StorageValues{
-		"name":     "Wrapped Ether",
-		"symbol":   "WETH",
-		"decimals": 18,
-	}
 	if config.EnableGovernance {
 		storage["GovernanceToken"] = state.StorageValues{
 			"_name":   config.GovernanceTokenName,
@@ -876,7 +1067,9 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"_initializing": false,
 	}
 	storage["Shares"] = state.StorageValues{
-		"price": config.SharesPrice.ToInt(),
+		"price":         config.SharesPrice.ToInt(),
+		"_initialized":  initializedValue,
+		"_initializing": false,
 	}
 
 	storage["Gas"] = state.StorageValues{
@@ -886,10 +1079,39 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"ceilGasSeconds": config.CeilGasSeconds.ToInt(),
 		"ceilClaimRate":  config.CeilClaimRate.ToInt(),
 	}
-	storage["Blast"] = state.StorageValues{}
-	storage["WETHRebasing"] = state.StorageValues{}
-	storage["USDB"] = state.StorageValues{}
-	storage["L2BlastBridge"] = state.StorageValues{}
+
+	governorMap := make(map[any]any)
+	governorMap[predeploys.L2BlastBridgeAddr.String()] = "0xdead"
+	governorMap[predeploys.L2StandardBridgeAddr.String()] = "0xdead"
+	governorMap[predeploys.SharesAddr.String()] = "0xdead"
+	governorMap[predeploys.USDBAddr.String()] = "0xdead"
+	governorMap[predeploys.WETHRebasingAddr.String()] = "0xdead"
+	governorMap[predeploys.L2CrossDomainMessengerAddr.String()] = "0xdead"
+	storage["Blast"] = state.StorageValues{
+		"_initialized":  initializedValue,
+		"_initializing": false,
+		"governorMap":   governorMap,
+	}
+	storage["WETHRebasing"] = state.StorageValues{
+		"_initialized":  initializedValue,
+		"_initializing": false,
+		"price":         config.SharesPrice.ToInt(),
+		"name":          "Wrapped Ether",
+		"symbol":        "WETH",
+	}
+	storage["USDB"] = state.StorageValues{
+		"_initialized":  initializedValue,
+		"_initializing": false,
+		"price":         config.SharesPrice.ToInt(),
+		"name":          "USDB",
+		"symbol":        "USDB",
+	}
+	storage["L2BlastBridge"] = state.StorageValues{
+		"_initialized":  initializedValue,
+		"_initializing": false,
+		"messenger":     predeploys.L2CrossDomainMessengerAddr,
+	}
+
 	return storage, nil
 }
 

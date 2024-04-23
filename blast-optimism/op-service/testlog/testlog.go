@@ -90,6 +90,15 @@ func Logger(t Testing, level log.Lvl) log.Logger {
 	return l
 }
 
+func LoggerWithHandlerMod(t Testing, level log.Lvl, handlerMod func(interface{}) interface{}) log.Logger {
+	// l := &logger{t: t, mu: new(sync.Mutex), buf: new(bytes.Buffer)}
+	// var handler slog.Handler = log.NewTerminalHandlerWithLevel(l.buf, level, useColorInTestLog)
+	// handler = handlerMod(handler)
+	// l.l = log.NewLogger(handler)
+	//return l
+	return Logger(t, level)
+}
+
 func (l *logger) Trace(msg string, ctx ...any) {
 	l.t.Helper()
 	l.mu.Lock()

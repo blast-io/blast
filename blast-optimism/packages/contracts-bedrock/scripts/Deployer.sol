@@ -83,7 +83,7 @@ abstract contract Deployer is Script {
         deployPath = string.concat(root, "/broadcast/", deployScript, ".s.sol/", vm.toString(chainId), "/", deployFile);
 
         deploymentsDir = string.concat(root, "/deployments/", deploymentContext);
-        try vm.createDir(deploymentsDir, true) { } catch (bytes memory) { }
+        try vm.createDir(deploymentsDir, true) {} catch (bytes memory) {}
 
         string memory chainIdPath = string.concat(deploymentsDir, "/.chainId");
         try vm.readFile(chainIdPath) returns (string memory localChainId) {
@@ -96,8 +96,7 @@ abstract contract Deployer is Script {
         console.log("Connected to network with chainid %s", chainId);
 
         tempDeploymentsPath = string.concat(deploymentsDir, "/.deploy");
-        try vm.readFile(tempDeploymentsPath) returns (string memory) { }
-        catch {
+        try vm.readFile(tempDeploymentsPath) returns (string memory) {} catch {
             vm.writeJson("{}", tempDeploymentsPath);
         }
         console.log("Storing temp deployment data in %s", tempDeploymentsPath);
@@ -115,8 +114,37 @@ abstract contract Deployer is Script {
             string memory deploymentName = deployments[i].name;
 
             string memory deployTx = _getDeployTransactionByContractAddress(addr);
-            if (bytes(deployTx).length == 0) {
+            string memory artifactPath;
+            string memory json;
+            Artifact memory artifact;
+            if (
+                bytes(deployTx).length == 0 ||
+                keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("USDToken")) ||
+                keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("ETHYieldToken")) ||
+                keccak256(abi.encodePacked(deploymentName)) == keccak256(abi.encodePacked("USDBRemoteToken"))
+            ) {
                 console.log("Deploy Tx not found for %s skipping deployment artifact generation", deploymentName);
+                artifact = Artifact({
+                    abi: "[]",
+                    addr: addr,
+                    args: new string[](0),
+                    bytecode: "",
+                    deployedBytecode: "",
+                    devdoc: "",
+                    metadata: "",
+                    numDeployments: 1,
+                    receipt: "",
+                    solcInputHash: bytes32(0),
+                    storageLayout: '{"storage":[],"types":{}}',
+                    transactionHash: bytes32(0),
+                    userdoc: ""
+                });
+
+                json = _serializeArtifact(artifact);
+
+                artifactPath = string.concat(deploymentsDir, "/", deploymentName, ".json");
+
+                vm.writeJson({ json: json, path: artifactPath });
                 continue;
             }
             string memory contractName = _getContractNameFromDeployTransaction(deployTx);
@@ -127,16 +155,16 @@ abstract contract Deployer is Script {
             bytes memory deployedCode = _getDeployedCode(contractName);
             string memory receipt = _getDeployReceiptByContractAddress(addr);
 
-            string memory artifactPath = string.concat(deploymentsDir, "/", deploymentName, ".json");
+            artifactPath = string.concat(deploymentsDir, "/", deploymentName, ".json");
 
             uint256 numDeployments = 0;
             try vm.readFile(artifactPath) returns (string memory res) {
                 numDeployments = stdJson.readUint(string(res), "$.numDeployments");
                 vm.removeFile(artifactPath);
-            } catch { }
+            } catch {}
             numDeployments++;
 
-            Artifact memory artifact = Artifact({
+            artifact = Artifact({
                 abi: getAbi(contractName),
                 addr: addr,
                 args: args,
@@ -152,7 +180,7 @@ abstract contract Deployer is Script {
                 userdoc: getUserDoc(contractName)
             });
 
-            string memory json = _serializeArtifact(artifact);
+            json = _serializeArtifact(artifact);
 
             vm.writeJson({ json: json, path: artifactPath });
         }
@@ -279,7 +307,7 @@ abstract contract Deployer is Script {
     }
 
     /// @notice Returns the contract name from a deploy transaction.
-    function _getContractNameFromDeployTransaction(string memory _deployTx) internal returns (string memory) {
+    function _getContractNameFromDeployTransaction(string memory _deployTx) internal pure returns (string memory) {
         return stdJson.readString(_deployTx, ".contractName");
     }
 
@@ -304,7 +332,12 @@ abstract contract Deployer is Script {
         cmd[0] = Executables.bash;
         cmd[1] = "-c";
         cmd[2] = string.concat(
-            Executables.echo, " ", _name, " | ", Executables.sed, " -E 's/[.][0-9]+\\.[0-9]+\\.[0-9]+//g'"
+            Executables.echo,
+            " ",
+            _name,
+            " | ",
+            Executables.sed,
+            " -E 's/[.][0-9]+\\.[0-9]+\\.[0-9]+//g'"
         );
         bytes memory res = vm.ffi(cmd);
         return string(res);
@@ -341,8 +374,16 @@ abstract contract Deployer is Script {
         cmd[2] = string.concat(Executables.forge, " config --json | ", Executables.jq, " -r .out");
         bytes memory res = vm.ffi(cmd);
         string memory contractName = _stripSemver(_name);
-        string memory forgeArtifactPath =
-            string.concat(vm.projectRoot(), "/", string(res), "/", contractName, ".sol/", _name, ".json");
+        string memory forgeArtifactPath = string.concat(
+            vm.projectRoot(),
+            "/",
+            string(res),
+            "/",
+            contractName,
+            ".sol/",
+            _name,
+            ".json"
+        );
         return forgeArtifactPath;
     }
 
@@ -451,7 +492,7 @@ abstract contract Deployer is Script {
 
     /// @notice The context of the deployment is used to namespace the artifacts.
     ///         An unknown context will use the chainid as the context name.
-    function _getDeploymentContext() private returns (string memory) {
+    function _getDeploymentContext() internal returns (string memory) {
         string memory context = vm.envOr("DEPLOYMENT_CONTEXT", string(""));
         if (bytes(context).length > 0) {
             return context;

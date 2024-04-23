@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 
@@ -71,10 +72,10 @@ func TestP2PSimple(t *testing.T) {
 }
 
 type mockGossipIn struct {
-	OnUnsafeL2PayloadFn func(ctx context.Context, from peer.ID, msg *eth.ExecutionPayload) error
+	OnUnsafeL2PayloadFn func(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error
 }
 
-func (m *mockGossipIn) OnUnsafeL2Payload(ctx context.Context, from peer.ID, msg *eth.ExecutionPayload) error {
+func (m *mockGossipIn) OnUnsafeL2Payload(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error {
 	if m.OnUnsafeL2PayloadFn != nil {
 		return m.OnUnsafeL2PayloadFn(ctx, from, msg)
 	}
@@ -138,6 +139,13 @@ func TestP2PFull(t *testing.T) {
 	// Set up B to connect statically
 	confB.StaticPeers, err = peer.AddrInfoToP2pAddrs(&peer.AddrInfo{ID: hostA.ID(), Addrs: hostA.Addrs()})
 	require.NoError(t, err)
+
+	// Add address of host B itself, it shouldn't connect or cause issues.
+	idB, err := peer.IDFromPublicKey(confB.Priv.GetPublic())
+	require.NoError(t, err)
+	altAddrB, err := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/12345/p2p/" + idB.String())
+	require.NoError(t, err)
+	confB.StaticPeers = append(confB.StaticPeers, altAddrB)
 
 	logB := testlog.Logger(t, log.LvlError).New("host", "B")
 

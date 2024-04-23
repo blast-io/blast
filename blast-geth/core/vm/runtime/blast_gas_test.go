@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -50,6 +51,16 @@ func TestGasUpdate(t *testing.T) {
 	baseGasSeconds := getPublicVar("baseGasSeconds", params.BlastGasAddress, env, t).(*big.Int)
 	if baseGasSeconds.Cmp(big.NewInt(2)) != 0 {
 		t.Fatal("baseGasSecodns did not update correctly")
+	}
+}
+
+func TestGasContractAddr(t *testing.T) {
+	_, env := setup(t)
+	gasContractAddrRaw := getPublicVar("GAS_CONTRACT", params.BlastAccountConfigurationAddress, env, t)
+	gasAddr := gasContractAddrRaw.(common.Address)
+	t.Log(gasAddr)
+	if gasAddr != params.BlastGasAddress {
+		t.Fatal()
 	}
 }
 
@@ -285,9 +296,11 @@ func TestGasClaim(t *testing.T) {
 
 	bps, secs := readBps(db, etherBalance, etherSeconds, t)
 	expGasToConsume := new(big.Int).Div(new(big.Int).Mul(bps, etherBalance), big.NewInt(10_000))
+	t.Log(bps, secs, expGasToConsume)
 
 	rec := getAddr(0x32)
 	gasClaimed := claimGas(db, addr, &rec, etherBalance, etherSeconds, big.NewInt(100), t)
+	t.Log(gasClaimed)
 	if gasClaimed.Cmp(expGasToConsume) != 0 {
 		t.Log(gasClaimed, etherBalance, expGasToConsume)
 		t.Fatalf("not all gas claimed")
@@ -302,6 +315,68 @@ func TestGasClaim(t *testing.T) {
 	if db.GetBalance(rec).Cmp(gasClaimed) != 0 {
 		t.Fatalf("gas did not transfer to rec")
 	}
+}
+
+func TestGasMinClaim(t *testing.T) {
+	db := setupDb(t)
+	// zeroClaimRate
+	db.SetState(params.BlastGasAddress, common.BigToHash(common.Big0), common.BigToHash(big.NewInt(2500)))
+	// baseGasSeconds
+	db.SetState(params.BlastGasAddress, common.BigToHash(common.Big1), common.BigToHash(big.NewInt(60)))
+	// baseClaimRate
+	db.SetState(params.BlastGasAddress, common.BigToHash(common.Big2), common.BigToHash(big.NewInt(5000)))
+	// ceilGasSeconds
+	db.SetState(params.BlastGasAddress, common.BigToHash(common.Big3), common.BigToHash(big.NewInt(100)))
+	// ceilClaimRate
+	db.SetState(params.BlastGasAddress, common.BigToHash(big.NewInt(4)), common.BigToHash(big.NewInt(8000)))
+
+	addr := deployTestContract(db, simulateContractPath, t)
+	abi := getAbi(simulateContractPath, t)
+	input, err := abi.Pack("readConfigurationSimulator", addr)
+	if err != nil {
+		t.Error(err)
+	}
+	tp := TransactionParams{
+		sender: EOA_ADDR,
+		to:     &addr,
+		input:  input,
+	}
+	stateTransition(&tp, db, t)
+	// now state transition to add ether balance
+	block := big.NewInt(80)
+	tp.blockNumber = block
+	for i := 1; i <= 80; i++ {
+		stateTransition(&tp, db, t)
+	}
+
+	etherSeconds, etherBalance, _, _ := readGasVarsAtBlock(db, addr, block, t)
+	t.Log(etherSeconds, etherBalance)
+	if etherSeconds.Cmp(common.Big0) == 0 {
+		t.Fail()
+	}
+
+	if etherBalance.Cmp(common.Big0) == 0 {
+		t.Fail()
+	}
+
+	bps, secs := readBps(db, etherBalance, etherSeconds, t)
+	oneEther, _ := new(big.Int).SetString("1000000000000000000", 10)
+	normSeconds := new(big.Int).Mul(oneEther, big.NewInt(80))
+	bps2, _ := readBps(db, oneEther, normSeconds, t)
+	t.Log("bpts2", bps2)
+	expGasToConsume := new(big.Int).Div(new(big.Int).Mul(bps, etherBalance), big.NewInt(10_000))
+	t.Log(bps, secs, expGasToConsume)
+
+	rec := getAddr(0x32)
+	rateToClaim := new(big.Int).SetUint64(6000)
+	gasClaimed := claimGasAtMinClaimRate(db, addr, &rec, rateToClaim, block, t)
+	etherSeconds1, _, _, _ := readGasVarsAtBlock(db, addr, block, t)
+	secondsConsumed := new(big.Int).Sub(etherSeconds, etherSeconds1)
+	rate, _ := readBps(db, gasClaimed, secondsConsumed, t)
+	if rateToClaim.Cmp(rate) > 0 {
+		t.Fail()
+	}
+	t.Log(rateToClaim, rate, gasClaimed, secondsConsumed)
 }
 
 func TestGasPackingMode(t *testing.T) {
@@ -519,5 +594,91 @@ func TestGasCode(t *testing.T) {
 	afterCodeHash := state.GetCodeHash(params.BlastGasAddress)
 	afterCode := state.GetCode(params.BlastGasAddress)
 	t.Log(codeHash, code, afterCodeHash, afterCode)
+}
+
+func TestRecursiveContract(t *testing.T) {
+	db := setupDb(t)
+	abi := getAbi(recursiveContractPath, t)
+
+	cinput, err := abi.Pack("", uint8(0))
+	bytecode := getBytecodeFromForStandardContract(recursiveContractPath, t)
+	input := append(bytecode, cinput...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tp := TransactionParams{
+		sender: EOA_ADDR,
+		input:  input,
+	}
+	result := stateTransition(&tp, db, t)
+	if result.Err != nil {
+		t.Fatal(result.Err)
+	}
+	if result.UsedGas != 389040 {
+		t.Fail()
+	}
+}
+
+func TestMaxGasParameters(t *testing.T) {
+	byteArray := make([]byte, 32)
+	for i := range byteArray {
+		byteArray[i] = 255
+	}
+	byteArray[0] = 1
+	db := setupDb(t)
+
+	strBytes := []byte("parameters")
+	output := append(getAddr(1).Bytes(), strBytes...)
+	slot := crypto.Keccak256Hash(output)
+
+	db.SetState(params.BlastGasAddress, slot, common.BytesToHash(byteArray))
+	etherSeconds, etherBalance, lastUpdated, mode := readGasVarsAtBlock(db, getAddr(1), getMaxValueForBytes(4), t)
+	t.Log(etherSeconds, etherBalance, lastUpdated, mode)
+	if etherBalance.Cmp(getMaxValueForBytes(12)) != 0 {
+		t.Fatalf("Expected etherBalance to be %s, got %s", getMaxValueForBytes(12), etherBalance)
+	}
+	if etherSeconds.Cmp(getMaxValueForBytes(15)) != 0 {
+		t.Fatalf("Expected etherSeconds to be %s, got %s", getMaxValueForBytes(15), etherSeconds)
+	}
+	if lastUpdated.Cmp(getMaxValueForBytes(4)) != 0 {
+		t.Fatalf("Expected lastUpdated to be %s, got %s", getMaxValueForBytes(4), lastUpdated)
+	}
+	if mode == 0 {
+		t.Fail()
+	}
+}
+
+func getMaxValueForBytes(numberBytes int64) *big.Int {
+	return new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(numberBytes*8), nil), common.Big1)
+}
+
+func TestGasPenaltyOnDelegateCall(t *testing.T) {
+	db := setupDbWithoutGenesis(t)
+	addr := deployTestContract(db, delegateCallContractPath, t)
+
+	abi := getAbi(delegateCallContractPath, t)
+	input, err := abi.Pack("call")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tp := TransactionParams{
+		sender: EOA_ADDR,
+		input:  input,
+		to:     &addr,
+	}
+	result := stateTransition(&tp, db, t)
+	if result.Err != nil {
+		t.Fatal(result.Err)
+	}
+	// USED GAS iff max frame count is 1024
+	// 807592
+
+	// USED GAS iff max frame count is 5 w/ delegate call on penalty bug
+	// 2625192
+	if result.UsedGas != 807592 {
+		t.Fatalf("unexpected gas used")
+	}
 
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -296,6 +297,100 @@ func TestFlagSwitchClaimableToVoid(t *testing.T) {
 		t.Fail()
 	}
 	if !assertClaimable(state, 1, 0) {
+		t.Fail()
+	}
+}
+
+func TestClaimableBalanceIncreaseWithRevert(t *testing.T) {
+	// 1) Setup the account to have some claimable yield
+	contractRawAccount := uint64(1)
+	recipientRawAccount := uint64(2)
+
+	precompile := vm.PrecompiledContractsCancun[common.BytesToAddress([]byte{1, 0})] // Blast precompile
+	db, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	setSharePrice(db, 1)
+	addClaimableAccount(db, contractRawAccount)
+	addBalance(db, contractRawAccount, 10)
+	setSharePrice(db, 2)
+	addBalance(db, contractRawAccount, 10)
+	if !assertBalance(db, contractRawAccount, 20) {
+		t.Fail()
+	}
+	expectedClaimable := uint64(10)
+	if !assertClaimable(db, contractRawAccount, expectedClaimable) {
+		t.Fail()
+	}
+
+	// 2) Simulate a claim transaction claiming the entire contract's claimable amount to recipient
+	snapshot := db.Snapshot() // Take a snapshot of the current db state
+
+	data := []byte{0x99, 0x6c, 0xba, 0x68} // claimSelector
+	contract := make([]byte, 32)
+	contract[31] = byte(contractRawAccount)
+	recipient := make([]byte, 32)
+	recipient[31] = byte(recipientRawAccount)
+	amount := make([]byte, 32)
+	amount[31] = byte(expectedClaimable)
+	data = append(data, contract...)
+	data = append(data, recipient...)
+	data = append(data, amount...)
+	cpy := make([]byte, len(data))
+	copy(cpy, data)
+	precompile.Run(params.BlastAccountConfigurationAddress, cpy, db, false)
+
+	// No more claimable, but balance intact
+	if !assertBalance(db, contractRawAccount, 20) {
+		t.Fail()
+	}
+	if !assertClaimable(db, contractRawAccount, 0) {
+		t.Fail()
+	}
+	if !assertBalance(db, recipientRawAccount, expectedClaimable) {
+		t.Fail()
+	}
+
+	// 2a) Simulate another operation in this transaction that will revert, making the entire transaction revert
+	_, err := precompile.Run(params.BlastAccountConfigurationAddress, cpy, db, true) // this is not doing anything, but just simulating a revert
+	if err != nil {
+		db.RevertToSnapshot(snapshot)
+	}
+
+	// 3) State should match the snapshot state, but it doesn't, both balance and claimable doesn't match.
+	// Claimable fails, since the account has been changed to Automatic instead of Claimable because of the revert
+	var forceFail bool
+	if !assertClaimable(db, contractRawAccount, expectedClaimable) {
+		actualClaimable := db.GetClaimableAmount(getAddr(contractRawAccount))
+		t.Logf("Amount claimable not matching after revert: want: %d have: %d\n", expectedClaimable, actualClaimable)
+		forceFail = true
+	}
+
+	// Balance fails as the share value includes the claimable yield which is kind of hidden, but it's not either
+	if !assertBalance(db, contractRawAccount, 20) {
+		actualBalance := getBalance(db, contractRawAccount)
+		t.Logf("Balance not matching after revert: want: %d have: %d\n", 20, actualBalance)
+		forceFail = true
+	}
+
+	if !assertBalance(db, recipientRawAccount, 0) {
+		actualBalance := getBalance(db, recipientRawAccount)
+		t.Logf("Recipient balance not matching after revert: want: %d have: %d\n", expectedClaimable, actualBalance)
+		forceFail = true
+	}
+
+	if db.GetFlags(getAddr(contractRawAccount)) != types.YieldClaimable {
+		actualType := db.GetFlags(getAddr(contractRawAccount))
+		t.Logf("Contract type not matching after revert: want: %d have: %d\n", types.YieldClaimable, actualType)
+		forceFail = true
+	}
+
+	if forceFail {
+		// Add balance to confirm it adds properly
+		addBalance(db, contractRawAccount, 1)
+		if !assertBalance(db, contractRawAccount, 31) {
+			actualBalance := getBalance(db, contractRawAccount)
+			t.Logf("Balance(after revert) not matching after revert: want: %d have: %d\n", 31, actualBalance)
+		}
+
 		t.Fail()
 	}
 }

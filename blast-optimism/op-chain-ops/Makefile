@@ -3,6 +3,9 @@ all: check-l2
 check-l2:
 	go build -o ./bin/check-l2 ./cmd/check-l2/main.go
 
+ecotone-scalar:
+	go build -o ./bin/ecotone-scalar ./cmd/ecotone-scalar/main.go
+
 test:
 	go test ./...
 

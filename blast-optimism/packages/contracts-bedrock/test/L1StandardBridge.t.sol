@@ -619,11 +619,9 @@ contract L1StandardBridge_FinalizeBridgeETH_Test is Bridge_Initializer {
 
         L1Bridge.finalizeBridgeETH{ value: 100 }(alice, alice, 100, hex"");
     }
-}
 
-contract L1StandardBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
-    /// @dev Tests that finalizing bridged ETH reverts if the amount is incorrect.
-    function test_finalizeBridgeETH_incorrectValue_reverts() external {
+    /// @dev Tests that finalizing bridged ETH with a discounted withdrawal succeeds.
+    function test_finalizeBridgeETH_discounted_succeeds() external {
         address messenger = address(L1Bridge.messenger());
         vm.mockCall(
             messenger,
@@ -632,10 +630,15 @@ contract L1StandardBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
         );
         vm.deal(messenger, 100);
         vm.prank(messenger);
-        vm.expectRevert("StandardBridge: amount sent does not match amount required");
+
+        vm.expectEmit(true, true, true, true, address(L1Bridge));
+        emit ETHBridgeFinalized(alice, alice, 50, hex"");
+
         L1Bridge.finalizeBridgeETH{ value: 50 }(alice, alice, 100, hex"");
     }
+}
 
+contract L1StandardBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
     /// @dev Tests that finalizing bridged ETH reverts if the destination is the L1 bridge.
     function test_finalizeBridgeETH_sendToSelf_reverts() external {
         address messenger = address(L1Bridge.messenger());
@@ -646,7 +649,7 @@ contract L1StandardBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
         );
         vm.deal(messenger, 100);
         vm.prank(messenger);
-        vm.expectRevert("StandardBridge: cannot send to self");
+        vm.expectRevert("L1StandardBridge: cannot send to self");
         L1Bridge.finalizeBridgeETH{ value: 100 }(alice, address(L1Bridge), 100, hex"");
     }
 
@@ -660,7 +663,7 @@ contract L1StandardBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
         );
         vm.deal(messenger, 100);
         vm.prank(messenger);
-        vm.expectRevert("StandardBridge: cannot send to messenger");
+        vm.expectRevert("L1StandardBridge: cannot send to messenger");
         L1Bridge.finalizeBridgeETH{ value: 100 }(alice, messenger, 100, hex"");
     }
 }

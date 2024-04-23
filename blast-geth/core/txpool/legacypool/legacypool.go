@@ -664,7 +664,7 @@ func (pool *LegacyPool) validateTx(tx *types.Transaction, local bool) error {
 				if tx := list.txs.Get(nonce); tx != nil {
 					cost := tx.Cost()
 					if pool.l1CostFn != nil {
-						if l1Cost := pool.l1CostFn(tx.RollupDataGas()); l1Cost != nil { // add rollup cost
+						if l1Cost := pool.l1CostFn(tx.RollupCostData()); l1Cost != nil { // add rollup cost
 							cost = cost.Add(cost, l1Cost)
 						}
 					}
@@ -997,6 +997,9 @@ func (pool *LegacyPool) addRemoteSync(tx *types.Transaction) error {
 // If sync is set, the method will block until all internal maintenance related
 // to the add is finished. Only use this during tests for determinism!
 func (pool *LegacyPool) Add(txs []*types.Transaction, local, sync bool) []error {
+	// Do not treat as local if local transactions have been disabled
+	local = local && !pool.config.NoLocals
+
 	// Filter out known ones without obtaining the pool lock or recovering signatures
 	var (
 		errs = make([]error, len(txs))
@@ -1449,9 +1452,10 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 	pool.currentState = statedb
 	pool.pendingNonces = newNoncer(statedb)
 
-	costFn := types.NewL1CostFunc(pool.chainconfig, statedb)
-	pool.l1CostFn = func(dataGas types.RollupGasData) *big.Int {
-		return costFn(newHead.Number.Uint64(), newHead.Time, dataGas, false)
+	if costFn := types.NewL1CostFunc(pool.chainconfig, statedb); costFn != nil {
+		pool.l1CostFn = func(rollupCostData types.RollupCostData) *big.Int {
+			return costFn(rollupCostData, newHead.Time)
+		}
 	}
 
 	// Inject any transactions discarded due to reorgs
@@ -1485,7 +1489,7 @@ func (pool *LegacyPool) promoteExecutables(accounts []common.Address) []*types.T
 		if !list.Empty() && pool.l1CostFn != nil {
 			// Reduce the cost-cap by L1 rollup cost of the first tx if necessary. Other txs will get filtered out afterwards.
 			el := list.txs.FirstElement()
-			if l1Cost := pool.l1CostFn(el.RollupDataGas()); l1Cost != nil {
+			if l1Cost := pool.l1CostFn(el.RollupCostData()); l1Cost != nil {
 				balance = new(big.Int).Sub(balance, l1Cost) // negative big int is fine
 			}
 		}
@@ -1694,7 +1698,7 @@ func (pool *LegacyPool) demoteUnexecutables() {
 		if !list.Empty() && pool.l1CostFn != nil {
 			// Reduce the cost-cap by L1 rollup cost of the first tx if necessary. Other txs will get filtered out afterwards.
 			el := list.txs.FirstElement()
-			if l1Cost := pool.l1CostFn(el.RollupDataGas()); l1Cost != nil {
+			if l1Cost := pool.l1CostFn(el.RollupCostData()); l1Cost != nil {
 				balance = new(big.Int).Sub(balance, l1Cost) // negative big int is fine
 			}
 		}

@@ -439,3 +439,17 @@ func TestInvalidBigInts(t *testing.T) {
 	}()
 	packAndUnpack(gasParams, t)
 }
+
+func TestMaxValues(t *testing.T) {
+	gasParams := &GasParameters{
+		mode:         true,
+		etherBalance: getMaxValueForBits(12),
+		etherSeconds: getMaxValueForBits(15),
+		lastUpdated:  getMaxValueForBits(4),
+	}
+	packAndUnpack(gasParams, t)
+}
+
+func getMaxValueForBits(numberBits int64) *big.Int {
+	return new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(numberBits), nil), common.Big1)
+}

@@ -80,10 +80,12 @@ func VerifyProof(stateRoot common.Hash, proof *gethclient.AccountResult) error {
 		stateRoot,
 		proof.Address,
 		types.StateAccount{
-			Nonce:    proof.Nonce,
-			Balance:  proof.Balance,
-			Root:     proof.StorageHash,
-			CodeHash: proof.CodeHash[:],
+			Nonce:     proof.Nonce,
+			Fixed:     proof.Fixed,
+			Remainder: proof.Remainder,
+			Shares:    proof.Shares,
+			Root:      proof.StorageHash,
+			CodeHash:  proof.CodeHash[:],
 		},
 		proof.AccountProof,
 	)

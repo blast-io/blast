@@ -144,28 +144,28 @@ type Message struct {
 	// This field will be set to true for operations like RPC eth_call.
 	SkipAccountChecks bool
 
-	IsSystemTx    bool                // IsSystemTx indicates the message, if also a deposit, does not emit gas usage.
-	IsDepositTx   bool                // IsDepositTx indicates the message is force-included and can persist a mint.
-	Mint          *big.Int            // Mint is the amount to mint before EVM processing, or nil if there is no minting.
-	RollupDataGas types.RollupGasData // RollupDataGas indicates the rollup cost of the message, 0 if not a rollup or no cost.
+	IsSystemTx     bool                 // IsSystemTx indicates the message, if also a deposit, does not emit gas usage.
+	IsDepositTx    bool                 // IsDepositTx indicates the message is force-included and can persist a mint.
+	Mint           *big.Int             // Mint is the amount to mint before EVM processing, or nil if there is no minting.
+	RollupCostData types.RollupCostData // RollupCostData caches data to compute the fee we charge for data availability
 }
 
 // TransactionToMessage converts a transaction into a Message.
 func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.Int) (*Message, error) {
 	msg := &Message{
-		Nonce:         tx.Nonce(),
-		GasLimit:      tx.Gas(),
-		GasPrice:      new(big.Int).Set(tx.GasPrice()),
-		GasFeeCap:     new(big.Int).Set(tx.GasFeeCap()),
-		GasTipCap:     new(big.Int).Set(tx.GasTipCap()),
-		To:            tx.To(),
-		Value:         tx.Value(),
-		Data:          tx.Data(),
-		AccessList:    tx.AccessList(),
-		IsSystemTx:    tx.IsSystemTx(),
-		IsDepositTx:   tx.IsDepositTx(),
-		Mint:          tx.Mint(),
-		RollupDataGas: tx.RollupDataGas(),
+		Nonce:          tx.Nonce(),
+		GasLimit:       tx.Gas(),
+		GasPrice:       new(big.Int).Set(tx.GasPrice()),
+		GasFeeCap:      new(big.Int).Set(tx.GasFeeCap()),
+		GasTipCap:      new(big.Int).Set(tx.GasTipCap()),
+		To:             tx.To(),
+		Value:          tx.Value(),
+		Data:           tx.Data(),
+		AccessList:     tx.AccessList(),
+		IsSystemTx:     tx.IsSystemTx(),
+		IsDepositTx:    tx.IsDepositTx(),
+		Mint:           tx.Mint(),
+		RollupCostData: tx.RollupCostData(),
 
 		SkipAccountChecks: false,
 		BlobHashes:        tx.BlobHashes(),
@@ -245,10 +245,10 @@ func (st *StateTransition) buyGas() error {
 	mgval = mgval.Mul(mgval, st.msg.GasPrice)
 	var l1Cost *big.Int
 	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks {
-		l1Cost = st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.evm.Context.Time, st.msg.RollupDataGas, st.msg.IsDepositTx)
-	}
-	if l1Cost != nil {
-		mgval = mgval.Add(mgval, l1Cost)
+		l1Cost = st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time)
+		if l1Cost != nil {
+			mgval = mgval.Add(mgval, l1Cost)
+		}
 	}
 	balanceCheck := new(big.Int).Set(mgval)
 	if st.msg.GasFeeCap != nil {
@@ -500,10 +500,6 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	}
 	// check if blast gas accounting == ethereum gas accounting
 	isGasAccountingCorrect := st.gasUsed() == gasTracker.GetGasUsed()
-	if !isGasAccountingCorrect {
-		// TODO(blast): remove panic?
-		panic(fmt.Sprintf("Gas used mismatch: st.gasUsed() = %d, gasTracker.GetGasUsed() = %d", st.gasUsed(), gasTracker.GetGasUsed()))
-	}
 
 	// Note for deposit tx there is no ETH refunded for unused gas, but that's taken care of by the fact that gasPrice
 	// is always 0 for deposit tx. So calling refundGas will ensure the gasUsed accounting is correct without actually
@@ -553,7 +549,7 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 			gasTracker.AllocateDevGas(blastFee, userRefund, st.state, st.evm.Context.Time)
 		}
 
-		if cost := st.evm.Context.L1CostFunc(st.evm.Context.BlockNumber.Uint64(), st.evm.Context.Time, st.msg.RollupDataGas, st.msg.IsDepositTx); cost != nil {
+		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
 			st.state.AddBalance(params.OptimismL1FeeRecipient, cost)
 		}
 	}

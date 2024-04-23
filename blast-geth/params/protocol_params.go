@@ -35,7 +35,7 @@ var (
 )
 
 const (
-	GasFrameCountBlockNumberFork uint64 = 373007
+	GasFrameCountBlockNumberFork uint64 = 353917
 
 	GasLimitBoundDivisor uint64 = 1024               // The bound divisor of the gas limit, used in update calculations.
 	MinGasLimit          uint64 = 5000               // Minimum the gas limit may ever be.

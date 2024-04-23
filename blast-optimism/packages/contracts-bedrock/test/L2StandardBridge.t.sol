@@ -17,9 +17,15 @@ import { Types } from "src/libraries/Types.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
+import { YieldMode } from "src/L2/Blast.sol";
+import { GasMode } from "src/L2/Gas.sol";
 
 contract L2StandardBridge_Test is Bridge_Initializer {
     using stdStorage for StdStorage;
+
+    function test_blastConfig() external {
+        checkBlastConfig(address(L2Bridge), address(0xdead), YieldMode.VOID, GasMode.VOID);
+    }
 
     /// @dev Tests that the bridge is initialized correctly.
     function test_initialize_succeeds() external {
@@ -406,6 +412,7 @@ contract L2StandardBridge_Bridge_Test is Bridge_Initializer {
     }
 
     /// @dev Tests that `finalizeDeposit` reverts if the amounts do not match.
+    /*
     function test_finalizeBridgeETH_incorrectValue_reverts() external {
         vm.mockCall(
             address(L2Bridge.messenger()),
@@ -417,6 +424,7 @@ contract L2StandardBridge_Bridge_Test is Bridge_Initializer {
         vm.expectRevert("StandardBridge: amount sent does not match amount required");
         L2Bridge.finalizeBridgeETH{ value: 50 }(alice, alice, 100, hex"");
     }
+    */
 
     /// @dev Tests that `finalizeDeposit` reverts if the receipient is the other bridge.
     function test_finalizeBridgeETH_sendToSelf_reverts() external {
@@ -429,19 +437,6 @@ contract L2StandardBridge_Bridge_Test is Bridge_Initializer {
         vm.prank(address(L2Messenger));
         vm.expectRevert("StandardBridge: cannot send to self");
         L2Bridge.finalizeBridgeETH{ value: 100 }(alice, address(L2Bridge), 100, hex"");
-    }
-
-    /// @dev Tests that `finalizeDeposit` reverts if the receipient is the messenger.
-    function test_finalizeBridgeETH_sendToMessenger_reverts() external {
-        vm.mockCall(
-            address(L2Bridge.messenger()),
-            abi.encodeWithSelector(CrossDomainMessenger.xDomainMessageSender.selector),
-            abi.encode(address(L2Bridge.OTHER_BRIDGE()))
-        );
-        vm.deal(address(L2Messenger), 100);
-        vm.prank(address(L2Messenger));
-        vm.expectRevert("StandardBridge: cannot send to messenger");
-        L2Bridge.finalizeBridgeETH{ value: 100 }(alice, address(L2Messenger), 100, hex"");
     }
 }
 

@@ -33,8 +33,67 @@ to enable more extensive redundancy and/or rotation configurations.
 
 ### `overhead` and `scalar` (`uint256,uint256`)
 
-The L1 fee parameters, also known as Gas Price Oracle (GPO) parameters,
-are updated in conjunction and apply new L1 costs to the L2 transactions.
+The L1 fee parameters, also known as Gas Price Oracle (GPO) parameters, are used to compute the L1
+data fee applied to an L2 transaction.  The specific parameters used depend on the upgrades that
+are active.
+
+#### `overhead`,`scalar` (`uint256,uint256`)
+
+Prior to the Ecotone upgrade, `overhead` and `scalar` are consulted and passed to the L2 via L1
+attribute info.
+
+#### `l1BasefeeScalar`,`l1BlobBasefeeScalar` (`uint32,uint32`)
+
+After the Ecotone upgrade, `l1BasefeeScalar` and `l1BlobBasefeeScalar` are passed to the L2
+instead.
+
+#### Ecotone `scalar`, `overhead` (`uint256,uint256`) change
+
+After Ecotone activation:
+
+- The `scalar` attribute encodes additional scalar information, in a versioned encoding scheme.
+- The `overhead` value is ignored: it does not affect the L2 state-transition output.
+
+The `scalar` is encoded as big-endian `uint256`, interpreted as `bytes32`, and composed as following:
+
+*Byte ranges are indicated with `[` (inclusive) and `)` (exclusive).
+
+- `0`: scalar-version byte
+- `[1, 32)`: depending scalar-version:
+  - Scalar-version `0`:
+    - `[1, 28)`: padding, should be zero.
+    - `[28, 32)`: big-endian `uint32`, encoding the L1-fee `baseFeeScalar`
+    - This version implies the L1-fee `blobBaseFeeScalar` is set to 0.
+    - In the event there are non-zero bytes in the padding area, `baseFeeScalar` must be set to MaxUint32.
+    - This version is compatible with the pre-Ecotone `scalar` value (assuming a `uint32` range).
+  - Scalar-version `1`:
+    - `[1, 24)`: padding, must be zero.
+    - `[24, 28)`: big-endian `uint32`, encoding the `blobBaseFeeScalar`
+    - `[28, 32)`: big-endian `uint32`, encoding the `baseFeeScalar`
+    - This version is meant to configure the EIP-4844 blob fee component, once blobs are used for data-availability.
+  - Other scalar-version values: unrecognized.
+    OP-Stack forks are recommended to utilize the `>= 128` scalar-version range and document their `scalar` encoding.
+
+Invalid and unrecognized scalar event-data should be ignored,
+and the last valid configuration should continue to be utilized.
+
+The `baseFeeScalar` and `blobBaseFeeScalar` are incorporated into the L2 through the
+[Ecotone L1 attributes deposit transaction calldata](./deposits.md#l1-attributes---ecotone).
+
+Future upgrades of the `SystemConfig` contract may provide additional typed getters/setters
+for the versioned scalar information.
+
+In Ecotone the existing `setGasConfig` function, and `scalar` and `overhead` getters, continue to function.
+
+When the batch-submitter utilizes EIP-4844 blob data for data-availability
+it can adjust the scalars to accurately price the resources:
+
+- `baseFeeScalar` to correspond to the share of the user-transaction (per byte)
+  in the total regular L1 EVM gas usage consumed by the data-transaction of the batch-submitter.
+  For blob transactions this is the fixed intrinsic gas cost of the L1 transaction.
+
+- `blobBaseFeeScalar` to correspond to share of a user-transaction (per byte)
+  in the total Blob data that is introduced by the data-transaction of the batch-submitter.
 
 ### `gasLimit` (`uint64`)
 

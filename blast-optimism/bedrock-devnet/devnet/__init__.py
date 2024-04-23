@@ -130,7 +130,8 @@ def deploy_contracts(paths):
     run_command([
         'cast', 'send', '--from', account,
         '--rpc-url', 'http://127.0.0.1:8545',
-        '--unlocked', '--value', '1ether', '0x3fAB184622Dc19b6109349B94811493BF2a45362'
+        '--unlocked', '--value', '1ether', '0x3fAB184622Dc19b6109349B94811493BF2a45362',
+        '--keystore', '~/.foundry/keystores'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     # deploy the create2 deployer
@@ -143,7 +144,7 @@ def deploy_contracts(paths):
     run_command([
         'forge', 'script', fqn, '--sender', account,
         '--rpc-url', 'http://127.0.0.1:8545', '--broadcast',
-        '--unlocked'
+        '--unlocked', '--keystore', '~/.foundry/keystores'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     shutil.copy(paths.l1_deployments_path, paths.addresses_json_path)
@@ -151,8 +152,24 @@ def deploy_contracts(paths):
     log.info('Syncing contracts.')
     run_command([
         'forge', 'script', fqn, '--sig', 'sync()',
-        '--rpc-url', 'http://127.0.0.1:8545'
+        '--rpc-url', 'http://127.0.0.1:8545', '--keystore', '~/.foundry/keystores'
     ], env={}, cwd=paths.contracts_bedrock_dir)
+
+    log.info('Patching malformatted JSON')
+    cdmp_filename = f"{paths.contracts_bedrock_dir}/deployments/devnetL1/L1CrossDomainMessengerProxy.json"
+    data = None
+    with open(cdmp_filename, "r") as f:
+        data = json.load(f)
+
+    if 'args' in data and isinstance(data['args'], str):
+        # Remove unnecessary backslashes and decode the JSON string
+        cleaned_args = data['args'].replace("\\", "")
+        try:
+            data['args'] = json.loads(cleaned_args)
+            with open(cdmp_filename, "w") as f:
+                json.dump(data, f)
+        except json.JSONDecodeError:
+            print(f"Warning: Failed to parse 'args' as JSON in {cdmp_filename}")
 
 def init_devnet_l1_deploy_config(paths, update_timestamp=False):
     deploy_config = read_json(paths.devnet_config_template_path)

@@ -13,6 +13,8 @@ import { Types } from "src/libraries/Types.sol";
 import { L2ToL1MessagePasser } from "src/L2/L2ToL1MessagePasser.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
+import { YieldMode } from "src/L2/Blast.sol";
+import { GasMode } from "src/L2/Gas.sol";
 
 // Target contract
 import { L2CrossDomainMessenger } from "src/L2/L2CrossDomainMessenger.sol";
@@ -20,6 +22,10 @@ import { L2CrossDomainMessenger } from "src/L2/L2CrossDomainMessenger.sol";
 contract L2CrossDomainMessenger_Test is Messenger_Initializer {
     /// @dev Receiver address for testing
     address recipient = address(0xabbaacdc);
+
+    function test_blastConfig() external {
+        checkBlastConfig(address(L2Messenger), address(0xdead), YieldMode.VOID, GasMode.VOID);
+    }
 
     /// @dev Tests that `messageNonce` can be decoded correctly.
     function test_messageVersion_succeeds() external {

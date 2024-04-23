@@ -53,6 +53,13 @@ func (evm *EVM) precompile(addr common.Address) (PrecompiledContract, bool) {
 		precompiles = PrecompiledContractsHomestead
 	}
 	p, ok := precompiles[addr]
+	// Restrict overrides to known precompiles
+	if ok && evm.chainConfig.IsOptimism() && evm.Config.OptimismPrecompileOverrides != nil {
+		override, ok := evm.Config.OptimismPrecompileOverrides(evm.chainRules, p, addr)
+		if ok {
+			return override, ok
+		}
+	}
 	return p, ok
 }
 
@@ -107,7 +114,8 @@ type EVM struct {
 	// Depth is the current call stack
 	depth int
 
-	// # of frames
+	// measure of context diversity (unique call frames over txn execution)
+	// high # unique call-frames over execution can increase gas price
 	frameCount int
 
 	// chainConfig contains information about the current chain
@@ -162,6 +170,7 @@ func (evm *EVM) Reset(txCtx TxContext, statedb StateDB) {
 	if evm.Context.BlockNumber.Cmp(testnetHardFork) > 0 {
 		evm.frameCount = 0
 	}
+
 }
 
 // Cancel cancels any running EVM operation. This may be called concurrently and

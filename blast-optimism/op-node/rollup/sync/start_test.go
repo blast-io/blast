@@ -74,8 +74,7 @@ func (c *syncStartTestCase) Run(t *testing.T) {
 		Genesis:       genesis,
 		SeqWindowSize: c.SeqWindowSize,
 	}
-	lgr := log.New()
-	lgr.SetHandler(log.DiscardHandler())
+	lgr := log.New(log.DiscardHandler())
 	result, err := FindL2Heads(context.Background(), cfg, chain, chain, lgr, &Config{})
 	if c.ExpectedErr != nil {
 		require.ErrorIs(t, err, c.ExpectedErr, "expected error")
