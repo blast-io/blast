@@ -1,5 +1,5 @@
 #FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:optimism
-FROM local-op-geth
+FROM blast-geth
 
 RUN apk add --no-cache jq
 

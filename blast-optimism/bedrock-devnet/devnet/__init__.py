@@ -144,7 +144,7 @@ def deploy_contracts(paths):
     run_command([
         'forge', 'script', fqn, '--sender', account,
         '--rpc-url', 'http://127.0.0.1:8545', '--broadcast',
-        '--unlocked', '--keystore', '~/.foundry/keystores'
+        '--unlocked'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     shutil.copy(paths.l1_deployments_path, paths.addresses_json_path)
@@ -152,7 +152,7 @@ def deploy_contracts(paths):
     log.info('Syncing contracts.')
     run_command([
         'forge', 'script', fqn, '--sig', 'sync()',
-        '--rpc-url', 'http://127.0.0.1:8545', '--keystore', '~/.foundry/keystores'
+        '--rpc-url', 'http://127.0.0.1:8545'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     log.info('Patching malformatted JSON')

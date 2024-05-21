@@ -142,7 +142,7 @@ func (n *NodeP2P) init(resourcesCtx context.Context, rollupCfg *rollup.Config, l
 		if err != nil {
 			return fmt.Errorf("failed to join blocks gossip topic: %w", err)
 		}
-		log.Info("started p2p host", "addrs", n.host.Addrs(), "peerID", n.host.ID().Pretty())
+		log.Info("started p2p host", "addrs", n.host.Addrs(), "peerID", n.host.ID())
 
 		tcpPort, err := FindActiveTCPPort(n.host)
 		if err != nil {
@@ -176,7 +176,8 @@ func (n *NodeP2P) RequestL2Range(ctx context.Context, start, end eth.L2BlockRef)
 	if !n.AltSyncEnabled() {
 		return fmt.Errorf("cannot request range %s - %s, req-resp sync is not enabled", start, end)
 	}
-	return n.syncCl.RequestL2Range(ctx, start, end)
+	_, err := n.syncCl.RequestL2Range(ctx, start, end)
+	return err
 }
 
 func (n *NodeP2P) Host() host.Host {

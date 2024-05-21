@@ -46,11 +46,7 @@ contract L2OutputOracle_constructor_Test is L2OutputOracle_Initializer {
     /// @dev Tests that the constructor reverts if the submissionInterval is zero.
     function test_constructor_submissionInterval_reverts() external {
         vm.expectRevert("L2OutputOracle: submission interval must be greater than 0");
-        new L2OutputOracle({
-            _submissionInterval: 0,
-            _l2BlockTime: l2BlockTime,
-            _finalizationPeriodSeconds: 7 days
-        });
+        new L2OutputOracle({ _submissionInterval: 0, _l2BlockTime: l2BlockTime, _finalizationPeriodSeconds: 7 days });
     }
 
     /// @dev Tests that initialize reverts if the starting timestamp is invalid.

@@ -1004,10 +1004,10 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Bridge_Initializer {
         uint256 txValueWithDiscount = _tx.value;
         if (value > 0) {
             vm.startPrank(address(ethYieldManager));
-            ethYieldManager.recordNegativeYield(ethYieldManager.totalValue()/9);
+            ethYieldManager.recordNegativeYield(ethYieldManager.totalValue() / 9);
             vm.stopPrank();
 
-            txValueWithDiscount = (_tx.value * ethYieldManager.sharePrice())/1e27;
+            txValueWithDiscount = (_tx.value * ethYieldManager.sharePrice()) / 1e27;
 
             vm.prank(address(multisig));
             ethYieldManager.finalize(1);

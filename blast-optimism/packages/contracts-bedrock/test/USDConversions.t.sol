@@ -30,11 +30,7 @@ contract USDConversions_Test is Bridge_Initializer {
     int128 constant USDC_INDEX = 1;
     int128 constant USDT_INDEX = 2;
 
-    event YieldReport(
-        int256  yield,
-        uint256 insurancePremiumPaid,
-        uint256 insuranceWithdrawn
-    );
+    event YieldReport(int256 yield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn);
 
     error InsufficientInsuranceBalance();
     error InsufficientBalance();
@@ -60,12 +56,17 @@ contract USDConversions_Test is Bridge_Initializer {
         int128 outputToken,
         uint256 inputAmountWad,
         uint256 minOutputAmountWad
-    ) internal {
+    )
+        internal
+    {
         uint256 inputTokenBalance = USDConversions._tokenBalance(inputToken);
         uint256 outputTokenBalance = USDConversions._tokenBalance(outputToken);
         uint256 amountReceived = USDConversions._convert(inputToken, outputToken, inputAmountWad, minOutputAmountWad);
         assertGe(amountReceived, USDConversions._convertDecimals(minOutputAmountWad, outputToken));
-        assertEq(USDConversions._tokenBalance(inputToken), inputTokenBalance - USDConversions._convertDecimals(inputAmountWad, inputToken));
+        assertEq(
+            USDConversions._tokenBalance(inputToken),
+            inputTokenBalance - USDConversions._convertDecimals(inputAmountWad, inputToken)
+        );
         assertEq(USDConversions._tokenBalance(outputToken), outputTokenBalance + amountReceived);
     }
 
@@ -79,7 +80,8 @@ contract USDConversions_Test is Bridge_Initializer {
         _testConvert(DAI_INDEX, USDC_INDEX, 2 ether, 2 ether);
     }
 
-    // TODO: for some reason Curve isn't working on a fork so these tests aren't working, the call to Curve looks correct though. Just a random EVM error that makes it hard to debug.
+    // TODO: for some reason Curve isn't working on a fork so these tests aren't working, the call to Curve looks
+    // correct though. Just a random EVM error that makes it hard to debug.
     function test_usdConversions_DAIToUSDT() external {
         vm.skip(true);
         mintDAI(address(this), 2 ether);

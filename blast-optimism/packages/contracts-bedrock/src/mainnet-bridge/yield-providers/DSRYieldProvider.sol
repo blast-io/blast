@@ -102,7 +102,8 @@ contract DSRYieldProvider is YieldProvider {
         if (amount > 0) {
             DSR_MANAGER.exit(address(YIELD_MANAGER), amount);
         }
-        // pending amount is always 0
+
+        pending = 0;
         claimed = amount;
     }
 

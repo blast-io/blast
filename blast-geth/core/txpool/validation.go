@@ -69,6 +69,9 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 	if tx.Type() == types.DepositTxType {
 		return core.ErrTxTypeNotSupported
 	}
+	if opts.Config.IsOptimism() && tx.Type() == types.BlobTxType {
+		return core.ErrTxTypeNotSupported
+	}
 	// Ensure transactions not implemented by the calling pool are rejected
 	if opts.Accept&(1<<tx.Type()) == 0 {
 		return fmt.Errorf("%w: tx type %v not supported by this pool", core.ErrTxTypeNotSupported, tx.Type())
@@ -245,7 +248,7 @@ func ValidateTransactionWithState(tx *types.Transaction, signer types.Signer, op
 		cost    = tx.Cost()
 	)
 	if opts.L1CostFn != nil {
-		if l1Cost := opts.L1CostFn(tx.RollupDataGas()); l1Cost != nil { // add rollup cost
+		if l1Cost := opts.L1CostFn(tx.RollupCostData()); l1Cost != nil { // add rollup cost
 			cost = cost.Add(cost, l1Cost)
 		}
 	}

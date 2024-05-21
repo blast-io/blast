@@ -17,3 +17,7 @@
 	path = packages/contracts-bedrock/lib/safe-contracts
 	url = https://github.com/safe-global/safe-contracts
 	branch = v1.4.0
+[submodule "op-geth"]
+	path = op-geth
+	url = git@github.com:blast-io/op-geth.git
+	branch = blast-mainnet-master

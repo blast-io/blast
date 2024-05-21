@@ -3,7 +3,6 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -747,18 +746,19 @@ func claimGas(db *state.StateDB, addr common.Address, recipient *common.Address,
 		blockNumber: blockNumber,
 	}
 	result, cfg := stateTransitionLogs(&tp, db, t)
-	tracer := cfg.EVMConfig.Tracer
-	structLogger := tracer.(*logger.StructLogger)
-	tracingResult, err := structLogger.GetResult()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var prettyJSON bytes.Buffer
-	error := json.Indent(&prettyJSON, tracingResult, "", "\t")
-	if error != nil {
-		t.Fatal(error)
-	}
-	fmt.Println(string(prettyJSON.Bytes()))
+	_ = cfg
+	// tracer := cfg.EVMConfig.Tracer
+	// structLogger := tracer.(*logger.StructLogger)
+	// tracingResult, err := structLogger.GetResult()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// var prettyJSON bytes.Buffer
+	// error := json.Indent(&prettyJSON, tracingResult, "", "\t")
+	// if error != nil {
+	// 	t.Fatal(error)
+	// }
+	// fmt.Println(string(prettyJSON.Bytes()))
 
 	if result.Err != nil {
 		t.Fatal(result.Err)

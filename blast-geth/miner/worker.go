@@ -79,6 +79,7 @@ var (
 	errBlockInterruptedByNewHead  = errors.New("new head arrived while building block")
 	errBlockInterruptedByRecommit = errors.New("recommit interrupt while building block")
 	errBlockInterruptedByTimeout  = errors.New("timeout while building block")
+	errBlockInterruptedByResolve  = errors.New("payload resolution while building block")
 )
 
 // environment is the worker's current environment and holds all
@@ -143,6 +144,7 @@ const (
 	commitInterruptNewHead
 	commitInterruptResubmit
 	commitInterruptTimeout
+	commitInterruptResolve
 )
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
@@ -936,8 +938,42 @@ type generateParams struct {
 	beaconRoot  *common.Hash      // The beacon root (cancun field).
 	noTxs       bool              // Flag whether an empty block without any transaction is expected
 
-	txs      types.Transactions // Deposit transactions to include at the start of the block
-	gasLimit *uint64            // Optional gas limit override
+	txs       types.Transactions // Deposit transactions to include at the start of the block
+	gasLimit  *uint64            // Optional gas limit override
+	interrupt *atomic.Int32      // Optional interruption signal to pass down to worker.generateWork
+	isUpdate  bool               // Optional flag indicating that this is building a discardable update
+}
+
+// validateParams validates the given parameters.
+// It currently checks that the parent block is known and that the timestamp is valid,
+// i.e., after the parent block's timestamp.
+// It returns an upper bound of the payload building duration as computed
+// by the difference in block timestamps between the parent and genParams.
+func (w *worker) validateParams(genParams *generateParams) (time.Duration, error) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	// Find the parent block for sealing task
+	parent := w.chain.CurrentBlock()
+	if genParams.parentHash != (common.Hash{}) {
+		block := w.chain.GetBlockByHash(genParams.parentHash)
+		if block == nil {
+			return 0, fmt.Errorf("missing parent %v", genParams.parentHash)
+		}
+		parent = block.Header()
+	}
+
+	// Sanity check the timestamp correctness
+	blockTime := int64(genParams.timestamp) - int64(parent.Time)
+	if blockTime <= 0 && genParams.forceTime {
+		return 0, fmt.Errorf("invalid timestamp, parent %d given %d", parent.Time, genParams.timestamp)
+	}
+
+	// minimum payload build time of 2s
+	if blockTime < 2 {
+		blockTime = 2
+	}
+	return time.Duration(blockTime) * time.Second, nil
 }
 
 // prepareWork constructs the sealing task according to the given parameters,
@@ -1083,17 +1119,27 @@ func (w *worker) generateWork(genParams *generateParams) *newPayloadResult {
 
 	// forced transactions done, fill rest of block with transactions
 	if !genParams.noTxs {
-		interrupt := new(atomic.Int32)
+		// use shared interrupt if present
+		interrupt := genParams.interrupt
+		if interrupt == nil {
+			interrupt = new(atomic.Int32)
+		}
 		timer := time.AfterFunc(w.newpayloadTimeout, func() {
 			interrupt.Store(commitInterruptTimeout)
 		})
-		defer timer.Stop()
 
 		err := w.fillTransactions(interrupt, work)
+		timer.Stop() // don't need timeout interruption any more
 		if errors.Is(err, errBlockInterruptedByTimeout) {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(w.newpayloadTimeout))
+		} else if errors.Is(err, errBlockInterruptedByResolve) {
+			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
+	if intr := genParams.interrupt; intr != nil && genParams.isUpdate && intr.Load() != commitInterruptNone {
+		return &newPayloadResult{err: errInterruptedUpdate}
+	}
+
 	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, nil, work.receipts, genParams.withdrawals)
 	if err != nil {
 		return &newPayloadResult{err: err}
@@ -1136,7 +1182,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
 		// of current interval is larger than the user-specified one.
-		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
+		w.adjustResubmitInterval(&intervalAdjust{inc: false})
 
 	case errors.Is(err, errBlockInterruptedByRecommit):
 		// Notify resubmit loop to increase resubmitting interval if the
@@ -1146,10 +1192,10 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 		if ratio < 0.1 {
 			ratio = 0.1
 		}
-		w.resubmitAdjustCh <- &intervalAdjust{
+		w.adjustResubmitInterval(&intervalAdjust{
 			ratio: ratio,
 			inc:   true,
-		}
+		})
 
 	case errors.Is(err, errBlockInterruptedByNewHead):
 		// If the block building is interrupted by newhead event, discard it
@@ -1231,6 +1277,15 @@ func (w *worker) isTTDReached(header *types.Header) bool {
 	return td != nil && ttd != nil && td.Cmp(ttd) >= 0
 }
 
+// adjustResubmitInterval adjusts the resubmit interval.
+func (w *worker) adjustResubmitInterval(message *intervalAdjust) {
+	select {
+	case w.resubmitAdjustCh <- message:
+	default:
+		log.Warn("the resubmitAdjustCh is full, discard the message")
+	}
+}
+
 // copyReceipts makes a deep copy of the given receipts.
 func copyReceipts(receipts []*types.Receipt) []*types.Receipt {
 	result := make([]*types.Receipt, len(receipts))
@@ -1261,6 +1316,8 @@ func signalToErr(signal int32) error {
 		return errBlockInterruptedByRecommit
 	case commitInterruptTimeout:
 		return errBlockInterruptedByTimeout
+	case commitInterruptResolve:
+		return errBlockInterruptedByResolve
 	default:
 		panic(fmt.Errorf("undefined signal %d", signal))
 	}

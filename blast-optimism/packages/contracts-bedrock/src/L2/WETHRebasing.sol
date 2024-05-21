@@ -101,4 +101,11 @@ contract WETHRebasing is ERC20Rebasing, Semver {
 
         price += (pending / _totalShares);
     }
+
+    /**
+     * @dev The version parameter for the EIP712 domain.
+     */
+    function _EIP712Version() internal override view returns (string memory) {
+        return version();
+    }
 }

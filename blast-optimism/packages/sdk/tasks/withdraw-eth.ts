@@ -65,7 +65,7 @@ task('withdraw-eth-2', 'withdraw ether from L2.')
   .addOptionalParam(
     'l1ContractsJsonPath',
     'Path to a JSON with L1 contract addresses in it',
-    'TODO_FILL_THIS_IN',
+    '/Users/neeraj/Documents/blast/s2',
     types.string
   )
   .addOptionalParam('to', 'recipient of ETH', '', types.string)

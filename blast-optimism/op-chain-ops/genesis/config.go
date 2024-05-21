@@ -116,10 +116,19 @@ type DeployConfig struct {
 	L2GenesisRegolithTimeOffset *hexutil.Uint64 `json:"l2GenesisRegolithTimeOffset,omitempty"`
 	// L2GenesisCanyonTimeOffset is the number of seconds after genesis block that Canyon hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Canyon.
-	L2GenesisCanyonTimeOffset *hexutil.Uint64 `json:"L2GenesisCanyonTimeOffset,omitempty"`
-	// L2GenesisSpanBatchTimeOffset is the number of seconds after genesis block that Span Batch hard fork activates.
-	// Set it to 0 to activate at genesis. Nil to disable SpanBatch.
-	L2GenesisSpanBatchTimeOffset *hexutil.Uint64 `json:"l2GenesisSpanBatchTimeOffset,omitempty"`
+	L2GenesisCanyonTimeOffset *hexutil.Uint64 `json:"l2GenesisCanyonTimeOffset,omitempty"`
+	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Delta hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisDeltaTimeOffset *hexutil.Uint64 `json:"l2GenesisDeltaTimeOffset,omitempty"`
+	// L2GenesisEcotoneTimeOffset is the number of seconds after genesis block that Eclipse hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisEcotoneTimeOffset *hexutil.Uint64 `json:"l2GenesisEcotoneTimeOffset,omitempty"`
+	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Fjord hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisFjordTimeOffset *hexutil.Uint64 `json:"l2GenesisFjordTimeOffset,omitempty"`
+	// L2GenesisInteropTimeOffset is the number of seconds after genesis block that the Interop hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Interop.
+	L2GenesisInteropTimeOffset *hexutil.Uint64 `json:"l2GenesisInteropTimeOffset,omitempty"`
 	// L2GenesisBlockExtraData is configurable extradata. Will default to []byte("BEDROCK") if left unspecified.
 	L2GenesisBlockExtraData []byte `json:"l2GenesisBlockExtraData"`
 	// ProxyAdminOwner represents the owner of the ProxyAdmin predeploy on L2.
@@ -219,7 +228,7 @@ type DeployConfig struct {
 	RecommendedProtocolVersion params.ProtocolVersion `json:"recommendedProtocolVersion"`
 
 	// Shares Predeploy
-	SharesPrice    *hexutil.Big   `json:"sharesPrice"`
+	SharesPrice *hexutil.Big `json:"sharesPrice"`
 
 	// Gas Predeploy
 	GasAdmin       common.Address `json:"gasAdmin"`
@@ -245,6 +254,9 @@ type DeployConfig struct {
 	ETHWithdrawalBuffer *hexutil.Big `json:"ethWithdrawalBuffer"`
 	USDInsuranceFee     *hexutil.Big `json:"usdInsuranceFee"`
 	USDWithdrawalBuffer *hexutil.Big `json:"usdWithdrawalBuffer"`
+
+	// When Cancun activates. Relative to L1 genesis.
+	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -391,6 +403,7 @@ func (d *DeployConfig) Check() error {
 	if d.YieldContract == (common.Address{}) {
 		return fmt.Errorf("%w: Yield Contract cannot be nil", ErrInvalidDeployConfig)
 	}
+
 	// Gas Contract
 	if d.GasAdmin == (common.Address{}) {
 		return fmt.Errorf("%w: Gas Admin cannot be nil", ErrInvalidDeployConfig)
@@ -409,6 +422,35 @@ func (d *DeployConfig) Check() error {
 	}
 	if d.ZeroClaimRate == nil {
 		return fmt.Errorf("%w: Zero Claim Rate cannot be nil", ErrInvalidDeployConfig)
+	}
+
+	// checkFork checks that fork A is before or at the same time as fork B
+	checkFork := func(a, b *hexutil.Uint64, aName, bName string) error {
+		if a == nil && b == nil {
+			return nil
+		}
+		if a == nil && b != nil {
+			return fmt.Errorf("fork %s set (to %d), but prior fork %s missing", bName, *b, aName)
+		}
+		if a != nil && b == nil {
+			return nil
+		}
+		if *a > *b {
+			return fmt.Errorf("fork %s set to %d, but prior fork %s has higher offset %d", bName, *b, aName, *a)
+		}
+		return nil
+	}
+	if err := checkFork(d.L2GenesisRegolithTimeOffset, d.L2GenesisCanyonTimeOffset, "regolith", "canyon"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisCanyonTimeOffset, d.L2GenesisDeltaTimeOffset, "canyon", "delta"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisDeltaTimeOffset, d.L2GenesisEcotoneTimeOffset, "delta", "ecotone"); err != nil {
+		return err
+	}
+	if err := checkFork(d.L2GenesisEcotoneTimeOffset, d.L2GenesisFjordTimeOffset, "ecotone", "fjord"); err != nil {
+		return err
 	}
 
 	return nil
@@ -584,12 +626,46 @@ func (d *DeployConfig) CanyonTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
-func (d *DeployConfig) SpanBatchTime(genesisTime uint64) *uint64 {
-	if d.L2GenesisSpanBatchTimeOffset == nil {
+func (d *DeployConfig) DeltaTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisDeltaTimeOffset == nil {
 		return nil
 	}
 	v := uint64(0)
-	if offset := *d.L2GenesisSpanBatchTimeOffset; offset > 0 {
+
+	if offset := *d.L2GenesisDeltaTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) EcotoneTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisEcotoneTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisEcotoneTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) FjordTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisFjordTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisFjordTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) InteropTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisInteropTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisInteropTimeOffset; offset > 0 {
 		v = genesisTime + uint64(offset)
 	}
 	return &v
@@ -633,7 +709,10 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		L1SystemConfigAddress:  d.SystemConfigProxy,
 		RegolithTime:           d.RegolithTime(l1StartBlock.Time()),
 		CanyonTime:             d.CanyonTime(l1StartBlock.Time()),
-		SpanBatchTime:          d.SpanBatchTime(l1StartBlock.Time()),
+		DeltaTime:              d.DeltaTime(l1StartBlock.Time()),
+		EcotoneTime:            d.EcotoneTime(l1StartBlock.Time()),
+		FjordTime:              d.FjordTime(l1StartBlock.Time()),
+		InteropTime:            d.InteropTime(l1StartBlock.Time()),
 	}, nil
 }
 
@@ -709,7 +788,7 @@ func (d *L1Deployments) GetName(addr common.Address) string {
 }
 
 // Check will ensure that the L1Deployments are sane
-func (d *L1Deployments) Check() error {
+func (d *L1Deployments) Check(*DeployConfig) error {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -782,6 +861,47 @@ func NewStateDump(path string) (*gstate.Dump, error) {
 	return &dump, nil
 }
 
+// ForgeDump is a simple alias for state.Dump that can read "nonce" as a hex string.
+// It appears as if updates to foundry have changed the serialization of the state dump.
+type ForgeDump gstate.Dump
+
+func (d *ForgeDump) UnmarshalJSON(b []byte) error {
+	type forgeDumpAccount struct {
+		Balance     string                 `json:"balance"`
+		Nonce       hexutil.Uint64         `json:"nonce"`
+		Root        hexutil.Bytes          `json:"root"`
+		CodeHash    hexutil.Bytes          `json:"codeHash"`
+		Code        hexutil.Bytes          `json:"code,omitempty"`
+		Storage     map[common.Hash]string `json:"storage,omitempty"`
+		Address     *common.Address        `json:"address,omitempty"`
+		AddressHash hexutil.Bytes          `json:"key,omitempty"`
+	}
+	type forgeDump struct {
+		Root     string                      `json:"root"`
+		Accounts map[string]forgeDumpAccount `json:"accounts"`
+	}
+	var dump forgeDump
+	if err := json.Unmarshal(b, &dump); err != nil {
+		return err
+	}
+
+	d.Root = dump.Root
+	d.Accounts = make(map[common.Address]gstate.DumpAccount)
+	for addr, acc := range dump.Accounts {
+		d.Accounts[common.HexToAddress(addr)] = gstate.DumpAccount{
+			Balance:  acc.Balance,
+			Nonce:    (uint64)(acc.Nonce),
+			Root:     acc.Root,
+			CodeHash: acc.CodeHash,
+			Code:     acc.Code,
+			Storage:  acc.Storage,
+			Address:  acc.Address,
+			// AddressHash: acc.AddressHash,
+		}
+	}
+	return nil
+}
+
 // NewL2ImmutableConfig will create an ImmutableConfig given an instance of a
 // DeployConfig and a block.
 func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.ImmutableConfig, error) {
@@ -852,7 +972,7 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	}
 
 	immutable["Gas"] = immutables.ImmutableValues{
-		"admin":          config.GasAdmin,
+		"admin": config.GasAdmin,
 	}
 
 	immutable["Blast"] = immutables.ImmutableValues{
@@ -929,7 +1049,7 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"_initializing": false,
 	}
 	storage["Shares"] = state.StorageValues{
-		"price": config.SharesPrice.ToInt(),
+		"price":         config.SharesPrice.ToInt(),
 		"_initialized":  initializedValue,
 		"_initializing": false,
 	}
@@ -940,8 +1060,8 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"baseClaimRate":  config.BaseClaimRate.ToInt(),
 		"ceilGasSeconds": config.CeilGasSeconds.ToInt(),
 		"ceilClaimRate":  config.CeilClaimRate.ToInt(),
-		"_initialized":  initializedValue,
-		"_initializing": false,
+		"_initialized":   initializedValue,
+		"_initializing":  false,
 	}
 	governorMap := make(map[any]any)
 	governorMap[predeploys.L2BlastBridgeAddr.String()] = "0xdead"
@@ -953,13 +1073,13 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 	storage["Blast"] = state.StorageValues{
 		"_initialized":  initializedValue,
 		"_initializing": false,
-		"governorMap": governorMap,
+		"governorMap":   governorMap,
 	}
 	storage["WETHRebasing"] = state.StorageValues{
 		"_initialized":  initializedValue,
 		"_initializing": false,
 		"price":         config.SharesPrice.ToInt(),
-		"name":	         "Wrapped Ether",
+		"name":          "Wrapped Ether",
 		"symbol":        "WETH",
 	}
 	storage["USDB"] = state.StorageValues{

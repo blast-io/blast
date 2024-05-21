@@ -412,4 +412,11 @@ abstract contract ERC20Rebasing is ERC20PermitUpgradeable, SharesBase, IERC20 {
     function _computeShareValue(uint256 shares, uint256 remainders) internal view returns (uint256) {
         return price * shares + remainders;
     }
+
+    /**
+     * @dev The name parameter for the EIP712 domain.
+     */
+    function _EIP712Name() internal override view returns (string memory) {
+        return name;
+    }
 }

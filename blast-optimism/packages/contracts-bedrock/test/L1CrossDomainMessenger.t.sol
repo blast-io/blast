@@ -179,7 +179,7 @@ contract L1CrossDomainMessenger_Test is Messenger_Initializer {
 
         emit RelayedMessage(hash);
 
-        L1Messenger.relayMessage{value: 90}(
+        L1Messenger.relayMessage{ value: 90 }(
             Encoding.encodeVersionedNonce({ _nonce: 0, _version: 1 }), // nonce
             sender,
             target,
@@ -201,17 +201,17 @@ contract L1CrossDomainMessenger_Test is Messenger_Initializer {
 
         MockRecipient _recipient = new MockRecipient();
 
-        vm.expectCall(address(recipient), hex"");
+        vm.expectCall(address(_recipient), hex"");
 
         // set the value of op.l2Sender() to be the L2 Cross Domain Messenger.
         vm.store(address(op), bytes32(senderSlotIndex), bytes32(abi.encode(sender)));
         vm.prank(address(op));
 
         bytes32 hash = Hashing.hashCrossDomainMessage(
-            Encoding.encodeVersionedNonce({ _nonce: 0, _version: 1 }), sender, address(recipient), value, 0, hex""
+            Encoding.encodeVersionedNonce({ _nonce: 0, _version: 1 }), sender, address(_recipient), value, 0, hex""
         );
 
-        L1Messenger.relayMessage{value: 90}(
+        L1Messenger.relayMessage{ value: 90 }(
             Encoding.encodeVersionedNonce({ _nonce: 0, _version: 1 }), // nonce
             sender,
             address(_recipient),
@@ -221,28 +221,27 @@ contract L1CrossDomainMessenger_Test is Messenger_Initializer {
         );
 
         assertEq(address(L1Messenger).balance, 90);
-        assertEq(address(recipient).balance, 0);
+        assertEq(address(_recipient).balance, 0);
         assertEq(L1Messenger.successfulMessages(hash), false);
         assertEq(L1Messenger.failedMessages(hash), true);
 
         _recipient.setReceive(true);
 
         vm.expectEmit(true, true, true, true);
-
         emit RelayedMessage(hash);
 
         vm.prank(address(sender));
         L1Messenger.relayMessage(
             Encoding.encodeVersionedNonce({ _nonce: 0, _version: 1 }), // nonce
             sender,
-            address(recipient),
+            address(_recipient),
             value,
             0,
             hex""
         );
 
         assertEq(address(L1Messenger).balance, 0);
-        assertEq(address(recipient).balance, 90);
+        assertEq(address(_recipient).balance, 90);
         assertEq(L1Messenger.successfulMessages(hash), true);
         assertEq(L1Messenger.failedMessages(hash), true);
     }

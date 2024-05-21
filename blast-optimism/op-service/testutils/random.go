@@ -246,7 +246,7 @@ func RandomReceipt(rng *rand.Rand, signer types.Signer, tx *types.Transaction, t
 	}
 }
 
-func RandomHeader(rng *rand.Rand) *types.Header {
+func RandomHeaderWithTime(rng *rand.Rand, t uint64) *types.Header {
 	return &types.Header{
 		ParentHash:  RandomHash(rng),
 		UncleHash:   types.EmptyUncleHash,
@@ -259,7 +259,7 @@ func RandomHeader(rng *rand.Rand) *types.Header {
 		Number:      big.NewInt(1 + rng.Int63n(100_000_000)),
 		GasLimit:    0,
 		GasUsed:     0,
-		Time:        uint64(rng.Int63n(2_000_000_000)),
+		Time:        t,
 		Extra:       RandomData(rng, rng.Intn(33)),
 		MixDigest:   common.Hash{},
 		Nonce:       types.BlockNonce{},
@@ -267,15 +267,17 @@ func RandomHeader(rng *rand.Rand) *types.Header {
 	}
 }
 
+func RandomHeader(rng *rand.Rand) *types.Header {
+	t := uint64(rng.Int63n(2_000_000_000))
+	return RandomHeaderWithTime(rng, t)
+}
+
 func RandomBlock(rng *rand.Rand, txCount uint64) (*types.Block, []*types.Receipt) {
 	return RandomBlockPrependTxs(rng, int(txCount))
 }
 
-// RandomBlockPrependTxs returns a random block with txCount randomly generated
-// transactions and additionally the transactions ptxs prepended. So the total
-// number of transactions is len(ptxs) + txCount.
-func RandomBlockPrependTxs(rng *rand.Rand, txCount int, ptxs ...*types.Transaction) (*types.Block, []*types.Receipt) {
-	header := RandomHeader(rng)
+func RandomBlockPrependTxsWithTime(rng *rand.Rand, txCount int, t uint64, ptxs ...*types.Transaction) (*types.Block, []*types.Receipt) {
+	header := RandomHeaderWithTime(rng, t)
 	signer := types.NewLondonSigner(big.NewInt(rng.Int63n(1000)))
 	txs := make([]*types.Transaction, 0, txCount+len(ptxs))
 	txs = append(txs, ptxs...)
@@ -308,6 +310,14 @@ func RandomBlockPrependTxs(rng *rand.Rand, txCount int, ptxs ...*types.Transacti
 	return block, receipts
 }
 
+// RandomBlockPrependTxs returns a random block with txCount randomly generated
+// transactions and additionally the transactions ptxs prepended. So the total
+// number of transactions is len(ptxs) + txCount.
+func RandomBlockPrependTxs(rng *rand.Rand, txCount int, ptxs ...*types.Transaction) (*types.Block, []*types.Receipt) {
+	t := uint64(rng.Int63n(2_000_000_000))
+	return RandomBlockPrependTxsWithTime(rng, txCount, t, ptxs...)
+}
+
 func RandomOutputResponse(rng *rand.Rand) *eth.OutputResponse {
 	return &eth.OutputResponse{
 		Version:               eth.Bytes32(RandomHash(rng)),
@@ -324,7 +334,7 @@ func RandomOutputResponse(rng *rand.Rand) *eth.OutputResponse {
 			UnsafeL2:           RandomL2BlockRef(rng),
 			SafeL2:             RandomL2BlockRef(rng),
 			FinalizedL2:        RandomL2BlockRef(rng),
-			EngineSyncTarget:   RandomL2BlockRef(rng),
+			PendingSafeL2:      RandomL2BlockRef(rng),
 		},
 	}
 }

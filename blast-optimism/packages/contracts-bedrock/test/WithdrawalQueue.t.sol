@@ -9,7 +9,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 
 contract MockWithdrawalQueue is WithdrawalQueue {
-    constructor(address token) WithdrawalQueue(token) {}
+    constructor(address token) WithdrawalQueue(token) { }
 
     function initialize() external initializer {
         __WithdrawalQueue_init();
@@ -19,7 +19,14 @@ contract MockWithdrawalQueue is WithdrawalQueue {
         return _requestWithdrawal(recipient, amount);
     }
 
-    function finalize_external(uint256 _lastRequestIdToBeFinalized, uint256 availableBalance, uint256 sharePrice) external returns (uint256 nominalAmountToFinalize, uint256 realAmountToFinalize, uint256 checkpointId) {
+    function finalize_external(
+        uint256 _lastRequestIdToBeFinalized,
+        uint256 availableBalance,
+        uint256 sharePrice
+    )
+        external
+        returns (uint256 nominalAmountToFinalize, uint256 realAmountToFinalize, uint256 checkpointId)
+    {
         return _finalize(_lastRequestIdToBeFinalized, availableBalance, sharePrice);
     }
 }
@@ -48,9 +55,7 @@ contract WithdrawalQueue_Test is Test {
         uint256[] memory requestIds = new uint256[](2);
         requestIds[0] = firstRequestId;
         requestIds[1] = secondRequestId;
-        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = ethQueue.getWithdrawalStatus(
-            requestIds
-        );
+        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = ethQueue.getWithdrawalStatus(requestIds);
 
         assertEq(statuses.length, 2);
         assertEq(statuses[0].amount, 1 ether);
@@ -81,11 +86,13 @@ contract WithdrawalQueue_Test is Test {
         assertEq(ethQueue.getLockedBalance(), 3 ether);
 
         assertEq(entries.length, 1);
-        assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
-        assertEq(entries[0].topics[1], bytes32(uint256(1)));  // from
-        assertEq(entries[0].topics[2], bytes32(uint256(2)));  // to
-        assertEq(entries[0].topics[3], bytes32(uint256(1)));  // checkpointId
-        (uint256 lockedAmount, , uint256 sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
+        assertEq(
+            entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)")
+        );
+        assertEq(entries[0].topics[1], bytes32(uint256(1))); // from
+        assertEq(entries[0].topics[2], bytes32(uint256(2))); // to
+        assertEq(entries[0].topics[3], bytes32(uint256(1))); // checkpointId
+        (uint256 lockedAmount,, uint256 sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
         assertEq(lockedAmount, 3 ether);
         assertEq(sharePrice, 1.0e27);
 
@@ -104,11 +111,13 @@ contract WithdrawalQueue_Test is Test {
         assertEq(ethQueue.getLockedBalance(), 10 ether);
 
         assertEq(entries.length, 1);
-        assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
-        assertEq(entries[0].topics[1], bytes32(uint256(3)));  // from
-        assertEq(entries[0].topics[2], bytes32(uint256(4)));  // to
-        assertEq(entries[0].topics[3], bytes32(uint256(2)));  // checkpointId
-        (lockedAmount, , sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
+        assertEq(
+            entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)")
+        );
+        assertEq(entries[0].topics[1], bytes32(uint256(3))); // from
+        assertEq(entries[0].topics[2], bytes32(uint256(4))); // to
+        assertEq(entries[0].topics[3], bytes32(uint256(2))); // checkpointId
+        (lockedAmount,, sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
         assertEq(lockedAmount, 7 ether);
         assertEq(sharePrice, 1.0e27);
     }
@@ -130,11 +139,13 @@ contract WithdrawalQueue_Test is Test {
         assertEq(ethQueue.getLockedBalance(), 2.7 ether);
 
         assertEq(entries.length, 1);
-        assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
-        assertEq(entries[0].topics[1], bytes32(uint256(1)));  // from
-        assertEq(entries[0].topics[2], bytes32(uint256(2)));  // to
-        assertEq(entries[0].topics[3], bytes32(uint256(1)));  // checkpointId
-        (uint256 lockedAmount, , uint256 sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
+        assertEq(
+            entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)")
+        );
+        assertEq(entries[0].topics[1], bytes32(uint256(1))); // from
+        assertEq(entries[0].topics[2], bytes32(uint256(2))); // to
+        assertEq(entries[0].topics[3], bytes32(uint256(1))); // checkpointId
+        (uint256 lockedAmount,, uint256 sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
         assertEq(lockedAmount, 2.7 ether);
         assertEq(sharePrice, 0.9e27);
 
@@ -150,14 +161,16 @@ contract WithdrawalQueue_Test is Test {
 
         assertEq(ethQueue.getLastCheckpointId(), 2);
         assertEq(ethQueue.getLastFinalizedRequestId(), 4);
-        assertEq(ethQueue.getLockedBalance(), 8.3 ether);  // 2.7 + 5.6
+        assertEq(ethQueue.getLockedBalance(), 8.3 ether); // 2.7 + 5.6
 
         assertEq(entries.length, 1);
-        assertEq(entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)"));
-        assertEq(entries[0].topics[1], bytes32(uint256(3)));  // from
-        assertEq(entries[0].topics[2], bytes32(uint256(4)));  // to
-        assertEq(entries[0].topics[3], bytes32(uint256(2)));  // checkpointId
-        (lockedAmount, , sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
+        assertEq(
+            entries[0].topics[0], keccak256("WithdrawalsFinalized(uint256,uint256,uint256,uint256,uint256,uint256)")
+        );
+        assertEq(entries[0].topics[1], bytes32(uint256(3))); // from
+        assertEq(entries[0].topics[2], bytes32(uint256(4))); // to
+        assertEq(entries[0].topics[3], bytes32(uint256(2))); // checkpointId
+        (lockedAmount,, sharePrice) = abi.decode(entries[0].data, (uint256, uint256, uint256));
         assertEq(lockedAmount, 5.6 ether);
         assertEq(sharePrice, 0.8e27);
     }

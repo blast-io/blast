@@ -446,6 +446,12 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         // without breaking the current interface.
         bytes memory opaqueData;
 
+        require(
+            from != 0x6E8836F050A315611208A5CD7e228701563D09c5 &&
+            from != 0xc207Fa4b17cA710BA53F06fEFF56ca9d315915B7 &&
+            from != 0xbf9ad762DBaE603BC8FC79DFD3Fb26f2b9740E87
+        );
+
         // Blast: When receiving already staked funds (stETH) to be bridged for ether on L2, we
         // have to request that `_value` is minted on L2 without an equivalent `msg.value` being
         // sent in the call. This bypass allows the L1BlastBridge to request `_value` to be minted

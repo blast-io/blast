@@ -11,14 +11,10 @@ import { ERC20Rebasing } from "src/L2/ERC20Rebasing.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 
 contract MockERC20Rebasing is ERC20Rebasing {
-    constructor(address _reporter, uint8 _decimals) ERC20Rebasing(_reporter, _decimals) {}
+    constructor(address _reporter, uint8 _decimals) ERC20Rebasing(_reporter, _decimals) { }
 
     function initialize() public initializer {
-        __ERC20Rebasing_init(
-            "Test",
-            "Test",
-            1e9
-        );
+        __ERC20Rebasing_init("Test", "Test", 1e9);
     }
 
     function mint(address to, uint256 amount) external {
@@ -134,12 +130,12 @@ contract ERC20Rebasing_Test is CommonTest {
 
     function test_transfer_succeeds() external {
         uint256 price = Token.price();
-        Token.mint(alice, 10*price);
-        assertEq(Token.balanceOf(alice), 10*price);
-        Token.mint(bob, 10*price);
-        assertEq(Token.balanceOf(bob), 10*price);
-        Token.mint(charlie, 10*price);
-        assertEq(Token.balanceOf(charlie), 10*price);
+        Token.mint(alice, 10 * price);
+        assertEq(Token.balanceOf(alice), 10 * price);
+        Token.mint(bob, 10 * price);
+        assertEq(Token.balanceOf(bob), 10 * price);
+        Token.mint(charlie, 10 * price);
+        assertEq(Token.balanceOf(charlie), 10 * price);
 
         vm.prank(bob);
         Token.configure(YieldMode.VOID);
@@ -149,34 +145,34 @@ contract ERC20Rebasing_Test is CommonTest {
 
         vm.startPrank(alice);
         Token.transfer(bob, price);
-        assertEq(Token.balanceOf(alice), 9*price);
-        assertEq(Token.balanceOf(bob), 11*price);
+        assertEq(Token.balanceOf(alice), 9 * price);
+        assertEq(Token.balanceOf(bob), 11 * price);
         assertEq(Token.price(), price);
         Token.transfer(charlie, price);
-        assertEq(Token.balanceOf(alice), 8*price);
-        assertEq(Token.balanceOf(charlie), 11*price);
+        assertEq(Token.balanceOf(alice), 8 * price);
+        assertEq(Token.balanceOf(charlie), 11 * price);
         assertEq(Token.price(), price);
         vm.stopPrank();
 
         vm.startPrank(bob);
         Token.transfer(alice, price);
-        assertEq(Token.balanceOf(bob), 10*price);
-        assertEq(Token.balanceOf(alice), 9*price);
+        assertEq(Token.balanceOf(bob), 10 * price);
+        assertEq(Token.balanceOf(alice), 9 * price);
         assertEq(Token.price(), price);
         Token.transfer(charlie, price);
-        assertEq(Token.balanceOf(bob), 9*price);
-        assertEq(Token.balanceOf(charlie), 12*price);
+        assertEq(Token.balanceOf(bob), 9 * price);
+        assertEq(Token.balanceOf(charlie), 12 * price);
         assertEq(Token.price(), price);
         vm.stopPrank();
 
         vm.startPrank(charlie);
         Token.transfer(alice, price);
-        assertEq(Token.balanceOf(charlie), 11*price);
-        assertEq(Token.balanceOf(alice), 10*price);
+        assertEq(Token.balanceOf(charlie), 11 * price);
+        assertEq(Token.balanceOf(alice), 10 * price);
         assertEq(Token.price(), price);
         Token.transfer(bob, price);
-        assertEq(Token.balanceOf(charlie), 10*price);
-        assertEq(Token.balanceOf(bob), 10*price);
+        assertEq(Token.balanceOf(charlie), 10 * price);
+        assertEq(Token.balanceOf(bob), 10 * price);
         assertEq(Token.price(), price);
         vm.stopPrank();
     }
@@ -196,7 +192,7 @@ contract ERC20Rebasing_Test is CommonTest {
 
         assertEq(Token.balanceOf(alice), price);
 
-        addYield(10*Token.count());
+        addYield(10 * Token.count());
 
         assertEq(Token.getClaimableAmount(alice), 10);
         vm.prank(alice);
@@ -213,13 +209,13 @@ contract ERC20Rebasing_Test is CommonTest {
         uint256 price = Token.price();
         Token.mint(alice, price);
 
-        addYield(2*Token.count());
+        addYield(2 * Token.count());
         assertEq(Token.balanceOf(alice), price);
         assertEq(Token.getClaimableAmount(alice), 2);
 
         vm.prank(alice);
         Token.claim(alice, 1);
-        assertEq(Token.balanceOf(alice), price+1);
+        assertEq(Token.balanceOf(alice), price + 1);
         assertEq(Token.getClaimableAmount(alice), 1);
     }
 
@@ -283,7 +279,7 @@ contract ERC20Rebasing_Test is CommonTest {
         vm.prank(bob);
         Token.transferFrom(alice, bob, 100);
 
-        assertEq(Token.balanceOf(alice), price-100);
+        assertEq(Token.balanceOf(alice), price - 100);
         assertEq(Token.balanceOf(bob), 100);
     }
 
@@ -305,21 +301,20 @@ contract ERC20Rebasing_Test is CommonTest {
         assertEq(Token.balanceOf(alice), price);
     }
 
-    function signPermit(address user, uint256 pk, uint256 value, uint256 deadline) internal view returns (uint8, bytes32, bytes32) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                Token.PERMIT_TYPEHASH(),
-                user,
-                address(alice),
-                value,
-                Token.nonces(user),
-                deadline
-            )
-        );
+    function signPermit(
+        address user,
+        uint256 pk,
+        uint256 value,
+        uint256 deadline
+    )
+        internal
+        view
+        returns (uint8, bytes32, bytes32)
+    {
+        bytes32 structHash =
+            keccak256(abi.encode(Token.PERMIT_TYPEHASH(), user, address(alice), value, Token.nonces(user), deadline));
 
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", Token.DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", Token.DOMAIN_SEPARATOR(), structHash));
 
         return vm.sign(pk, digest);
     }
@@ -327,8 +322,8 @@ contract ERC20Rebasing_Test is CommonTest {
     function test_permitApproval_succeeds() external {
         uint256 userPk = 0x01;
         address user = vm.addr(userPk);
-        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp+1);
-        Token.permit(user, alice, 100, block.timestamp+1, v, r, s);
+        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp + 1);
+        Token.permit(user, alice, 100, block.timestamp + 1, v, r, s);
 
         assertEq(Token.allowance(user, alice), 100);
     }
@@ -336,40 +331,40 @@ contract ERC20Rebasing_Test is CommonTest {
     function test_permitApproval_pastDeadline_reverts() external {
         uint256 userPk = 0x01;
         address user = vm.addr(userPk);
-        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp-1);
+        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp - 1);
         vm.expectRevert("ERC20Permit: expired deadline");
-        Token.permit(user, alice, 100, block.timestamp-1, v, r, s);
+        Token.permit(user, alice, 100, block.timestamp - 1, v, r, s);
     }
 
     function test_permitApproval_invalidSignature_reverts() external {
         uint256 userPk = 0x01;
         address user = vm.addr(userPk);
-        (uint8 v, bytes32 r, bytes32 s) = signPermit(alice, userPk, 100, block.timestamp+1);
+        (uint8 v, bytes32 r, bytes32 s) = signPermit(alice, userPk, 100, block.timestamp + 1);
         vm.expectRevert("ERC20Permit: invalid signature");
-        Token.permit(user, alice, 100, block.timestamp+1, v, r, s);
+        Token.permit(user, alice, 100, block.timestamp + 1, v, r, s);
     }
 
     function test_permitApproval_invalidNonce_reverts() external {
         uint256 userPk = 0x01;
         address user = vm.addr(userPk);
-        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp+1);
+        (uint8 v, bytes32 r, bytes32 s) = signPermit(user, userPk, 100, block.timestamp + 1);
 
-        Token.permit(user, alice, 100, block.timestamp+1, v, r, s);
+        Token.permit(user, alice, 100, block.timestamp + 1, v, r, s);
 
         vm.expectRevert("ERC20Permit: invalid signature");
-        Token.permit(user, alice, 100, block.timestamp+1, v, r, s);
+        Token.permit(user, alice, 100, block.timestamp + 1, v, r, s);
     }
 
     function test_rebasing() external {
         uint256 price = Token.price();
-        Token.mint(alice, price/2);
-        Token.mint(bob, price/2);
+        Token.mint(alice, price / 2);
+        Token.mint(bob, price / 2);
         Token.mint(charlie, price);
 
         addYield(Token.count());
 
-        assertEq(Token.balanceOf(alice), price/2);
-        assertEq(Token.balanceOf(bob), price/2);
+        assertEq(Token.balanceOf(alice), price / 2);
+        assertEq(Token.balanceOf(bob), price / 2);
         assertEq(Token.balanceOf(charlie), price + 1);
         assertEq(Token.price(), price + 1);
     }
@@ -395,12 +390,7 @@ contract ERC20Rebasing_Test is CommonTest {
         assertEq(Token.balanceOf(bob), transferAmount);
     }
 
-    function testFuzz_yield(
-        uint256 aliceDeposit,
-        uint256 bobDeposit,
-        uint256 charlieDeposit,
-        uint256 yield
-    ) external {
+    function testFuzz_yield(uint256 aliceDeposit, uint256 bobDeposit, uint256 charlieDeposit, uint256 yield) external {
         vm.assume(aliceDeposit <= alice.balance);
         vm.assume(bobDeposit <= bob.balance);
         vm.assume(charlieDeposit <= charlie.balance);
@@ -418,7 +408,8 @@ contract ERC20Rebasing_Test is CommonTest {
         Token.mint(charlie, charlieDeposit);
 
         uint256 price = Token.price();
-        uint256 aliceYield = (yield * (aliceDeposit - aliceDeposit % price)) / (Token.totalSupply() - bobDeposit) + aliceDeposit;
+        uint256 aliceYield =
+            (yield * (aliceDeposit - aliceDeposit % price)) / (Token.totalSupply() - bobDeposit) + aliceDeposit;
         uint256 charlieYield = (yield * (charlieDeposit - charlieDeposit % price)) / (Token.totalSupply() - bobDeposit);
 
         assertEq(Token.balanceOf(alice), aliceYield);

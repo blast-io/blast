@@ -115,7 +115,9 @@ contract LidoYieldProvider is YieldProvider {
         uint256 requestId = WITHDRAWAL_QUEUE.requestWithdrawals(amounts, address(YIELD_MANAGER))[0];
         LidoYieldProvider(THIS).enqueueUnstakeRequest(requestId);
         emit LidoUnstakeInitiated(requestId, amount);
+
         pending = amount;
+        claimed = 0;
     }
 
     function lastUnstakeRequestIndex() public view returns (uint256) {
@@ -169,19 +171,19 @@ contract LidoYieldProvider is YieldProvider {
     ///         delegate-called by the yield manager.
     function _claim() internal onlyDelegateCall returns (uint256 claimed, uint256 expected) {
         LidoYieldProvider yp = LidoYieldProvider(THIS);
-        uint256 lastClaimedIndex = yp.lastClaimedIndex();
+        uint256 _lastClaimedIndex = yp.lastClaimedIndex();
         uint256 lastRequestIndex = yp.lastUnstakeRequestIndex();
 
-        if (lastClaimedIndex == lastRequestIndex) {
+        if (_lastClaimedIndex == lastRequestIndex) {
             // nothing to claim
             return (0, 0);
         }
         // sanity check
-        require(lastClaimedIndex < lastRequestIndex, "invalid claim index");
+        require(_lastClaimedIndex < lastRequestIndex, "invalid claim index");
 
         // withdrawal status check for a batch of requests
-        uint256 firstIndex = lastClaimedIndex + 1;
-        uint256 lastIndex = (lastRequestIndex - lastClaimedIndex) > claimBatchSize
+        uint256 firstIndex = _lastClaimedIndex + 1;
+        uint256 lastIndex = (lastRequestIndex - _lastClaimedIndex) > claimBatchSize
             ? firstIndex + claimBatchSize - 1
             : lastRequestIndex;
 
@@ -200,9 +202,9 @@ contract LidoYieldProvider is YieldProvider {
             }
             expected += statuses[i].amountOfStETH;
         }
-        uint256 lastClaimableIndex = i + lastClaimedIndex;
+        uint256 lastClaimableIndex = i + _lastClaimedIndex;
         // if there is nothing to claim, return
-        if (lastClaimableIndex == lastClaimedIndex) {
+        if (lastClaimableIndex == _lastClaimedIndex) {
             return (0, 0);
         }
 

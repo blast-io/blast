@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSL 1.1 - Copyright 2024 MetaLayer Labs Ltd.
-pragma solidity ^0.8.15;
+pragma solidity 0.8.15;
 
 import { ClonesWithImmutableArgs } from "@cwia/ClonesWithImmutableArgs.sol";
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";

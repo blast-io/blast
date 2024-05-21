@@ -113,4 +113,11 @@ contract USDB is ERC20Rebasing, Semver, IOptimismMintableERC20 {
         _withdraw(_from, _amount);
         emit Transfer(_from, address(0), _amount);
     }
+
+    /**
+     * @dev The version parameter for the EIP712 domain.
+     */
+    function _EIP712Version() internal override view returns (string memory) {
+        return version();
+    }
 }

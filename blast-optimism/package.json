@@ -25,7 +25,7 @@
     "preinstall": "npx only-allow pnpm",
     "postinstall": "patch-package",
     "ready": "pnpm lint && pnpm test",
-    "prepare": "cd .. && husky install blast-optimism",
+    "prepare": "cd .. && husky install",
     "release": "npx nx run-many --target=build --skip-nx-cache && pnpm changeset publish",
     "release:check": "changeset status --verbose --since=origin/main",
     "release:publish": "pnpm install --frozen-lockfile && npx nx run-many --target=build && pnpm build && changeset publish",

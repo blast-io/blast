@@ -132,6 +132,28 @@ func Run(l1RpcUrl string, l1RpcKind string, l2RpcUrl string, l2OracleAddr common
 		os.Exit(1)
 	}
 	fmt.Printf("Configuration: %s\n", argsStr)
+
+	logger := oplog.DefaultCLIConfig()
+	logger.Level = log.LevelDebug
+	rollupCfg, err := rollup.LoadOPStackRollupConfig(chainCfg.ChainID.Uint64())
+	if err != nil {
+		return fmt.Errorf("failed to load rollup config: %w", err)
+	}
+	offlineCfg := config.Config{
+		Rollup:             rollupCfg,
+		DataDir:            dataDir,
+		L2ChainConfig:      chainCfg,
+		L2Head:             l2Head,
+		L2OutputRoot:       agreedOutput.OutputRoot,
+		L2Claim:            l2Claim,
+		L2ClaimBlockNumber: l2BlockNumber.Uint64(),
+		L1Head:             l1Head,
+	}
+	onlineCfg := offlineCfg
+	onlineCfg.L1URL = l1RpcUrl
+	onlineCfg.L2URL = l2RpcUrl
+	onlineCfg.L1RPCKind = sources.RPCProviderKind(l1RpcKind)
+
 	fmt.Println("Running in online mode")
 	err = runFaultProofProgram(ctx, append(args, "--l1", l1RpcUrl, "--l2", l2RpcUrl, "--l1.rpckind", l1RpcKind))
 	if err != nil {

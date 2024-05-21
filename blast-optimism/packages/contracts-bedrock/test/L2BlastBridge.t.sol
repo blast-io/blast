@@ -124,7 +124,13 @@ contract PreBridgeERC20 is Bridge_Initializer {
         );
         uint64 baseGas = L2Messenger.baseGas(message, 1000);
         bytes memory withdrawalData = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l2BlastBridge), address(l1BlastBridge), 0, 1000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l2BlastBridge),
+            address(l1BlastBridge),
+            0,
+            1000,
+            message
         );
         bytes32 withdrawalHash = Hashing.hashWithdrawal(
             Types.WithdrawalTransaction({
@@ -207,7 +213,13 @@ contract PreBridgeERC20To is Bridge_Initializer {
         );
         uint64 baseGas = L2Messenger.baseGas(message, 1000);
         bytes memory withdrawalData = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l2BlastBridge), address(l1BlastBridge), 0, 1000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l2BlastBridge),
+            address(l1BlastBridge),
+            0,
+            1000,
+            message
         );
         bytes32 withdrawalHash = Hashing.hashWithdrawal(
             Types.WithdrawalTransaction({
@@ -238,9 +250,7 @@ contract PreBridgeERC20To is Bridge_Initializer {
 
         vm.expectCall(
             address(l2BlastBridge),
-            abi.encodeWithSelector(
-                l2BlastBridge.bridgeERC20To.selector, _l2Token, address(DAI), bob, 100, 1000, hex""
-            )
+            abi.encodeWithSelector(l2BlastBridge.bridgeERC20To.selector, _l2Token, address(DAI), bob, 100, 1000, hex"")
         );
 
         vm.expectCall(

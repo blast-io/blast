@@ -120,6 +120,53 @@ can be accessed in two interchangeable ways:
     - Overhead as big-endian `uint256` in slot `5`
     - Scalar as big-endian `uint256` in slot `6`
 
+#### Ecotone L1-Cost fee changes (EIP-4844 DA)
+
+Ecotone allows posting batches via Blobs which are subject to a new fee market. To account for this feature,
+L1 cost is computed as:
+
+`(zeroes*4 + ones*16) * (16*l1Basefee*l1BasefeeScalar + l1BlobBasefee*l1BlobBasefeeScalar) / 16e6`
+
+Where:
+
+- the computation is an unlimited precision integer computation, with the result in Wei and having
+  `uint256` range.
+
+- `compressedTxSize` is an approximation of how many bytes the transaction occupies in a compressed
+  batch. It is determined from the *full* encoded transaction as: `compressedTxSize = (zeroes*4 +
+  ones*16) / 16` (To preserve precision under integer arithmetic, the division by 16 is actually
+  performed at the very end of the fee computation together with the division by 1e6 as a single
+  division by 16e6.)
+
+- `l1Basefee` is the L1 basefee of the latest L1 origin registered in the L2 chain.
+
+- `l1BlobBasefee` is the blob gasprice, computed as described in [EIP-4844][4844-gas] from the
+  header of the latest registered L1 origin block.
+
+Conceptually what the above function captures is the formula below, where `compressedTxSize =
+(zeroes*4 + ones*16) / 16` can be thought of as a rough approximation of how many bytes the
+transaction occupies in a compressed batch.
+
+`(compressedTxSize) * (16*l1Basefee*lBasefeeScalar + l1BlobBasefee*l1BlobBasefeeScalar) / 1e6`
+
+The precise cost function used by Ecotone at the top of this section preserves precision under
+integer arithmetic by postponing the inner division by 16 until the very end.
+
+[4844-gas]: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-4844.md#gas-accounting
+
+The two basefee values and their respective scalars can be accessed in two interchangeable
+ways:
+
+- read from the deposited L1 attributes (`l1BasefeeScalar`, `l1BlobBasefeeScalar`, `basefee`,
+  `blobBasefee`) of the current L2 block
+- read from the L1 Block Info contract (`0x4200000000000000000000000000000000000015`)
+  - using the respective solidity getter functions
+  - using direct storage-reads:
+    - basefee `uint256` in slot `1`
+    - blobBasefee `uint256` in slot `7`
+    - l1BasefeeScalar big-endian `uint32` slot `3` at offset `12`
+    - l1BlobBasefeeScalar big-endian `uint32` in slot `3` at offset `8`
+
 ## Engine API
 
 <!--
@@ -188,6 +235,37 @@ This field overrides the gas limit used during block-building.
 If not specified as rollup, a `STATUS_INVALID` is returned.
 
 [rollup-driver]: rollup-node.md
+
+### `engine_forkchoiceUpdatedV3`
+
+See [`engine_forkchoiceUpdatedV2`](#engine_forkchoiceUpdatedV2) for a description of the forkchoice updated method.
+
+To support rollup functionality, one backwards-compatible change is introduced
+to [`engine_forkchoiceUpdatedV3`][engine_forkchoiceUpdatedV3]: the extended `PayloadAttributesV3`
+
+#### Extended PayloadAttributesV3
+
+[`PayloadAttributesV3`][PayloadAttributesV3] is extended to:
+
+```js
+PayloadAttributesV3: {
+    timestamp: QUANTITY
+    random: DATA (32 bytes)
+    suggestedFeeRecipient: DATA (20 bytes)
+    withdrawals: array of WithdrawalV1
+    parentBeaconBlockRoot: DATA (32 bytes)
+    transactions: array of DATA
+    noTxPool: bool
+    gasLimit: QUANTITY or null
+}
+```
+
+The requirements of this object are the same as extended [`PayloadAttributesV2`][#extended-payloadattributesv2] with
+the addition of `parentBeaconBlockRoot` which is the parent beacon block root from the L1 origin block of the L2 block.
+
+The `parentBeaconBlockRoot` must be nil for Bedrock/Canyon/Delta payloads.
+Starting at Ecotone, the `parentBeaconBlockRoot` must be set to the L1 origin `parentBeaconBlockRoot`,
+or a zero `bytes32` if the Dencun functionality with `parentBeaconBlockRoot` is not active on L1.
 
 ### `engine_newPayloadV2`
 

@@ -24,7 +24,7 @@ import (
 
 type gossipNoop struct{}
 
-func (g *gossipNoop) OnUnsafeL2Payload(_ context.Context, _ peer.ID, _ *eth.ExecutionPayload) error {
+func (g *gossipNoop) OnUnsafeL2Payload(_ context.Context, _ peer.ID, _ *eth.ExecutionPayloadEnvelope) error {
 	return nil
 }
 
@@ -36,15 +36,15 @@ func (g *gossipConfig) P2PSequencerAddress() common.Address {
 
 type l2Chain struct{}
 
-func (l *l2Chain) PayloadByNumber(_ context.Context, _ uint64) (*eth.ExecutionPayload, error) {
-	return nil, nil
+func (l *l2Chain) PayloadByNumber(_ context.Context, _ uint64) (*eth.ExecutionPayloadEnvelope, error) {
+	return nil, errors.New("P2P req/resp is not supported in bootnodes")
 }
 
 func Main(cliCtx *cli.Context) error {
 	log.Info("Initializing bootnode")
 	logCfg := oplog.ReadCLIConfig(cliCtx)
 	logger := oplog.NewLogger(oplog.AppOut(cliCtx), logCfg)
-	oplog.SetGlobalLogHandler(logger.GetHandler())
+	oplog.SetGlobalLogHandler(logger.Handler())
 	m := metrics.NewMetrics("default")
 	ctx := context.Background()
 
@@ -59,6 +59,10 @@ func Main(cliCtx *cli.Context) error {
 	p2pConfig, err := p2pcli.NewConfig(cliCtx, config)
 	if err != nil {
 		return fmt.Errorf("failed to load p2p config: %w", err)
+	}
+	if p2pConfig.EnableReqRespSync {
+		logger.Warn("req-resp sync is enabled, bootnode does not support this feature")
+		p2pConfig.EnableReqRespSync = false
 	}
 
 	p2pNode, err := p2p.NewNodeP2P(ctx, config, logger, p2pConfig, &gossipNoop{}, &l2Chain{}, &gossipConfig{}, m)

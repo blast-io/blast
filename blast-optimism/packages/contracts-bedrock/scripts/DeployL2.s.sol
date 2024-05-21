@@ -31,13 +31,6 @@ contract DeployL2 is Deployer {
         console.log("Deployment context: %s", deploymentContext);
     }
 
-    /// @notice Modifier that wraps a function in broadcasting.
-    modifier broadcast() {
-        vm.startBroadcast();
-        _;
-        vm.stopBroadcast();
-    }
-
     /// @notice Deploy the EAS implementation.
     function deployEAS() public broadcast returns (address) {
         EAS eas = new EAS();

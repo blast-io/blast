@@ -26,10 +26,12 @@ type ServerConfig struct {
 	MaxRequestBodyLogLen  int  `toml:"max_request_body_log_len"`
 	EnablePprof           bool `toml:"enable_pprof"`
 	EnableXServedByHeader bool `toml:"enable_served_by_header"`
+	AllowAllOrigins       bool `toml:"allow_all_origins"`
 }
 
 type CacheConfig struct {
-	Enabled bool `toml:"enabled"`
+	Enabled bool         `toml:"enabled"`
+	TTL     TOMLDuration `toml:"ttl"`
 }
 
 type RedisConfig struct {
@@ -83,17 +85,20 @@ type BackendOptions struct {
 }
 
 type BackendConfig struct {
-	Username         string `toml:"username"`
-	Password         string `toml:"password"`
-	RPCURL           string `toml:"rpc_url"`
-	WSURL            string `toml:"ws_url"`
-	WSPort           int    `toml:"ws_port"`
-	MaxRPS           int    `toml:"max_rps"`
-	MaxWSConns       int    `toml:"max_ws_conns"`
-	CAFile           string `toml:"ca_file"`
-	ClientCertFile   string `toml:"client_cert_file"`
-	ClientKeyFile    string `toml:"client_key_file"`
-	StripTrailingXFF bool   `toml:"strip_trailing_xff"`
+	Username         string            `toml:"username"`
+	Password         string            `toml:"password"`
+	RPCURL           string            `toml:"rpc_url"`
+	WSURL            string            `toml:"ws_url"`
+	WSPort           int               `toml:"ws_port"`
+	MaxRPS           int               `toml:"max_rps"`
+	MaxWSConns       int               `toml:"max_ws_conns"`
+	CAFile           string            `toml:"ca_file"`
+	ClientCertFile   string            `toml:"client_cert_file"`
+	ClientKeyFile    string            `toml:"client_key_file"`
+	StripTrailingXFF bool              `toml:"strip_trailing_xff"`
+	Headers          map[string]string `toml:"headers"`
+
+	Weight int `toml:"weight"`
 
 	ConsensusSkipPeerCountCheck bool   `toml:"consensus_skip_peer_count"`
 	ConsensusForcedCandidate    bool   `toml:"consensus_forced_candidate"`
@@ -105,8 +110,11 @@ type BackendsConfig map[string]*BackendConfig
 type BackendGroupConfig struct {
 	Backends []string `toml:"backends"`
 
-	ConsensusAware        bool   `toml:"consensus_aware"`
-	ConsensusAsyncHandler string `toml:"consensus_handler"`
+	WeightedRouting bool `toml:"weighted_routing"`
+
+	ConsensusAware          bool         `toml:"consensus_aware"`
+	ConsensusAsyncHandler   string       `toml:"consensus_handler"`
+	ConsensusPollerInterval TOMLDuration `toml:"consensus_poller_interval"`
 
 	ConsensusBanPeriod          TOMLDuration `toml:"consensus_ban_period"`
 	ConsensusMaxUpdateThreshold TOMLDuration `toml:"consensus_max_update_threshold"`
@@ -117,6 +125,7 @@ type BackendGroupConfig struct {
 	ConsensusHA                  bool         `toml:"consensus_ha"`
 	ConsensusHAHeartbeatInterval TOMLDuration `toml:"consensus_ha_heartbeat_interval"`
 	ConsensusHALockPeriod        TOMLDuration `toml:"consensus_ha_lock_period"`
+	ConsensusHARedis             RedisConfig  `toml:"consensus_ha_redis"`
 }
 
 type BackendGroupsConfig map[string]*BackendGroupConfig
@@ -130,6 +139,7 @@ type BatchConfig struct {
 
 // SenderRateLimitConfig configures the sender-based rate limiter
 // for eth_sendRawTransaction requests.
+// To enable pre-eip155 transactions, add '0' to allowed_chain_ids.
 type SenderRateLimitConfig struct {
 	Enabled         bool
 	Interval        TOMLDuration

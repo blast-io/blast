@@ -100,9 +100,9 @@ contract WETHRebasing_Test is Bridge_Initializer {
     function addYield(uint256 yield) internal {
         uint256 perToken = 1e18 + (yield * 1e18) / totalETH();
         vm.deal(address(WETH), (perToken * address(WETH).balance) / 1e18);
-        vm.deal(alice, (perToken*alice.balance) / 1e18);
-        vm.deal(bob, (perToken*bob.balance) / 1e18);
-        vm.deal(charlie, (perToken*charlie.balance) / 1e18);
+        vm.deal(alice, (perToken * alice.balance) / 1e18);
+        vm.deal(bob, (perToken * bob.balance) / 1e18);
+        vm.deal(charlie, (perToken * charlie.balance) / 1e18);
         vm.prank(Predeploys.SHARES);
         WETH.addValue(0);
     }
@@ -130,19 +130,19 @@ contract WETHRebasing_Test is Bridge_Initializer {
         vm.expectEmit(true, true, true, true);
         emit Deposit(alice, 100);
         vm.prank(alice);
-        WETH.deposit{value: 100}();
+        WETH.deposit{ value: 100 }();
         assertEq(WETH.balanceOf(alice), 100);
 
         vm.expectEmit(true, true, true, true);
         emit Deposit(bob, 100);
         vm.prank(bob);
-        WETH.deposit{value: 100}();
+        WETH.deposit{ value: 100 }();
         assertEq(WETH.balanceOf(bob), 100);
 
         vm.expectEmit(true, true, true, true);
         emit Deposit(charlie, 100);
         vm.prank(charlie);
-        WETH.deposit{value: 100}();
+        WETH.deposit{ value: 100 }();
         assertEq(WETH.balanceOf(charlie), 100);
     }
 
@@ -150,29 +150,29 @@ contract WETHRebasing_Test is Bridge_Initializer {
         uint256 price = WETH.price();
         vm.deal(alice, price);
         vm.prank(alice);
-        WETH.deposit{value: price}();
+        WETH.deposit{ value: price }();
 
         addYield(totalETH());
         uint256 aliceBalance = alice.balance;
 
         vm.expectEmit(true, true, true, true);
-        emit Withdrawal(alice, 2*price);
+        emit Withdrawal(alice, 2 * price);
 
         vm.prank(alice);
-        WETH.withdraw(2*price);
+        WETH.withdraw(2 * price);
         assertEq(WETH.balanceOf(alice), 0);
-        assertEq(alice.balance, aliceBalance+2*price);
+        assertEq(alice.balance, aliceBalance + 2 * price);
     }
 
     function test_withdraw_insufficientBalance_fails() external {
         uint256 price = WETH.price();
         vm.deal(alice, price);
         vm.prank(alice);
-        WETH.deposit{value: price}();
+        WETH.deposit{ value: price }();
 
         vm.expectRevert(InsufficientBalance.selector);
         vm.prank(alice);
-        WETH.withdraw(2*price);
+        WETH.withdraw(2 * price);
 
         assertEq(WETH.balanceOf(alice), price);
     }

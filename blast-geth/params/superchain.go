@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 4, Minor: 0, Patch: 0, PreRelease: 1}.Encode()
+var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 6, Minor: 0, Patch: 0, PreRelease: 0}.Encode()
 
 func init() {
 	for id, ch := range superchain.OPChains {
@@ -41,10 +41,6 @@ func LoadOPStackChainConfig(chainID uint64) (*ChainConfig, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown chain ID: %d", chainID)
 	}
-	superchainConfig, ok := superchain.Superchains[chConfig.Superchain]
-	if !ok {
-		return nil, fmt.Errorf("unknown superchain %q", chConfig.Superchain)
-	}
 
 	genesisActivation := uint64(0)
 	out := &ChainConfig{
@@ -65,12 +61,13 @@ func LoadOPStackChainConfig(chainID uint64) (*ChainConfig, error) {
 		ArrowGlacierBlock:             common.Big0,
 		GrayGlacierBlock:              common.Big0,
 		MergeNetsplitBlock:            common.Big0,
-		ShanghaiTime:                  superchainConfig.Config.CanyonTime, // Shanghai activates with Canyon
-		CancunTime:                    nil,
+		ShanghaiTime:                  chConfig.CanyonTime,  // Shanghai activates with Canyon
+		CancunTime:                    chConfig.EcotoneTime, // Cancun activates with Ecotone
 		PragueTime:                    nil,
 		BedrockBlock:                  common.Big0,
 		RegolithTime:                  &genesisActivation,
-		CanyonTime:                    superchainConfig.Config.CanyonTime,
+		CanyonTime:                    chConfig.CanyonTime,
+		EcotoneTime:                   chConfig.EcotoneTime,
 		TerminalTotalDifficulty:       common.Big0,
 		TerminalTotalDifficultyPassed: true,
 		Ethash:                        nil,
@@ -81,10 +78,6 @@ func LoadOPStackChainConfig(chainID uint64) (*ChainConfig, error) {
 			EIP1559DenominatorCanyon: 250,
 		},
 	}
-
-	// note: no actual parameters are being loaded, yet.
-	// Future superchain upgrades are loaded from the superchain chConfig and applied to the geth ChainConfig here.
-	_ = superchainConfig.Config
 
 	// special overrides for OP-Stack chains with pre-Regolith upgrade history
 	switch chainID {

@@ -58,6 +58,7 @@ import { USDConversions, IDssPsm } from "src/mainnet-bridge/USDConversions.sol";
 import { Insurance } from "src/mainnet-bridge/Insurance.sol";
 import { YieldMode } from "src/L2/Blast.sol";
 import { GasMode } from "src/L2/Gas.sol";
+import { L1Block } from "src/L2/L1Block.sol";
 
 interface IPot {
     function chi() external view returns (uint256);
@@ -73,7 +74,12 @@ contract MockGas is Gas {
         address _blastFeeVault
     ) Gas(_admin, _blastConfigurationContract, _blastFeeVault) {}
 
-    function updateGasParams(address contractAddress, uint256 etherSeconds, uint256 etherBalance, GasMode mode) external {
+    function updateGasParams(
+        address contractAddress,
+        uint256 etherSeconds,
+        uint256 etherBalance,
+        GasMode mode
+    ) external {
         _updateGasParams(contractAddress, etherSeconds, etherBalance, mode);
     }
 }
@@ -91,6 +97,7 @@ contract CommonTest is Test {
     uint64 immutable NON_ZERO_GASLIMIT = 50000;
     bytes32 nonZeroHash = keccak256(abi.encode("NON_ZERO"));
     bytes NON_ZERO_DATA = hex"0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000";
+    L1Block l1Block = L1Block(Predeploys.L1_BLOCK_ATTRIBUTES);
 
     event TransactionDeposited(address indexed from, address indexed to, uint256 indexed version, bytes opaqueData);
 
@@ -115,10 +122,12 @@ contract CommonTest is Test {
         vm.fee(1000000000);
 
         ffi = new FFIInterface();
+        // place the L1Block contract at the predeploy address
+        vm.etch(Predeploys.L1_BLOCK_ATTRIBUTES, address(new L1Block()).code);
     }
 
     function sendETH(address to, uint256 amount) internal {
-        (bool success,) = to.call{value: amount}(hex"");
+        (bool success, ) = to.call{ value: amount }(hex"");
         assertEq(success, true);
     }
 
@@ -130,9 +139,7 @@ contract CommonTest is Test {
         uint64 _gasLimit,
         bool _isCreation,
         bytes memory _data
-    )
-        internal
-    {
+    ) internal {
         emit TransactionDeposited(_from, _to, 0, abi.encodePacked(_mint, _value, _gasLimit, _isCreation, _data));
     }
 }
@@ -161,7 +168,10 @@ contract L2OutputOracle_Initializer is CommonTest {
     uint256 initL1Time;
 
     event OutputProposed(
-        bytes32 indexed outputRoot, uint256 indexed l2OutputIndex, uint256 indexed l2BlockNumber, uint256 l1Timestamp
+        bytes32 indexed outputRoot,
+        uint256 indexed l2OutputIndex,
+        uint256 indexed l2BlockNumber,
+        uint256 l1Timestamp
     );
 
     event OutputsDeleted(uint256 indexed prevNextOutputIndex, uint256 indexed newNextOutputIndex);
@@ -191,15 +201,10 @@ contract L2OutputOracle_Initializer is CommonTest {
         oracle.proposeL2Output(proposedOutput2, nextBlockNumber, 0, 0);
     }
 
-    function checkBlastConfig(
-        address contractAddress,
-        address governor,
-        YieldMode yieldMode,
-        GasMode gasMode
-    ) public {
+    function checkBlastConfig(address contractAddress, address governor, YieldMode yieldMode, GasMode gasMode) public {
         assertEq(blast.governorMap(contractAddress), governor);
         assertTrue(blast.readYieldConfiguration(contractAddress) == uint8(yieldMode));
-        (,,, GasMode _gasMode) = blast.readGasParams(contractAddress);
+        (, , , GasMode _gasMode) = blast.readGasParams(contractAddress);
         assertTrue(_gasMode == gasMode);
     }
 
@@ -255,11 +260,13 @@ contract MockYield {
     function getConfiguration(address x) external view returns (uint8) {
         return configurations[x];
     }
+
     function configure(address x, uint8 mode) external returns (uint256) {
         configurations[x] = mode;
         return 0;
     }
-    function claim(address, address, uint256) external returns (uint256) {}
+
+    function claim(address, address, uint256) external returns (uint256) { }
 }
 
 contract Portal_Initializer is L2OutputOracle_Initializer {
@@ -300,13 +307,13 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
                     0, //_startBlock
                     address(0xff), // _batchInbox
                     SystemConfig.Addresses({ // _addresses
-                        l1CrossDomainMessenger: address(0),
-                        l1ERC721Bridge: address(0),
-                        l1StandardBridge: address(0),
-                        l2OutputOracle: address(oracle),
-                        optimismPortal: address(op),
-                        optimismMintableERC20Factory: address(0)
-                    })
+                            l1CrossDomainMessenger: address(0),
+                            l1ERC721Bridge: address(0),
+                            l1StandardBridge: address(0),
+                            l2OutputOracle: address(oracle),
+                            optimismPortal: address(op),
+                            optimismMintableERC20Factory: address(0)
+                        })
                 )
             )
         );
@@ -335,7 +342,11 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
 
         vm.prank(multisig);
         portalProxy.upgradeToAndCall(
-            address(opImpl), abi.encodeCall(OptimismPortal.initialize, (oracle, guardian, systemConfig, false, ETHYieldManager(payable(address(eymProxy)))))
+            address(opImpl),
+            abi.encodeCall(
+                OptimismPortal.initialize,
+                (oracle, guardian, systemConfig, false, ETHYieldManager(payable(address(eymProxy))))
+            )
         );
         op = OptimismPortal(payable(address(portalProxy)));
         vm.label(address(op), "OptimismPortal");
@@ -414,10 +425,7 @@ contract Messenger_Initializer is Portal_Initializer {
         // Setup the address manager and proxy
         vm.prank(multisig);
         addressManager.setAddress("OVM_L1CrossDomainMessenger", address(L1MessengerImpl));
-        ResolvedDelegateProxy proxy = new ResolvedDelegateProxy(
-            addressManager,
-            "OVM_L1CrossDomainMessenger"
-        );
+        ResolvedDelegateProxy proxy = new ResolvedDelegateProxy(addressManager, "OVM_L1CrossDomainMessenger");
         L1Messenger = L1CrossDomainMessenger(address(proxy));
         L1Messenger.initialize(op);
 
@@ -459,23 +467,48 @@ contract Bridge_Initializer is Messenger_Initializer {
     event ETHWithdrawalFinalized(address indexed from, address indexed to, uint256 amount, bytes data);
 
     event ERC20DepositInitiated(
-        address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes data
+        address indexed l1Token,
+        address indexed l2Token,
+        address indexed from,
+        address to,
+        uint256 amount,
+        bytes data
     );
 
     event ERC20WithdrawalFinalized(
-        address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes data
+        address indexed l1Token,
+        address indexed l2Token,
+        address indexed from,
+        address to,
+        uint256 amount,
+        bytes data
     );
 
     event WithdrawalInitiated(
-        address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes data
+        address indexed l1Token,
+        address indexed l2Token,
+        address indexed from,
+        address to,
+        uint256 amount,
+        bytes data
     );
 
     event DepositFinalized(
-        address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes data
+        address indexed l1Token,
+        address indexed l2Token,
+        address indexed from,
+        address to,
+        uint256 amount,
+        bytes data
     );
 
     event DepositFailed(
-        address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes data
+        address indexed l1Token,
+        address indexed l2Token,
+        address indexed from,
+        address to,
+        uint256 amount,
+        bytes data
     );
 
     event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes data);
@@ -539,10 +572,10 @@ contract Bridge_Initializer is Messenger_Initializer {
         address L1BlastBridge_Impl = proxy.getImplementation();
         l1BlastBridge = L1BlastBridge(payable(address(proxy)));
         l1BlastBridge.initialize({
-          _portal: op,
-          _messenger: L1Messenger,
-          _usdYieldManager: usdYieldManager,
-          _ethYieldManager: ethYieldManager
+            _portal: op,
+            _messenger: L1Messenger,
+            _usdYieldManager: usdYieldManager,
+            _ethYieldManager: ethYieldManager
         });
         ethYieldManager.setBlastBridge(address(l1BlastBridge));
         usdYieldManager.setBlastBridge(address(l1BlastBridge));
@@ -590,7 +623,6 @@ contract Bridge_Initializer is Messenger_Initializer {
         SHARES.initialize(1e9);
         vm.label(address(SHARES), "SHARES");
 
-
         vm.deal(address(this), 100 ether);
         WETHRebasing weth = new WETHRebasing();
         vm.etch(Predeploys.WETH_REBASING, address(weth).code);
@@ -629,7 +661,8 @@ contract Bridge_Initializer is Messenger_Initializer {
 
         vm.prank(multisig);
         factoryProxy.upgradeToAndCall(
-            address(L1TokenFactoryImpl), abi.encodeCall(OptimismMintableERC20Factory.initialize, address(L1Bridge))
+            address(L1TokenFactoryImpl),
+            abi.encodeCall(OptimismMintableERC20Factory.initialize, address(L1Bridge))
         );
 
         L1TokenFactory = OptimismMintableERC20Factory(address(factoryProxy));
@@ -665,7 +698,8 @@ contract ERC721Bridge_Initializer is Bridge_Initializer {
 
         vm.prank(multisig);
         l1BridgeProxy.upgradeToAndCall(
-            address(l1BridgeImpl), abi.encodeCall(L1ERC721Bridge.initialize, (CrossDomainMessenger(L1Messenger)))
+            address(l1BridgeImpl),
+            abi.encodeCall(L1ERC721Bridge.initialize, (CrossDomainMessenger(L1Messenger)))
         );
 
         L1NFTBridge = L1ERC721Bridge(address(l1BridgeProxy));
@@ -681,7 +715,8 @@ contract ERC721Bridge_Initializer is Bridge_Initializer {
 
         vm.prank(multisig);
         Proxy(payable(Predeploys.L2_ERC721_BRIDGE)).upgradeToAndCall(
-            address(l2BridgeImpl), abi.encodeCall(L2ERC721Bridge.initialize, ())
+            address(l2BridgeImpl),
+            abi.encodeCall(L2ERC721Bridge.initialize, ())
         );
 
         // Set up a reference to the L2ERC721Bridge.
@@ -718,7 +753,7 @@ contract LidoYieldProvider_Initializer is Bridge_Initializer {
         uint256[] memory _requestIds = withdrawalQueue.getWithdrawalRequests(address(ethYieldManager));
         uint256 shareRate = Lido.getPooledEthByShares(1e27);
         vm.prank(address(Lido));
-        withdrawalQueue.finalize(_requestIds[_requestIds.length-1], shareRate);
+        withdrawalQueue.finalize(_requestIds[_requestIds.length - 1], shareRate);
     }
 
     function setUp() public virtual override {
@@ -748,7 +783,7 @@ contract LidoYieldProvider_Initializer is Bridge_Initializer {
 
         // faucet stETH
         vm.deal(address(this), 100 ether);
-        Lido.submit{value: 100 ether}(address(0));
+        Lido.submit{ value: 100 ether }(address(0));
     }
 }
 
@@ -821,10 +856,9 @@ contract DSRYieldProvider_Initializer is Bridge_Initializer {
 }
 
 contract FFIInterface is Test {
-    function getProveWithdrawalTransactionInputs(Types.WithdrawalTransaction memory _tx)
-        external
-        returns (bytes32, bytes32, bytes32, bytes32, bytes[] memory)
-    {
+    function getProveWithdrawalTransactionInputs(
+        Types.WithdrawalTransaction memory _tx
+    ) external returns (bytes32, bytes32, bytes32, bytes32, bytes[] memory) {
         string[] memory cmds = new string[](9);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -855,10 +889,7 @@ contract FFIInterface is Test {
         uint256 _value,
         uint256 _gasLimit,
         bytes memory _data
-    )
-        external
-        returns (bytes32)
-    {
+    ) external returns (bytes32) {
         string[] memory cmds = new string[](9);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -881,10 +912,7 @@ contract FFIInterface is Test {
         uint256 _value,
         uint256 _gasLimit,
         bytes memory _data
-    )
-        external
-        returns (bytes32)
-    {
+    ) external returns (bytes32) {
         string[] memory cmds = new string[](9);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -905,10 +933,7 @@ contract FFIInterface is Test {
         bytes32 _stateRoot,
         bytes32 _messagePasserStorageRoot,
         bytes32 _latestBlockhash
-    )
-        external
-        returns (bytes32)
-    {
+    ) external returns (bytes32) {
         string[] memory cmds = new string[](7);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -930,10 +955,7 @@ contract FFIInterface is Test {
         uint64 _gas,
         bytes memory _data,
         uint64 _logIndex
-    )
-        external
-        returns (bytes32)
-    {
+    ) external returns (bytes32) {
         string[] memory cmds = new string[](11);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -977,10 +999,7 @@ contract FFIInterface is Test {
         uint256 _value,
         uint256 _gasLimit,
         bytes memory _data
-    )
-        external
-        returns (bytes memory)
-    {
+    ) external returns (bytes memory) {
         string[] memory cmds = new string[](9);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -1007,10 +1026,9 @@ contract FFIInterface is Test {
         return abi.decode(result, (uint256, uint256));
     }
 
-    function getMerkleTrieFuzzCase(string memory variant)
-        external
-        returns (bytes32, bytes memory, bytes memory, bytes[] memory)
-    {
+    function getMerkleTrieFuzzCase(
+        string memory variant
+    ) external returns (bytes32, bytes memory, bytes memory, bytes[] memory) {
         string[] memory cmds = new string[](6);
         cmds[0] = "./scripts/go-ffi/go-ffi";
         cmds[1] = "trie";
@@ -1036,10 +1054,7 @@ contract FFIInterface is Test {
         uint32 insn,
         uint32 memAddr,
         uint32 memVal
-    )
-        external
-        returns (bytes32, bytes memory)
-    {
+    ) external returns (bytes32, bytes memory) {
         string[] memory cmds = new string[](7);
         cmds[0] = "scripts/go-ffi/go-ffi";
         cmds[1] = "diff";
@@ -1097,8 +1112,12 @@ contract CallerCaller {
         emit WhatHappened(success, returndata);
         assembly {
             switch success
-            case 0 { revert(add(returndata, 0x20), mload(returndata)) }
-            default { return(add(returndata, 0x20), mload(returndata)) }
+            case 0 {
+                revert(add(returndata, 0x20), mload(returndata))
+            }
+            default {
+                return(add(returndata, 0x20), mload(returndata))
+            }
         }
     }
 }
@@ -1120,8 +1139,12 @@ contract ConfigurableCaller {
             emit WhatHappened(success, returndata);
             assembly {
                 switch success
-                case 0 { revert(add(returndata, 0x20), mload(returndata)) }
-                default { return(add(returndata, 0x20), mload(returndata)) }
+                case 0 {
+                    revert(add(returndata, 0x20), mload(returndata))
+                }
+                default {
+                    return(add(returndata, 0x20), mload(returndata))
+                }
             }
         }
     }

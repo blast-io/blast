@@ -101,7 +101,9 @@ contract PreBridgeETH is Bridge_Initializer {
                 address(l1BlastBridge), 500, abi.encodeWithSelector(l1BlastBridge.bridgeETH.selector, 50000, hex"dead")
             );
         } else {
-            vm.expectCall(address(l1BlastBridge), 500, abi.encodeWithSelector(l1BlastBridge.bridgeETH.selector, 50000, hex"dead"));
+            vm.expectCall(
+                address(l1BlastBridge), 500, abi.encodeWithSelector(l1BlastBridge.bridgeETH.selector, 50000, hex"dead")
+            );
         }
         vm.expectCall(
             address(L1Messenger),
@@ -110,7 +112,13 @@ contract PreBridgeETH is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 500, 50000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            500,
+            50000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 50000);
@@ -167,11 +175,15 @@ contract PreBridgeETHTo is Bridge_Initializer {
 
         if (isLegacy) {
             vm.expectCall(
-                address(l1BlastBridge), 600, abi.encodeWithSelector(l1BlastBridge.bridgeETHTo.selector, bob, 60000, hex"dead")
+                address(l1BlastBridge),
+                600,
+                abi.encodeWithSelector(l1BlastBridge.bridgeETHTo.selector, bob, 60000, hex"dead")
             );
         } else {
             vm.expectCall(
-                address(l1BlastBridge), 600, abi.encodeWithSelector(l1BlastBridge.bridgeETHTo.selector, bob, 60000, hex"dead")
+                address(l1BlastBridge),
+                600,
+                abi.encodeWithSelector(l1BlastBridge.bridgeETHTo.selector, bob, 60000, hex"dead")
             );
         }
 
@@ -186,7 +198,13 @@ contract PreBridgeETHTo is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 600, 60000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            600,
+            60000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 60000);
@@ -276,7 +294,13 @@ contract L1BlastBridge_DepositERC20_Test is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            0,
+            10000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 10000);
@@ -342,7 +366,13 @@ contract L1BlastBridge_DepositERC20To_Test is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            0,
+            10000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 10000);
@@ -371,7 +401,9 @@ contract L1BlastBridge_DepositERC20To_Test is Bridge_Initializer {
         // the L1 bridge should call L1CrossDomainMessenger.sendMessage
         vm.expectCall(
             address(L1Messenger),
-            abi.encodeWithSelector(CrossDomainMessenger.sendMessage.selector, address(Predeploys.L2_BLAST_BRIDGE), message, 10000)
+            abi.encodeWithSelector(
+                CrossDomainMessenger.sendMessage.selector, address(Predeploys.L2_BLAST_BRIDGE), message, 10000
+            )
         );
 
         // The L1 XDM should call OptimismPortal.depositTransaction
@@ -459,16 +491,16 @@ contract L1BlastBridge_BridgeStakedAsset is LidoYieldProvider_Initializer {
         l1BlastBridge.setETHYieldToken(address(Lido), true, 18, address(lidoProvider), true);
 
         vm.prank(alice);
-        Lido.submit{value: amount}(address(0));
+        Lido.submit{ value: amount }(address(0));
 
         vm.prank(alice);
         Lido.approve(address(l1BlastBridge), type(uint256).max);
 
-        bytes memory message = abi.encodeWithSelector(
-            l2BlastBridge.finalizeBridgeETHDirect.selector, alice, bob, amount, hex""
-        );
+        bytes memory message =
+            abi.encodeWithSelector(l2BlastBridge.finalizeBridgeETHDirect.selector, alice, bob, amount, hex"");
 
-        bytes memory opaqueData = abi.encodePacked(amount, amount, uint64(200_000), false, message);
+        uint64 baseGas = l1BlastBridge.baseGas(200_000);
+        bytes memory opaqueData = abi.encodePacked(amount, amount, baseGas, false, message);
 
         vm.expectEmit(true, true, true, true, address(l1BlastBridge));
         emit ERC20BridgeInitiated(address(Lido), address(0), alice, bob, amount, hex"");
@@ -486,7 +518,7 @@ contract L1BlastBridge_BridgeStakedAsset is LidoYieldProvider_Initializer {
         vm.expectCall(
             address(op),
             abi.encodeWithSelector(
-                OptimismPortal.depositTransaction.selector, address(l2BlastBridge), amount, 200_000, false, message
+                OptimismPortal.depositTransaction.selector, address(l2BlastBridge), amount, baseGas, false, message
             )
         );
         vm.prank(alice);
@@ -570,6 +602,7 @@ contract L1BlastBridge_FinalizeBridgeETH_TestFail is Bridge_Initializer {
         l1BlastBridge.finalizeBridgeETH{ value: 100 }(alice, messenger, 100, hex"");
     }
 }
+
 contract L1BlastBridge_BridgeFork is Bridge_Initializer {
     using SafeERC20 for ERC20;
     using stdStorage for StdStorage;
@@ -620,7 +653,13 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            0,
+            10000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 10000);
@@ -686,7 +725,13 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         );
 
         bytes memory message = abi.encodeWithSelector(
-            StandardBridge.finalizeBridgeERC20.selector, address(Usdb), address(DAI), alice, alice, amount*1e12, extraData
+            StandardBridge.finalizeBridgeERC20.selector,
+            address(Usdb),
+            address(DAI),
+            alice,
+            alice,
+            amount * 1e12,
+            extraData
         );
 
         // the L1 bridge should call L1CrossDomainMessenger.sendMessage
@@ -696,7 +741,13 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            0,
+            10000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 10000);
@@ -766,7 +817,13 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         );
 
         bytes memory message = abi.encodeWithSelector(
-            StandardBridge.finalizeBridgeERC20.selector, address(Usdb), address(DAI), alice, alice, amount*1e12, extraData
+            StandardBridge.finalizeBridgeERC20.selector,
+            address(Usdb),
+            address(DAI),
+            alice,
+            alice,
+            amount * 1e12,
+            extraData
         );
 
         // the L1 bridge should call L1CrossDomainMessenger.sendMessage
@@ -776,7 +833,13 @@ contract L1BlastBridge_BridgeFork is Bridge_Initializer {
         );
 
         bytes memory innerMessage = abi.encodeWithSelector(
-            CrossDomainMessenger.relayMessage.selector, nonce, address(l1BlastBridge), address(l2BlastBridge), 0, 10000, message
+            CrossDomainMessenger.relayMessage.selector,
+            nonce,
+            address(l1BlastBridge),
+            address(l2BlastBridge),
+            0,
+            10000,
+            message
         );
 
         uint64 baseGas = L1Messenger.baseGas(message, 10000);

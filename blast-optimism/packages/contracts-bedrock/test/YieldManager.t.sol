@@ -1,5 +1,6 @@
 pragma solidity 0.8.15;
 // Testing utilities
+
 import { Test, StdUtils, Vm, StdStorage, stdStorage } from "forge-std/Test.sol";
 import {
     Portal_Initializer,
@@ -16,7 +17,12 @@ import { Types } from "src/libraries/Types.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { YieldProvider } from "src/mainnet-bridge/yield-providers/YieldProvider.sol";
-import { LidoYieldProvider, ILido, IERC20, IWithdrawalQueue } from "src/mainnet-bridge/yield-providers/LidoYieldProvider.sol";
+import {
+    LidoYieldProvider,
+    ILido,
+    IERC20,
+    IWithdrawalQueue
+} from "src/mainnet-bridge/yield-providers/LidoYieldProvider.sol";
 import { USDConversions } from "src/mainnet-bridge/USDConversions.sol";
 import { DSRYieldProvider, IDsrManager, IPot } from "src/mainnet-bridge/yield-providers/DSRYieldProvider.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
@@ -52,11 +58,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
     using stdStorage for StdStorage;
 
     event LidoUnstakeInitiated(uint256 indexed requestId, uint256 amount);
-    event YieldReport(
-        int256  yield,
-        uint256 insurancePremiumPaid,
-        uint256 insuranceWithdrawn
-    );
+    event YieldReport(int256 yield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn);
 
     error InsufficientInsuranceBalance();
 
@@ -99,7 +101,8 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(totalEth, 1 ether);
     }
 
-    function test_unstake_Lido_succeeds() external { // ensure withdrawal queue is not paused skip(1700000000);
+    function test_unstake_Lido_succeeds() external {
+        // ensure withdrawal queue is not paused skip(1700000000);
         vm.deal(address(ethYieldManager), 1 ether);
 
         uint256 availableBalance = ethYieldManager.availableBalance();
@@ -147,7 +150,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(0.1 ether));
 
         assertEq(entries[1].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, , ) = abi.decode(entries[1].data, (int256, uint256, uint256));
+        (int256 totalYield,,) = abi.decode(entries[1].data, (int256, uint256, uint256));
         assertEq(totalYield, yield);
 
         assertEq(entries[2].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
@@ -178,7 +181,8 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(0.09 ether));
 
         assertEq(entries[4].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[4].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[4].data, (int256, uint256, uint256));
         assertClose(totalYield, int256(0.09 ether));
         assertClose(insurancePremiumPaid, uint256(0.01 ether));
         assertEq(insuranceWithdrawn, 0);
@@ -224,7 +228,8 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(0.9 ether));
 
         assertEq(entries[4].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[4].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[4].data, (int256, uint256, uint256));
         assertClose(totalYield, int256(0.7 ether));
         assertClose(insurancePremiumPaid, uint256(0.1 ether));
         assertEq(insuranceWithdrawn, 0);
@@ -272,7 +277,8 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(0.9 ether));
 
         assertEq(entries[4].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[4].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[4].data, (int256, uint256, uint256));
         assertClose(totalYield, int256(-0.3 ether));
         assertClose(insurancePremiumPaid, uint256(0.1 ether));
         assertEq(insuranceWithdrawn, 0);
@@ -303,11 +309,11 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(-1 ether));
 
         assertEq(entries[1].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[1].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[1].data, (int256, uint256, uint256));
         assertClose(totalYield, int256(-1 ether));
         assertClose(insurancePremiumPaid, uint256(0));
         assertEq(insuranceWithdrawn, 0);
-
 
         uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(0 ether));
@@ -344,14 +350,14 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertLe(yield, int256(buffer));
 
         assertEq(entries[4].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[4].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[4].data, (int256, uint256, uint256));
 
         assertGe(totalYield, 0);
         assertLe(totalYield, int256(buffer));
 
         assertClose(insurancePremiumPaid, uint256(0));
         assertClose(insuranceWithdrawn, 1 ether + buffer);
-
 
         uint256 insuranceBalance = Lido.balanceOf(ethYieldManager.insurance());
         assertClose(insuranceBalance, uint256(1 ether));
@@ -404,7 +410,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256, uint256));
 
         assertEq(expected, 0.3 ether);
         assertClose(claimed, 0.3 ether);
@@ -420,14 +426,13 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         int256 expectedTotalYield = yield + int256(negativeYield) * -1;
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, expectedTotalYield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
 
-        uint256 expectedAccumulatedNegativeYield = totalYield >= 0 ?
-            uint256(0) :
-            uint256(totalYield * -1);
+        uint256 expectedAccumulatedNegativeYield = totalYield >= 0 ? uint256(0) : uint256(totalYield * -1);
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), expectedAccumulatedNegativeYield);
     }
@@ -461,7 +466,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256, uint256));
 
         assertEq(expected, 0.4 ether);
         assertClose(claimed, 0.4 ether);
@@ -475,14 +480,23 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         int256 totalExpectedYield = yield + int256(negativeYield) * -1;
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, totalExpectedYield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
 
-        assertEq(entries[transactionDepositedIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[transactionDepositedIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
-        assertEq(entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
+        assertEq(
+            entries[transactionDepositedIndex].topics[0],
+            keccak256("TransactionDeposited(address,address,uint256,bytes)")
+        );
+        assertEq(
+            entries[transactionDepositedIndex].topics[1],
+            addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager)))
+        );
+        assertEq(
+            entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000)
+        );
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
     }
@@ -518,7 +532,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256, uint256));
 
         assertEq(expected, 0.6 ether);
         assertClose(claimed, 0.6 ether);
@@ -534,7 +548,8 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         int256 expectedTotalYield = yield + int256(negativeYield) * -1;
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, expectedTotalYield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
@@ -575,7 +590,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256, uint256));
 
         assertEq(expected, 1.0 ether);
         assertClose(claimed, 1.0 ether);
@@ -591,14 +606,14 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         int256 totalExpectedYield = yield + int256(negativeYield) * -1;
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, totalExpectedYield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
 
-        uint256 expectedAccumulatedNegativeYield = totalExpectedYield >= 0 ?
-            uint256(totalExpectedYield) :
-            uint256(totalExpectedYield * -1);
+        uint256 expectedAccumulatedNegativeYield =
+            totalExpectedYield >= 0 ? uint256(totalExpectedYield) : uint256(totalExpectedYield * -1);
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), expectedAccumulatedNegativeYield);
 
@@ -644,17 +659,25 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         assertClose(yield, int256(0.1 ether));
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, yield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
 
-        assertEq(entries[transactionDepositedIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[transactionDepositedIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager))));
-        assertEq(entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000));
+        assertEq(
+            entries[transactionDepositedIndex].topics[0],
+            keccak256("TransactionDeposited(address,address,uint256,bytes)")
+        );
+        assertEq(
+            entries[transactionDepositedIndex].topics[1],
+            addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(ethYieldManager)))
+        );
+        assertEq(
+            entries[transactionDepositedIndex].topics[2], addressToBytes32(0x4300000000000000000000000000000000000000)
+        );
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
-
     }
 
     /// @notice This test ensures that negative yield from claim and negative yield
@@ -685,7 +708,7 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedIndex].topics[1], YieldProvider(lidoProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedIndex].data, (uint256, uint256));
 
         assertEq(expected, 0.2 ether);
         assertClose(claimed, 0.2 ether);
@@ -700,13 +723,13 @@ contract ETH_YieldManager_Test is LidoYieldProvider_Initializer, Util {
         int256 totalExpectedYield = yield + int256(negativeYieldFromClaim) * -1;
 
         assertEq(entries[yieldReportIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportIndex].data, (int256, uint256, uint256));
         assertEq(totalYield, totalExpectedYield);
         assertEq(insurancePremiumPaid, 0);
         assertEq(insuranceWithdrawn, 0);
 
         assertEq(ethYieldManager.accumulatedNegativeYields(), uint256(totalExpectedYield * -1));
-
     }
 
     function test_requestWithdrawal_portal_succeeds() external {
@@ -750,7 +773,6 @@ contract ETH_Insurance_Test is LidoYieldProvider_Initializer, Util {
     }
 
     function test_coverLoss_admin_succeeds() external {
-
         Lido.transfer(address(insurance), 2 ether);
 
         assertEq(ethYieldManager.totalValue(), 0 ether);
@@ -762,7 +784,6 @@ contract ETH_Insurance_Test is LidoYieldProvider_Initializer, Util {
     }
 
     function test_coverLoss_ym_succeeds() external {
-
         Lido.transfer(address(insurance), 2 ether);
 
         assertEq(ethYieldManager.totalValue(), 0 ether);
@@ -774,7 +795,6 @@ contract ETH_Insurance_Test is LidoYieldProvider_Initializer, Util {
     }
 
     function test_coverLoss_non_admin_reverts() external {
-
         Lido.transfer(address(insurance), 2 ether);
 
         assertEq(ethYieldManager.totalValue(), 0 ether);
@@ -838,7 +858,8 @@ contract ETH_Insurance_Test is LidoYieldProvider_Initializer, Util {
 ///
 /// Exhaustive list of `accumulatedNegativeYields` mutations:
 ///    - `commitYieldReport()`
-///        - via LidoYieldProvider._claim() (via `_delegatecall_preCommitYieldReportDelegateCallHook` -> yp._claim() -> `ym.recordNegativeYield()`)
+///        - via LidoYieldProvider._claim() (via `_delegatecall_preCommitYieldReportDelegateCallHook` -> yp._claim() ->
+/// `ym.recordNegativeYield()`)
 ///        - via `totalYield` update
 ///    - `finalize()`: negative yields are paid off from discounted withdrawals
 ///
@@ -858,7 +879,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     function testFuzz_sharePrice_does_not_change_after_single_finalize(
         uint256 balance,
         uint256 withdrawalAmount
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(withdrawalAmount > 0);
@@ -887,7 +910,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 withdrawalAmount,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(withdrawalAmount > 0);
@@ -915,13 +940,16 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         assertGe(ethYieldManager.sharePrice(), sharePriceBefore);
     }
 
-    // see OptimismPortal_FinalizeWithdrawal_Test for testFuzz_sharePrice_does_not_change_after_finalizeWithdrawalTransaction
+    // see OptimismPortal_FinalizeWithdrawal_Test for
+    // testFuzz_sharePrice_does_not_change_after_finalizeWithdrawalTransaction
 
     // share price should stay the same after ETH balance increase
     function testFuzz_sharePrice_does_not_change_after_ETH_balance_increase(
         uint256 balance,
         uint256 increaseAmount
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > increaseAmount);
@@ -941,7 +969,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 increaseAmount,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > increaseAmount);
@@ -968,7 +998,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 increaseAmount,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > increaseAmount);
@@ -978,7 +1010,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance
         vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
+        Lido.submit{ value: balance }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
 
         // set up negative yield
@@ -997,7 +1029,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     function testFuzz_sharePrice_does_not_change_after_pendingBalance_increase_via_unstake(
         uint256 balance,
         uint256 unstakeAmount
-    ) external {
+    )
+        external
+    {
         // share price = 1
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
@@ -1009,7 +1043,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance
         vm.deal(address(this), balance + unstakeAmount);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
+        Lido.submit{ value: balance + unstakeAmount }(address(0));
         Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
@@ -1026,7 +1060,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 negativeYield,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > negativeYield);
@@ -1038,7 +1074,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance and original negative yield
         vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
+        Lido.submit{ value: balance }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
@@ -1064,7 +1100,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     function testFuzz_sharePrice_decreases_after_negative_yield_from_claim(
         uint256 balance,
         uint256 unstakeAmount
-    ) external {
+    )
+        external
+    {
         // share price = 1
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
@@ -1076,7 +1114,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance and stake
         vm.deal(address(this), balance + unstakeAmount);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
+        Lido.submit{ value: balance + unstakeAmount }(address(0));
         Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
@@ -1096,10 +1134,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     }
 
     // guarantees only when share price is 1
-    function testFuzz_sharePrice_does_not_change_after_stake(
-        uint256 balance,
-        uint256 stakeAmount
-    ) external {
+    function testFuzz_sharePrice_does_not_change_after_stake(uint256 balance, uint256 stakeAmount) external {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > stakeAmount);
@@ -1123,10 +1158,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     //    // TODO
     //}
 
-    function testFuzz_sharePrice_does_not_change_after_positive_yield(
-        uint256 balance,
-        uint256 yield
-    ) external {
+    function testFuzz_sharePrice_does_not_change_after_positive_yield(uint256 balance, uint256 yield) external {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > yield);
@@ -1134,7 +1166,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance and stake
         vm.deal(address(this), balance + yield);
-        Lido.submit{value: balance + yield}(address(0));
+        Lido.submit{ value: balance + yield }(address(0));
         Lido.transfer(address(ethYieldManager), balance + yield);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance);
@@ -1153,7 +1185,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 positiveYield,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > positiveYield);
@@ -1165,7 +1199,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance and original negative yield
         vm.deal(address(this), balance + positiveYield + 1 ether);
-        Lido.submit{value: balance + positiveYield + 1 ether}(address(0));
+        Lido.submit{ value: balance + positiveYield + 1 ether }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
@@ -1191,7 +1225,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         uint256 balance,
         uint256 positiveYield,
         uint256 originalNegativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
         vm.assume(100000 ether > positiveYield);
@@ -1205,7 +1241,7 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
 
         // set up balance and original negative yield
         vm.deal(address(this), balance + positiveYield + 1 ether);
-        Lido.submit{value: balance + positiveYield + 1 ether}(address(0));
+        Lido.submit{ value: balance + positiveYield + 1 ether }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + originalNegativeYield);
@@ -1230,7 +1266,9 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
     function testFuzz_negative_yields_accumulate_after_commitYieldReport(
         uint256 balance,
         uint256 negativeYield
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 1 ether);
         vm.assume(balance < 100000 ether);
         vm.assume(negativeYield < 100000 ether);
@@ -1240,9 +1278,8 @@ contract ETH_YieldManager_Accounting_No_Insurance_Test is LidoYieldProvider_Init
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
         vm.deal(address(this), balance);
-        Lido.submit{value: balance}(address(0));
+        Lido.submit{ value: balance }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
-
 
         uint256 accumulatedBefore = ethYieldManager.accumulatedNegativeYields();
         assertEq(accumulatedBefore, 0);
@@ -1270,7 +1307,9 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
         uint256 balance,
         uint256 negativeYield,
         uint256 insuranceBalance
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 1 ether);
         vm.assume(balance < 100000 ether);
         vm.assume(insuranceBalance < 100000 ether);
@@ -1283,7 +1322,7 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
         // 1 ether is a buffer
         vm.deal(address(this), balance + insuranceBalance + 1 ether);
-        Lido.submit{value: balance}(address(0));
+        Lido.submit{ value: balance }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
 
         // set up insurance balance
@@ -1298,7 +1337,9 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
     function testFuzz_commitYieldReport_insufficient_insurance_to_cover_claim_loss_reverts(
         uint256 balance,
         uint256 unstakeAmount
-    ) external {
+    )
+        external
+    {
         // no negative yields
         vm.assume(balance > 0);
         vm.assume(1000 ether > balance);
@@ -1310,7 +1351,7 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
 
         // set up balance and stake and give 1 ether to insurance
         vm.deal(address(this), balance + unstakeAmount + 1 ether);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
+        Lido.submit{ value: balance + unstakeAmount }(address(0));
         Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
@@ -1337,7 +1378,9 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
         uint256 balance,
         uint256 negativeYield,
         uint256 insuranceBalance
-    ) external {
+    )
+        external
+    {
         vm.assume(balance > 1 ether);
         vm.assume(balance < 100000 ether);
         vm.assume(insuranceBalance < 100000 ether);
@@ -1352,7 +1395,7 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + negativeYield);
         // 1 ether is a buffer
         vm.deal(address(this), balance + insuranceBalance + 1 ether);
-        Lido.submit{value: balance + insuranceBalance + 1 ether}(address(0));
+        Lido.submit{ value: balance + insuranceBalance + 1 ether }(address(0));
         Lido.transfer(address(ethYieldManager), balance);
 
         // set up insurance balance
@@ -1364,11 +1407,14 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
         assertEq(ethYieldManager.accumulatedNegativeYields(), 0);
     }
 
-    // ensure that share price remains 1 when pending balance decreases and a loss can be realized as a result of LidoYP._claim
+    // ensure that share price remains 1 when pending balance decreases and a loss can be realized as a result of
+    // LidoYP._claim
     function testFuzz_commitYieldReportAfterInsuranceWithdrawal_succeeds_after_claim_loss(
         uint256 balance,
         uint256 unstakeAmount
-    ) external {
+    )
+        external
+    {
         // share price = 1
         vm.assume(balance > 0);
         vm.assume(100000 ether > balance);
@@ -1381,12 +1427,11 @@ contract ETH_YieldManager_Accounting_With_Insurance_Test is LidoYieldProvider_In
 
         // set up balance and stake and give 1 ether to insurance
         vm.deal(address(this), balance + unstakeAmount + 1 ether);
-        Lido.submit{value: balance + unstakeAmount}(address(0));
+        Lido.submit{ value: balance + unstakeAmount }(address(0));
         Lido.transfer(address(ethYieldManager), balance + unstakeAmount);
         Lido.transfer(address(insurance), 1 ether);
         vm.prank(address(l1BlastBridge));
         ethYieldManager.recordStakedDeposit(address(lidoProvider), balance + unstakeAmount);
-
 
         // unstake and finalize
         vm.prank(multisig);
@@ -1408,13 +1453,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
 
     function test_getProviderInfo_DSR_empty_succeeds() external {
         IPot pot = IPot(DSR_MANAGER.pot());
-        vm.mockCall(
-            address(pot),
-            abi.encodeWithSelector(
-                pot.rho.selector
-            ),
-            abi.encode(block.timestamp)
-        );
+        vm.mockCall(address(pot), abi.encodeWithSelector(pot.rho.selector), abi.encode(block.timestamp));
 
         YieldManager.ProviderInfo memory info = usdYieldManager.getProviderInfoAt(0);
         assertEq(info.providerAddress, address(dsrProvider));
@@ -1433,13 +1472,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         usdYieldManager.stake(0, address(dsrProvider), 10 ether);
 
         IPot pot = IPot(DSR_MANAGER.pot());
-        vm.mockCall(
-            address(pot),
-            abi.encodeWithSelector(
-                pot.rho.selector
-            ),
-            abi.encode(block.timestamp - 30 days)
-        );
+        vm.mockCall(address(pot), abi.encodeWithSelector(pot.rho.selector), abi.encode(block.timestamp - 30 days));
 
         YieldManager.ProviderInfo memory info = usdYieldManager.getProviderInfoAt(0);
         assertEq(info.providerAddress, address(dsrProvider));
@@ -1475,7 +1508,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
 
         assertEq(entries[claimedLogIndex].topics[0], keccak256("Claimed(bytes32,uint256,uint256)"));
         assertEq(entries[claimedLogIndex].topics[1], YieldProvider(dsrProvider).id());
-        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedLogIndex].data, (uint256,uint256));
+        (uint256 claimed, uint256 expected) = abi.decode(entries[claimedLogIndex].data, (uint256, uint256));
         assertEq(claimed, uint256(10 ether));
         assertEq(expected, uint256(10 ether));
 
@@ -1513,7 +1546,7 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         assertClose(reportedYield, int256(yield));
 
         assertEq(entries[1].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, , ) = abi.decode(entries[1].data, (int256, uint256, uint256));
+        (int256 totalYield,,) = abi.decode(entries[1].data, (int256, uint256, uint256));
         assertEq(totalYield, int256(yield));
 
         assertEq(entries[2].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
@@ -1547,13 +1580,17 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
         assertClose(committedYield, int256(yield - insuranceAmount));
 
         assertEq(entries[yieldReportLogIndex].topics[0], keccak256("YieldReport(int256,uint256,uint256)"));
-        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) = abi.decode(entries[yieldReportLogIndex].data, (int256, uint256, uint256));
+        (int256 totalYield, uint256 insurancePremiumPaid, uint256 insuranceWithdrawn) =
+            abi.decode(entries[yieldReportLogIndex].data, (int256, uint256, uint256));
         assertClose(totalYield, int256(yield - insuranceAmount));
         assertClose(insurancePremiumPaid, insuranceAmount);
         assertEq(insuranceWithdrawn, 0);
 
         assertEq(entries[depositLogIndex].topics[0], keccak256("TransactionDeposited(address,address,uint256,bytes)"));
-        assertEq(entries[depositLogIndex].topics[1], addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(usdYieldManager))));
+        assertEq(
+            entries[depositLogIndex].topics[1],
+            addressToBytes32(AddressAliasHelper.applyL1ToL2Alias(address(usdYieldManager)))
+        );
         assertEq(entries[depositLogIndex].topics[2], addressToBytes32(Predeploys.USDB)); // USDB
 
         uint256 insuranceBalance = RealDAI.balanceOf(usdYieldManager.insurance());
@@ -1576,7 +1613,6 @@ contract USD_YieldManager_Test is DSRYieldProvider_Initializer, Util {
 }
 
 contract USD_Insurance_Test is DSRYieldProvider_Initializer, Util {
-
     function setUp() public override {
         super.setUp();
 
@@ -1593,7 +1629,6 @@ contract USD_Insurance_Test is DSRYieldProvider_Initializer, Util {
     }
 
     function test_coverLoss_admin_succeeds() external {
-
         assertEq(insurance.admin(), multisig);
 
         assertEq(usdYieldManager.totalValue(), 0 ether);
@@ -1605,7 +1640,6 @@ contract USD_Insurance_Test is DSRYieldProvider_Initializer, Util {
     }
 
     function test_coverLoss_ym_succeeds() external {
-
         assertEq(usdYieldManager.totalValue(), 0 ether);
 
         vm.prank(address(usdYieldManager));
@@ -1615,7 +1649,6 @@ contract USD_Insurance_Test is DSRYieldProvider_Initializer, Util {
     }
 
     function test_coverloss_non_admin_reverts() external {
-
         assertEq(usdYieldManager.totalValue(), 0 ether);
 
         vm.expectRevert(abi.encodeWithSelector(Insurance.OnlyAdminOrYieldManager.selector));

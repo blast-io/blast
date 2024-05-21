@@ -28,6 +28,10 @@ type ReceiptClient interface {
 	TransactionReceipt(context.Context, common.Hash) (*types.Receipt, error)
 }
 
+type BlockClient interface {
+	BlockByNumber(context.Context, *big.Int) (*types.Block, error)
+}
+
 // ProvenWithdrawalParameters is the set of parameters to pass to the ProveWithdrawalTransaction
 // and FinalizeWithdrawalTransaction functions
 type ProvenWithdrawalParameters struct {

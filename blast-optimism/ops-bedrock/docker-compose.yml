@@ -15,7 +15,7 @@ services:
     build:
       context: ../
       additional_contexts:
-        - blast-geth=../../blast-geth
+        - op-geth=../../blast-geth
       dockerfile: ops/docker/op-stack-go/Dockerfile
       args:
         GIT_COMMIT: "dev"

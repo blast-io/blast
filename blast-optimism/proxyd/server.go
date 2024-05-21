@@ -42,20 +42,13 @@ const (
 	defaultWSHandshakeTimeout    = 10 * time.Second
 	defaultWSReadTimeout         = 2 * time.Minute
 	defaultWSWriteTimeout        = 10 * time.Second
+	defaultCacheTtl              = 1 * time.Hour
 	maxRequestBodyLogLen         = 2000
 	defaultMaxUpstreamBatchSize  = 10
 	defaultRateLimitHeader       = "X-Forwarded-For"
 )
 
 var emptyArrayResponse = json.RawMessage("[]")
-
-type ErrBannedTx struct {
-	TxHash string
-}
-
-func (*ErrBannedTx) Error() string {
-	return "banned tx"
-}
 
 type Server struct {
 	BackendGroups          map[string]*BackendGroup
@@ -83,14 +76,9 @@ type Server struct {
 	cache                  RPCCache
 	srvMu                  sync.Mutex
 	rateLimitHeader        string
-	banned                 *bannedAddrs
 }
 
 type limiterFunc func(method string) bool
-
-type bannedAddrs struct {
-	rClient *redis.Client
-}
 
 func NewServer(
 	backendGroups map[string]*BackendGroup,
@@ -168,11 +156,7 @@ func NewServer(
 	overrideLims := make(map[string]FrontendRateLimiter)
 	globalMethodLims := make(map[string]bool)
 	for method, override := range rateLimitConfig.MethodOverrides {
-		var err error
 		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, method)
-		if err != nil {
-			return nil, err
-		}
 
 		if override.Global {
 			globalMethodLims[method] = true
@@ -186,11 +170,6 @@ func NewServer(
 	rateLimitHeader := defaultRateLimitHeader
 	if rateLimitConfig.IPHeaderOverride != "" {
 		rateLimitHeader = rateLimitConfig.IPHeaderOverride
-	}
-
-	var banned *bannedAddrs
-	if redisClient != nil {
-		banned = &bannedAddrs{redisClient}
 	}
 
 	return &Server{
@@ -218,8 +197,6 @@ func NewServer(
 		limExemptOrigins:       limExemptOrigins,
 		limExemptUserAgents:    limExemptUserAgents,
 		rateLimitHeader:        rateLimitHeader,
-
-		banned: banned,
 	}, nil
 }
 
@@ -455,6 +432,16 @@ func (s *Server) handleBatchRPC(ctx context.Context, reqs []json.RawMessage, isL
 			continue
 		}
 
+		// Simple health check
+		if len(reqs) == 1 && parsedReq.Method == proxydHealthzMethod {
+			res := &RPCRes{
+				ID:      parsedReq.ID,
+				JSONRPC: JSONRPCVersion,
+				Result:  "OK",
+			}
+			return []*RPCRes{res}, false, "", nil
+		}
+
 		if err := ValidateRPCReq(parsedReq); err != nil {
 			RecordRPCError(ctx, BackendProxyd, MethodUnknown, err)
 			responses[i] = NewRPCErrorRes(nil, err)
@@ -504,12 +491,7 @@ func (s *Server) handleBatchRPC(ctx context.Context, reqs []json.RawMessage, isL
 		if parsedReq.Method == "eth_sendRawTransaction" && s.senderLim != nil {
 			if err := s.rateLimitSender(ctx, parsedReq); err != nil {
 				RecordRPCError(ctx, BackendProxyd, parsedReq.Method, err)
-				if bannedErr, ok := err.(*ErrBannedTx); ok {
-					responses[i] = NewRPCRes(parsedReq.ID, bannedErr.TxHash)
-				} else {
-					responses[i] = NewRPCErrorRes(parsedReq.ID, err)
-				}
-
+				responses[i] = NewRPCErrorRes(parsedReq.ID, err)
 				continue
 			}
 		}
@@ -699,12 +681,10 @@ func (s *Server) isGlobalLimit(method string) bool {
 	return s.globallyLimitedMethods[method]
 }
 
-const bannedKey = "banned_tags"
-
 func (s *Server) rateLimitSender(ctx context.Context, req *RPCReq) error {
 	var params []string
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		log.Debug("error unmarshaling raw transaction params", "err", err, "req_Id", GetReqID(ctx))
+		log.Debug("error unmarshalling raw transaction params", "err", err, "req_Id", GetReqID(ctx))
 		return ErrParseErr
 	}
 
@@ -750,37 +730,6 @@ func (s *Server) rateLimitSender(ctx context.Context, req *RPCReq) error {
 	if !ok {
 		log.Debug("sender rate limit exceeded", "sender", msg.From.Hex(), "req_id", GetReqID(ctx))
 		return ErrOverSenderRateLimit
-	}
-
-	// TODO don't require sender rate limiting for this feature to work
-	if s.banned != nil {
-		txHash := tx.Hash().Hex()
-
-		tags := make([]string, 2, 3)
-		tags[0] = fmt.Sprintf("hash:%s", txHash)
-		tags[1] = fmt.Sprintf("from:%s", strings.ToLower(msg.From.Hex()))
-
-		if msg.To != nil {
-			tags = append(tags, fmt.Sprintf("to:%s", strings.ToLower(msg.To.Hex())))
-		}
-
-		tagFounds, err := s.banned.rClient.SMIsMember(ctx, bannedKey, tags).Result()
-		if err != nil {
-			log.Error("error checking banned", "err", err, "tx_hash", txHash)
-			return ErrInternal
-		}
-
-		bannedTags := make([]string, 0, len(tags))
-		for i, tagFound := range tagFounds {
-			if tagFound {
-				bannedTags = append(bannedTags, tags[i])
-			}
-		}
-
-		if len(bannedTags) > 0 {
-			log.Info("rejecting banned tx", "tx_hash", txHash, "tags", strings.Join(bannedTags, ","))
-			return &ErrBannedTx{TxHash: txHash}
-		}
 	}
 
 	return nil

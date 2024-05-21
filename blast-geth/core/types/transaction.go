@@ -19,6 +19,7 @@ package types
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -58,8 +59,8 @@ type Transaction struct {
 	size atomic.Value
 	from atomic.Value
 
-	// cache of RollupGasData details to compute the gas the tx takes on L1 for its share of rollup data
-	rollupGas atomic.Value
+	// cache of details to compute the data availability fee
+	rollupCostData atomic.Value
 }
 
 // NewTx creates a new transaction.
@@ -366,27 +367,20 @@ func (tx *Transaction) Cost() *big.Int {
 	return total
 }
 
-// RollupDataGas is the amount of gas it takes to confirm the tx on L1 as a rollup
-func (tx *Transaction) RollupDataGas() RollupGasData {
+// RollupCostData caches the information needed to efficiently compute the data availability fee
+func (tx *Transaction) RollupCostData() RollupCostData {
 	if tx.Type() == DepositTxType {
-		return RollupGasData{}
+		return RollupCostData{}
 	}
-	if v := tx.rollupGas.Load(); v != nil {
-		return v.(RollupGasData)
+	if v := tx.rollupCostData.Load(); v != nil {
+		return v.(RollupCostData)
 	}
 	data, err := tx.MarshalBinary()
 	if err != nil { // Silent error, invalid txs will not be marshalled/unmarshalled for batch submission anyway.
 		log.Error("failed to encode tx for L1 cost computation", "err", err)
 	}
-	var out RollupGasData
-	for _, byt := range data {
-		if byt == 0 {
-			out.Zeroes++
-		} else {
-			out.Ones++
-		}
-	}
-	tx.rollupGas.Store(out)
+	out := NewRollupCostData(data)
+	tx.rollupCostData.Store(out)
 	return out
 }
 
@@ -486,6 +480,18 @@ func (tx *Transaction) BlobTxSidecar() *BlobTxSidecar {
 	if blobtx, ok := tx.inner.(*BlobTx); ok {
 		return blobtx.Sidecar
 	}
+	return nil
+}
+
+// SetBlobTxSidecar sets the sidecar of a transaction.
+// The sidecar should match the blob-tx versioned hashes, or the transaction will be invalid.
+// This allows tools to easily re-attach blob sidecars to signed transactions that omit the sidecar.
+func (tx *Transaction) SetBlobTxSidecar(sidecar *BlobTxSidecar) error {
+	blobtx, ok := tx.inner.(*BlobTx)
+	if !ok {
+		return fmt.Errorf("not a blob tx, type = %d", tx.Type())
+	}
+	blobtx.Sidecar = sidecar
 	return nil
 }
 

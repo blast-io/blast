@@ -48,3 +48,7 @@ __pycache__
 
 # Ignore echidna artifacts
 crytic-export
+
+
+# Ignore code package folder
+output/

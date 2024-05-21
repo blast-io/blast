@@ -91,17 +91,20 @@ func LoadOPStackRollupConfig(chainID uint64) (*Config, error) {
 		// but since none of the superchain chains differ, it's not represented in the superchain-registry yet.
 		// This restriction on superchain-chains may change in the future.
 		// Test/Alt configurations can still load custom rollup-configs when necessary.
-		BlockTime:              2,
-		MaxSequencerDrift:      600,
-		SeqWindowSize:          3600,
-		ChannelTimeout:         300,
-		L1ChainID:              new(big.Int).SetUint64(superChain.Config.L1.ChainID),
-		L2ChainID:              new(big.Int).SetUint64(chConfig.ChainID),
-		RegolithTime:           &regolithTime,
-		CanyonTime:             superChain.Config.CanyonTime,
+		BlockTime:         2,
+		MaxSequencerDrift: 600,
+		SeqWindowSize:     3600,
+		ChannelTimeout:    300,
+		L1ChainID:         new(big.Int).SetUint64(superChain.Config.L1.ChainID),
+		L2ChainID:         new(big.Int).SetUint64(chConfig.ChainID),
+		RegolithTime:      &regolithTime,
+		// CanyonTime:             superChain.Config.CanyonTime,
+		// DeltaTime:              superChain.Config.DeltaTime,
+		// EclipseTime:            superChain.Config.EclipseTime,
+		// FjordTime:              superChain.Config.FjordTime,
 		BatchInboxAddress:      common.Address(chConfig.BatchInboxAddr),
 		DepositContractAddress: depositContractAddress,
-		L1SystemConfigAddress:  common.Address(chConfig.SystemConfigAddr),
+		// L1SystemConfigAddress:  common.Address(chConfig.SystemConfigAddr),
 	}
 	if superChain.Config.ProtocolVersionsAddr != nil { // Set optional protocol versions address
 		cfg.ProtocolVersionsAddress = common.Address(*superChain.Config.ProtocolVersionsAddr)

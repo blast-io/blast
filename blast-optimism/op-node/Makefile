@@ -1,6 +1,18 @@
 GITCOMMIT ?= $(shell git rev-parse HEAD)
 GITDATE ?= $(shell git show -s --format='%ct')
-VERSION := v0.0.0
+# Find the github tag that points to this commit. If none are found, set the version string to "untagged"
+# Prioritizes release tag, if one exists, over tags suffixed with "-rc"
+VERSION ?= $(shell tags=$$(git tag --points-at $(GITCOMMIT) | grep '^op-node/' | sed 's/op-node\///' | sort -V); \
+             preferred_tag=$$(echo "$$tags" | grep -v -- '-rc' | tail -n 1); \
+             if [ -z "$$preferred_tag" ]; then \
+                 if [ -z "$$tags" ]; then \
+                     echo "untagged"; \
+                 else \
+                     echo "$$tags" | tail -n 1; \
+                 fi \
+             else \
+                 echo $$preferred_tag; \
+             fi)
 
 LDFLAGSSTRING +=-X main.GitCommit=$(GITCOMMIT)
 LDFLAGSSTRING +=-X main.GitDate=$(GITDATE)
@@ -18,7 +30,8 @@ test:
 	go test -v ./...
 
 fuzz:
-	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzL1InfoRoundTrip ./rollup/derive
+	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzL1InfoBedrockRoundTrip ./rollup/derive
+	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzL1InfoEcotoneRoundTrip ./rollup/derive
 	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzL1InfoAgainstContract ./rollup/derive
 	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzUnmarshallLogEvent ./rollup/derive
 	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz FuzzParseFrames ./rollup/derive

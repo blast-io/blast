@@ -52,7 +52,7 @@ contract USDB_Test is Bridge_Initializer {
         );
         uint256 price = Usdb.price();
         vm.startPrank(address(Usdb.BRIDGE()));
-        Usdb.mint(alice, 10*price);
+        Usdb.mint(alice, 10 * price);
         vm.stopPrank();
 
         uint256 shares = Usdb.count();
@@ -61,14 +61,14 @@ contract USDB_Test is Bridge_Initializer {
         vm.prank(caller);
         Usdb.addValue(shares - 1);
 
-        assertEq(Usdb.balanceOf(alice), 10*price);
+        assertEq(Usdb.balanceOf(alice), 10 * price);
         assertEq(Usdb.price(), price);
         assertEq(Usdb.pending(), shares - 1);
 
         vm.prank(caller);
         Usdb.addValue(1);
 
-        assertEq(Usdb.balanceOf(alice), 10*price + 10);
+        assertEq(Usdb.balanceOf(alice), 10 * price + 10);
         assertEq(Usdb.price(), price + 1);
         assertEq(Usdb.pending(), 0);
     }
@@ -125,8 +125,7 @@ contract USDB_Test is Bridge_Initializer {
         assertEq(iface1, type(IERC165).interfaceId);
         assert(Usdb.supportsInterface(iface1));
 
-        bytes4 iface2 =
-            Usdb.remoteToken.selector ^ Usdb.bridge.selector ^ Usdb.mint.selector ^ Usdb.burn.selector;
+        bytes4 iface2 = Usdb.remoteToken.selector ^ Usdb.bridge.selector ^ Usdb.mint.selector ^ Usdb.burn.selector;
         assertEq(iface2, type(IOptimismMintableERC20).interfaceId);
         assert(Usdb.supportsInterface(iface2));
     }

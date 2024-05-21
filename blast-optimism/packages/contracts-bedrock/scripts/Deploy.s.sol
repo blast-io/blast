@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { Script } from "forge-std/Script.sol";
-
 import { console2 as console } from "forge-std/console2.sol";
-import { stdJson } from "forge-std/StdJson.sol";
 import { IERC20 } from "forge-std/interfaces/IERC20.sol";
 import { ERC20Mock } from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 
@@ -24,12 +21,9 @@ import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { L1BlastBridge } from "src/mainnet-bridge/L1BlastBridge.sol";
 import { ETHYieldManager } from "src/mainnet-bridge/ETHYieldManager.sol";
-import { L2BlastBridge } from "src/mainnet-bridge/L2BlastBridge.sol";
 import { Insurance } from "src/mainnet-bridge/Insurance.sol";
-import { WithdrawalQueue } from "src/mainnet-bridge/withdrawal-queue/WithdrawalQueue.sol";
 import { YieldManager } from "src/mainnet-bridge/YieldManager.sol";
 import { USDYieldManager } from "src/mainnet-bridge/USDYieldManager.sol";
-import { WETHRebasing } from "src/L2/WETHRebasing.sol";
 import { L1ChugSplashProxy } from "src/legacy/L1ChugSplashProxy.sol";
 import { ResolvedDelegateProxy } from "src/legacy/ResolvedDelegateProxy.sol";
 import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
@@ -59,21 +53,23 @@ import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { AlphabetVM } from "../test/FaultDisputeGame.t.sol";
 import "src/libraries/DisputeTypes.sol";
 
-
 interface IMint {
     function mint(address to, uint256 amount) external;
 }
+
 interface IUSDT {
     function owner() external view returns (address);
     function issue(uint256 amount) external;
     function transfer(address to, uint256 amount) external;
 }
+
 interface IUSDC is IMint {
     function masterMinter() external view returns (address);
     function configureMinter(address, uint256) external returns (bool);
 }
+
 interface IDAI is IMint {
-    function wards(address to) external view returns (uint);
+    function wards(address to) external view returns (uint256);
 }
 
 /// @title Deploy
@@ -104,7 +100,7 @@ contract Deploy is Deployer {
     function run() public {
         console.log("Deploying L1 system");
 
-        if (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84.code.length == 0) { // if Lido exists
+        if (!_isFork()) {
             deployMocks();
         }
 
@@ -145,13 +141,6 @@ contract Deploy is Deployer {
         return keccak256(bytes(vm.envOr("IMPL_SALT", string("ethers phoenix"))));
     }
 
-    /// @notice Modifier that wraps a function in broadcasting.
-    modifier broadcast() {
-        vm.startBroadcast();
-        _;
-        vm.stopBroadcast();
-    }
-
     /// @notice Modifier that will only allow a function to be called on devnet.
     modifier onlyDevnet() {
         uint256 chainid = block.chainid;
@@ -165,7 +154,7 @@ contract Deploy is Deployer {
     modifier onlyTestnetOrDevnet() {
         uint256 chainid = block.chainid;
         if (
-            chainid == Chains.Goerli || chainid == Chains.Sepolia || chainid == Chains.LocalDevnet
+            chainid == Chains.Sepolia || chainid == Chains.LocalDevnet
                 || chainid == Chains.GethDevnet
         ) {
             _;
@@ -175,6 +164,7 @@ contract Deploy is Deployer {
     function deployMocks() public broadcast {
         ERC20Mock usdToken = new ERC20Mock("USDToken", "UT", address(this), 0);
         save("USDToken", address(usdToken));
+
         ERC20Mock ethToken = new ERC20Mock("ETHYieldToken", "EYT", address(this), 0);
         save("ETHYieldToken", address(ethToken));
     }
@@ -267,9 +257,7 @@ contract Deploy is Deployer {
 
     /// @notice Deploy the ProxyAdmin
     function deployProxyAdmin() public broadcast returns (address addr_) {
-        ProxyAdmin admin = new ProxyAdmin({
-            _owner: msg.sender
-        });
+        ProxyAdmin admin = new ProxyAdmin({ _owner: msg.sender });
         require(admin.owner() == msg.sender);
 
         AddressManager addressManager = AddressManager(mustGetAddress("AddressManager"));
@@ -357,9 +345,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the L2OutputOracleProxy
     function deployL2OutputOracleProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -391,9 +377,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the OptimismPortalProxy
     function deployOptimismPortalProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -407,9 +391,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the OptimismMintableERC20FactoryProxy
     function deployOptimismMintableERC20FactoryProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -423,9 +405,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the L1ERC721BridgeProxy
     function deployL1ERC721BridgeProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -439,9 +419,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the SystemConfigProxy
     function deploySystemConfigProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -455,9 +433,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the DisputeGameFactoryProxy
     function deployDisputeGameFactoryProxy() public onlyDevnet broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -471,9 +447,7 @@ contract Deploy is Deployer {
     /// @notice Deploy the ProtocolVersionsProxy
     function deployProtocolVersionsProxy() public broadcast returns (address addr_) {
         address proxyAdmin = mustGetAddress("ProxyAdmin");
-        Proxy proxy = new Proxy({
-            _admin: proxyAdmin
-        });
+        Proxy proxy = new Proxy({ _admin: proxyAdmin });
 
         address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
         require(admin == proxyAdmin);
@@ -670,12 +644,7 @@ contract Deploy is Deployer {
 
     /// @notice Deploy the USDYieldManager
     function deployUSDYieldManager() public broadcast returns (address addr_) {
-        address token;
-        if (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84.code.length > 0) { // if Lido exists
-            token = address(USDConversions.DAI);
-        } else {
-            token = mustGetAddress("USDToken");
-        }
+        address token = _isFork() ? address(USDConversions.DAI) : mustGetAddress("USDToken");
         USDYieldManager ym = new USDYieldManager{ salt: implSalt() }(token);
 
         save("USDYieldManager", address(ym));
@@ -899,7 +868,7 @@ contract Deploy is Deployer {
                     USDYieldManager(payable(usdYieldManagerProxy)),
                     ETHYieldManager(payable(ethYieldManagerProxy))
                 )
-            )
+                )
         });
 
         L1BlastBridge bridge = L1BlastBridge(payable(l1BlastBridgeProxy));
@@ -934,23 +903,23 @@ contract Deploy is Deployer {
             _proxy: payable(ethYieldManagerProxy),
             _implementation: ethYieldManager,
             _innerCallData: abi.encodeCall(
-                ETHYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
-            )
+                ETHYieldManager.initialize,
+                (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
+                )
         });
 
         ETHYieldManager ym = ETHYieldManager(payable(ethYieldManagerProxy));
 
-        _callViaSafe({
-            _target: address(ym),
-            _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin()))
-        });
+        _callViaSafe({ _target: address(ym), _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin())) });
         _callViaSafe({
             _target: address(ym),
             _data: abi.encodeCall(YieldManager.setBlastBridge, (mustGetAddress("L1BlastBridgeProxy")))
         });
         _callViaSafe({
             _target: address(ym),
-            _data: abi.encodeCall(YieldManager.setInsurance, (address(insuranceProxy), cfg.ethInsuranceFee(), cfg.ethWithdrawalBuffer()))
+            _data: abi.encodeCall(
+                YieldManager.setInsurance, (address(insuranceProxy), cfg.ethInsuranceFee(), cfg.ethWithdrawalBuffer())
+                )
         });
 
         string memory version = ym.version();
@@ -974,28 +943,27 @@ contract Deploy is Deployer {
         }
         require(uint256(proxyAdmin.proxyType(usdYieldManagerProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
 
-        Safe safe = Safe(mustGetAddress("SystemOwnerSafe"));
         _upgradeAndCallViaSafe({
             _proxy: payable(usdYieldManagerProxy),
             _implementation: usdYieldManager,
             _innerCallData: abi.encodeCall(
-                USDYieldManager.initialize, (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
-            )
+                USDYieldManager.initialize,
+                (OptimismPortal(payable(optimismPortalProxy)), mustGetAddress("SystemOwnerSafe"))
+                )
         });
 
         USDYieldManager ym = USDYieldManager(payable(usdYieldManagerProxy));
 
-        _callViaSafe({
-            _target: address(ym),
-            _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin()))
-        });
+        _callViaSafe({ _target: address(ym), _data: abi.encodeCall(YieldManager.setAdmin, (cfg.yieldManagerAdmin())) });
         _callViaSafe({
             _target: address(ym),
             _data: abi.encodeCall(YieldManager.setBlastBridge, (mustGetAddress("L1BlastBridgeProxy")))
         });
         _callViaSafe({
             _target: address(ym),
-            _data: abi.encodeCall(YieldManager.setInsurance, (address(insuranceProxy), cfg.usdInsuranceFee(), cfg.usdWithdrawalBuffer()))
+            _data: abi.encodeCall(
+                YieldManager.setInsurance, (address(insuranceProxy), cfg.usdInsuranceFee(), cfg.usdWithdrawalBuffer())
+                )
         });
 
         string memory version = ym.version();
@@ -1022,9 +990,7 @@ contract Deploy is Deployer {
         _upgradeAndCallViaSafe({
             _proxy: payable(ethInsuranceProxy),
             _implementation: ethInsurance,
-            _innerCallData: abi.encodeCall(
-                Insurance.initialize, (mustGetAddress("SystemOwnerSafe"))
-            )
+            _innerCallData: abi.encodeCall(Insurance.initialize, (mustGetAddress("SystemOwnerSafe")))
         });
 
         proxyType = uint256(proxyAdmin.proxyType(usdInsuranceProxy));
@@ -1039,9 +1005,7 @@ contract Deploy is Deployer {
         _upgradeAndCallViaSafe({
             _proxy: payable(usdInsuranceProxy),
             _implementation: usdInsurance,
-            _innerCallData: abi.encodeCall(
-                Insurance.initialize, (mustGetAddress("SystemOwnerSafe"))
-            )
+            _innerCallData: abi.encodeCall(Insurance.initialize, (mustGetAddress("SystemOwnerSafe")))
         });
     }
 
@@ -1182,7 +1146,13 @@ contract Deploy is Deployer {
             _implementation: optimismPortal,
             _innerCallData: abi.encodeCall(
                 OptimismPortal.initialize,
-                (L2OutputOracle(l2OutputOracleProxy), mustGetAddress("SystemOwnerSafe"), SystemConfig(systemConfigProxy), false, ETHYieldManager(payable(ethYieldManagerProxy)))
+                (
+                    L2OutputOracle(l2OutputOracleProxy),
+                    mustGetAddress("SystemOwnerSafe"),
+                    SystemConfig(systemConfigProxy),
+                    false,
+                    ETHYieldManager(payable(ethYieldManagerProxy))
+                )
                 )
         });
 
@@ -1285,34 +1255,58 @@ contract Deploy is Deployer {
     }
 
     function setYieldTokens() public broadcast {
-        if (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84.code.length > 0) { // if Lido exists
+        if (_isFork()) {
             save("USDBRemoteToken", address(USDConversions.DAI));
             _setUSDYieldToken(address(USDConversions.DAI), true, 18, address(0), false);
             _setUSDYieldToken(address(USDConversions.USDC), true, 6, address(0), false);
             _setUSDYieldToken(address(USDConversions.USDT), true, 6, address(0), false);
-            _setETHYieldToken(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, true, 18, mustGetAddress("LidoYieldProvider"), true);
+            _setETHYieldToken(
+                0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84, true, 18, mustGetAddress("LidoYieldProvider"), true
+            );
         } else {
             save("USDBRemoteToken", mustGetAddress("USDToken"));
             _setUSDYieldToken(mustGetAddress("USDToken"), true, 18, address(0), false);
-            _setETHYieldToken(mustGetAddress("ETHYieldToken"), true, 18, mustGetAddress("ETHTestnetYieldProvider"), true);
+            _setETHYieldToken(
+                mustGetAddress("ETHYieldToken"), true, 18, mustGetAddress("ETHTestnetYieldProvider"), true
+            );
         }
     }
 
-    function _setETHYieldToken(address token, bool approved, uint8 decimals, address provider, bool reportStakedBalance) internal {
+    function _setETHYieldToken(
+        address token,
+        bool approved,
+        uint8 decimals,
+        address provider,
+        bool reportStakedBalance
+    )
+        internal
+    {
         L1BlastBridge l1BlastBridge = L1BlastBridge(payable(mustGetAddress("L1BlastBridgeProxy")));
 
         _callViaSafe({
             _target: address(l1BlastBridge),
-            _data: abi.encodeCall(L1BlastBridge.setETHYieldToken, (token, approved, decimals, provider, reportStakedBalance))
+            _data: abi.encodeCall(
+                L1BlastBridge.setETHYieldToken, (token, approved, decimals, provider, reportStakedBalance)
+                )
         });
     }
 
-    function _setUSDYieldToken(address token, bool approved, uint8 decimals, address provider, bool reportStakedBalance) internal {
+    function _setUSDYieldToken(
+        address token,
+        bool approved,
+        uint8 decimals,
+        address provider,
+        bool reportStakedBalance
+    )
+        internal
+    {
         L1BlastBridge l1BlastBridge = L1BlastBridge(payable(mustGetAddress("L1BlastBridgeProxy")));
 
         _callViaSafe({
             _target: address(l1BlastBridge),
-            _data: abi.encodeCall(L1BlastBridge.setUSDYieldToken, (token, approved, decimals, provider, reportStakedBalance))
+            _data: abi.encodeCall(
+                L1BlastBridge.setUSDYieldToken, (token, approved, decimals, provider, reportStakedBalance)
+                )
         });
     }
 
@@ -1320,20 +1314,14 @@ contract Deploy is Deployer {
         ETHYieldManager yieldManager = ETHYieldManager(payable(mustGetAddress("ETHYieldManagerProxy")));
         address yieldProvider;
 
-        if (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84.code.length > 0) { // if Lido exists
+        if (_isFork()) {
             yieldProvider = address(new LidoYieldProvider(yieldManager));
-            _addYieldProvider(
-                "LidoYieldProvider",
-                yieldProvider,
-                address(yieldManager)
-            );
+            _addYieldProvider("LidoYieldProvider", yieldProvider, address(yieldManager));
         } else {
-             yieldProvider = address(new ETHTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("ETHYieldToken")));
-            _addYieldProvider(
-                "ETHTestnetYieldProvider",
-                yieldProvider,
-                address(yieldManager)
+            yieldProvider = address(
+                new ETHTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("ETHYieldToken"))
             );
+            _addYieldProvider("ETHTestnetYieldProvider", yieldProvider, address(yieldManager));
         }
         save("ETHYieldProvider", yieldProvider);
     }
@@ -1342,29 +1330,20 @@ contract Deploy is Deployer {
         USDYieldManager yieldManager = USDYieldManager(payable(mustGetAddress("USDYieldManagerProxy")));
         address yieldProvider;
 
-        if (address(USDConversions.DAI).code.length > 0) { // if DAI exists
+        if (address(USDConversions.DAI).code.length > 0) {
+            // if DAI exists
             yieldProvider = address(new DSRYieldProvider(yieldManager));
-            _addYieldProvider(
-                "DSRYieldProvider",
-                yieldProvider,
-                address(yieldManager)
-            );
+            _addYieldProvider("DSRYieldProvider", yieldProvider, address(yieldManager));
         } else {
-            yieldProvider = address(new USDTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("USDToken")));
-            _addYieldProvider(
-                "USDTestnetYieldProvider",
-                yieldProvider,
-                address(yieldManager)
-            );
+            yieldProvider =
+                address(new USDTestnetYieldProvider(yieldManager, cfg.yieldManagerAdmin(), mustGetAddress("USDToken")));
+            _addYieldProvider("USDTestnetYieldProvider", yieldProvider, address(yieldManager));
         }
         save("USDYieldProvider", yieldProvider);
     }
 
     function _addYieldProvider(string memory _name, address yieldProvider, address yieldManager) internal {
-        _callViaSafe({
-            _target: yieldManager,
-            _data: abi.encodeCall(YieldManager.addProvider, (yieldProvider))
-        });
+        _callViaSafe({ _target: yieldManager, _data: abi.encodeCall(YieldManager.addProvider, (yieldProvider)) });
         save(_name, yieldProvider);
     }
 
@@ -1440,7 +1419,7 @@ contract Deploy is Deployer {
         vm.startBroadcast();
         payable(USDT.owner()).transfer(0.5 ether);
         payable(USDC.masterMinter()).transfer(0.5 ether);
-        (bool success,) = payable(address(eym)).call{value: 0.5 ether}("");
+        (bool success,) = payable(address(eym)).call{ value: 0.5 ether }("");
         require(success);
         vm.stopBroadcast();
 

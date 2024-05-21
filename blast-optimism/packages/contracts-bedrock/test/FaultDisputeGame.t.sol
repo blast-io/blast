@@ -55,13 +55,7 @@ contract FaultDisputeGame_Init is DisputeGameFactory_Init {
 
         // Deploy an implementation of the fault game
         gameImpl = new FaultDisputeGame(
-            GAME_TYPE,
-            absolutePrestate,
-            4,
-            Duration.wrap(7 days),
-            new AlphabetVM(absolutePrestate),
-            oracle,
-            blockOracle
+            GAME_TYPE, absolutePrestate, 4, Duration.wrap(7 days), new AlphabetVM(absolutePrestate), oracle, blockOracle
         );
         // Register the game implementation with the factory.
         factory.setImplementation(GAME_TYPE, gameImpl);
@@ -990,11 +984,7 @@ contract FaultDisputeGame_ResolvesCorrectly_IncorrectRootFuzz is OneVsOne_Arena 
             uint256 snapshot = vm.snapshot();
 
             GamePlayer honest = new HonestPlayer(ABSOLUTE_PRESTATE);
-            GamePlayer dishonest = new VariableDivergentPlayer(
-                ABSOLUTE_PRESTATE,
-                _dishonestTraceLength,
-                i
-            );
+            GamePlayer dishonest = new VariableDivergentPlayer(ABSOLUTE_PRESTATE, _dishonestTraceLength, i);
             super.init(dishonest, honest, _dishonestTraceLength - 1);
 
             // Play the game until a step is forced.
@@ -1021,11 +1011,7 @@ contract FaultDisputeGame_ResolvesCorrectly_CorrectRootFuzz is OneVsOne_Arena {
             uint256 snapshot = vm.snapshot();
 
             GamePlayer honest = new HonestPlayer(ABSOLUTE_PRESTATE);
-            GamePlayer dishonest = new VariableDivergentPlayer(
-                ABSOLUTE_PRESTATE,
-                _dishonestTraceLength,
-                i
-            );
+            GamePlayer dishonest = new VariableDivergentPlayer(ABSOLUTE_PRESTATE, _dishonestTraceLength, i);
             super.init(honest, dishonest, 15);
 
             // Play the game until a step is forced.
