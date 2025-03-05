@@ -1472,7 +1472,7 @@ func (pool *LegacyPool) promoteExecutables(accounts []common.Address) []*types.T
 	var promoted []*types.Transaction
 
 	// Iterate over all accounts and promote any executable transactions
-	gasLimit := txpool.EffectiveGasLimit(pool.chainconfig, pool.currentHead.Load().GasLimit)
+	gasLimit := txpool.EffectiveGasLimit(pool.chainconfig, pool.currentHead.Load().GasLimit, 0)
 	for _, addr := range accounts {
 		list := pool.queue[addr]
 		if list == nil {
@@ -1683,7 +1683,7 @@ func (pool *LegacyPool) truncateQueue() {
 // to trigger a re-heap is this function
 func (pool *LegacyPool) demoteUnexecutables() {
 	// Iterate over all accounts and demote any non-executable transactions
-	gasLimit := txpool.EffectiveGasLimit(pool.chainconfig, pool.currentHead.Load().GasLimit)
+	gasLimit := txpool.EffectiveGasLimit(pool.chainconfig, pool.currentHead.Load().GasLimit, 0)
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
 

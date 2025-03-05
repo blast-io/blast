@@ -3,119 +3,86 @@ package params
 import (
 	"encoding/binary"
 	"fmt"
-	"math/big"
-	"sort"
 	"strings"
 
-	"github.com/ethereum-optimism/superchain-registry/superchain"
 	"github.com/ethereum/go-ethereum/common"
+	// "github.com/ethereum/go-ethereum/superchain"
 )
 
-var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 6, Minor: 0, Patch: 0, PreRelease: 0}.Encode()
+var OPStackSupport = ProtocolVersionV0{Build: [8]byte{}, Major: 9, Minor: 0, Patch: 0, PreRelease: 0}.Encode()
 
 func init() {
-	for id, ch := range superchain.OPChains {
-		NetworkNames[fmt.Sprintf("%d", id)] = ch.Name
-	}
+	// for id, ch := range superchain.Chains {
+	// 	NetworkNames[fmt.Sprintf("%d", id)] = ch.Name
+	// }
 }
 
-func OPStackChainIDByName(name string) (uint64, error) {
-	for id, ch := range superchain.OPChains {
-		if ch.Chain+"-"+ch.Superchain == name {
-			return id, nil
-		}
-	}
-	return 0, fmt.Errorf("unknown chain %q", name)
+// uint64ptr is a weird helper to allow 1-line constant pointer creation.
+func uint64ptr(n uint64) *uint64 {
+	return &n
 }
 
-func OPStackChainNames() (out []string) {
-	for _, ch := range superchain.OPChains {
-		out = append(out, ch.Chain+"-"+ch.Superchain)
-	}
-	sort.Strings(out)
-	return
-}
+// func LoadOPStackChainConfig(chConfig *superchain.ChainConfig) (*ChainConfig, error) {
+// 	hardforks := chConfig.Hardforks
+// 	genesisActivation := uint64(0)
+// 	out := &ChainConfig{
+// 		ChainID:                 new(big.Int).SetUint64(chConfig.ChainID),
+// 		HomesteadBlock:          common.Big0,
+// 		DAOForkBlock:            nil,
+// 		DAOForkSupport:          false,
+// 		EIP150Block:             common.Big0,
+// 		EIP155Block:             common.Big0,
+// 		EIP158Block:             common.Big0,
+// 		ByzantiumBlock:          common.Big0,
+// 		ConstantinopleBlock:     common.Big0,
+// 		PetersburgBlock:         common.Big0,
+// 		IstanbulBlock:           common.Big0,
+// 		MuirGlacierBlock:        common.Big0,
+// 		BerlinBlock:             common.Big0,
+// 		LondonBlock:             common.Big0,
+// 		ArrowGlacierBlock:       common.Big0,
+// 		GrayGlacierBlock:        common.Big0,
+// 		MergeNetsplitBlock:      common.Big0,
+// 		ShanghaiTime:            hardforks.CanyonTime,  // Shanghai activates with Canyon
+// 		CancunTime:              hardforks.EcotoneTime, // Cancun activates with Ecotone
+// 		PragueTime:              hardforks.IsthmusTime, // Prague activates with Isthmus
+// 		BedrockBlock:            common.Big0,
+// 		RegolithTime:            &genesisActivation,
+// 		CanyonTime:              hardforks.CanyonTime,
+// 		EcotoneTime:             hardforks.EcotoneTime,
+// 		FjordTime:               hardforks.FjordTime,
+// 		GraniteTime:             hardforks.GraniteTime,
+// 		HoloceneTime:            hardforks.HoloceneTime,
+// 		IsthmusTime:             hardforks.IsthmusTime,
+// 		JovianTime:              hardforks.JovianTime,
+// 		TerminalTotalDifficulty: common.Big0,
+// 		Ethash:                  nil,
+// 		Clique:                  nil,
+// 	}
 
-func LoadOPStackChainConfig(chainID uint64) (*ChainConfig, error) {
-	chConfig, ok := superchain.OPChains[chainID]
-	if !ok {
-		return nil, fmt.Errorf("unknown chain ID: %d", chainID)
-	}
+// 	if chConfig.Optimism != nil {
+// 		out.Optimism = &OptimismConfig{
+// 			EIP1559Elasticity:  chConfig.Optimism.EIP1559Elasticity,
+// 			EIP1559Denominator: chConfig.Optimism.EIP1559Denominator,
+// 		}
+// 		if chConfig.Optimism.EIP1559DenominatorCanyon != nil {
+// 			out.Optimism.EIP1559DenominatorCanyon = uint64ptr(*chConfig.Optimism.EIP1559DenominatorCanyon)
+// 		}
+// 	}
 
-	genesisActivation := uint64(0)
-	out := &ChainConfig{
-		ChainID:                       new(big.Int).SetUint64(chainID),
-		HomesteadBlock:                common.Big0,
-		DAOForkBlock:                  nil,
-		DAOForkSupport:                false,
-		EIP150Block:                   common.Big0,
-		EIP155Block:                   common.Big0,
-		EIP158Block:                   common.Big0,
-		ByzantiumBlock:                common.Big0,
-		ConstantinopleBlock:           common.Big0,
-		PetersburgBlock:               common.Big0,
-		IstanbulBlock:                 common.Big0,
-		MuirGlacierBlock:              common.Big0,
-		BerlinBlock:                   common.Big0,
-		LondonBlock:                   common.Big0,
-		ArrowGlacierBlock:             common.Big0,
-		GrayGlacierBlock:              common.Big0,
-		MergeNetsplitBlock:            common.Big0,
-		ShanghaiTime:                  chConfig.CanyonTime,  // Shanghai activates with Canyon
-		CancunTime:                    chConfig.EcotoneTime, // Cancun activates with Ecotone
-		PragueTime:                    nil,
-		BedrockBlock:                  common.Big0,
-		RegolithTime:                  &genesisActivation,
-		CanyonTime:                    chConfig.CanyonTime,
-		EcotoneTime:                   chConfig.EcotoneTime,
-		TerminalTotalDifficulty:       common.Big0,
-		TerminalTotalDifficultyPassed: true,
-		Ethash:                        nil,
-		Clique:                        nil,
-		Optimism: &OptimismConfig{
-			EIP1559Elasticity:        6,
-			EIP1559Denominator:       50,
-			EIP1559DenominatorCanyon: 250,
-		},
-	}
+// 	// special overrides for OP-Stack chains with pre-Regolith upgrade history
+// 	switch chConfig.ChainID {
+// 	case OPMainnetChainID:
+// 		out.BerlinBlock = big.NewInt(3950000)
+// 		out.LondonBlock = big.NewInt(105235063)
+// 		out.ArrowGlacierBlock = big.NewInt(105235063)
+// 		out.GrayGlacierBlock = big.NewInt(105235063)
+// 		out.MergeNetsplitBlock = big.NewInt(105235063)
+// 		out.BedrockBlock = big.NewInt(105235063)
+// 	}
 
-	// special overrides for OP-Stack chains with pre-Regolith upgrade history
-	switch chainID {
-	case OPGoerliChainID:
-		out.LondonBlock = big.NewInt(4061224)
-		out.ArrowGlacierBlock = big.NewInt(4061224)
-		out.GrayGlacierBlock = big.NewInt(4061224)
-		out.MergeNetsplitBlock = big.NewInt(4061224)
-		out.BedrockBlock = big.NewInt(4061224)
-		out.RegolithTime = &OptimismGoerliRegolithTime
-		out.Optimism.EIP1559Elasticity = 10
-	case OPMainnetChainID:
-		out.BerlinBlock = big.NewInt(3950000)
-		out.LondonBlock = big.NewInt(105235063)
-		out.ArrowGlacierBlock = big.NewInt(105235063)
-		out.GrayGlacierBlock = big.NewInt(105235063)
-		out.MergeNetsplitBlock = big.NewInt(105235063)
-		out.BedrockBlock = big.NewInt(105235063)
-	case BaseGoerliChainID:
-		out.RegolithTime = &BaseGoerliRegolithTime
-		out.Optimism.EIP1559Elasticity = 10
-	case baseSepoliaChainID:
-		out.Optimism.EIP1559Elasticity = 10
-	case baseGoerliDevnetChainID:
-		out.RegolithTime = &baseGoerliDevnetRegolithTime
-	case pgnSepoliaChainID:
-		out.Optimism.EIP1559Elasticity = 2
-		out.Optimism.EIP1559Denominator = 8
-	case devnetChainID:
-		out.RegolithTime = &devnetRegolithTime
-		out.Optimism.EIP1559Elasticity = 10
-	case chaosnetChainID:
-		out.RegolithTime = &chaosnetRegolithTime
-		out.Optimism.EIP1559Elasticity = 10
-	}
-
-	return out, nil
-}
+// 	return out, nil
+// }
 
 // ProtocolVersion encodes the OP-Stack protocol version. See OP-Stack superchain-upgrade specification.
 type ProtocolVersion [32]byte

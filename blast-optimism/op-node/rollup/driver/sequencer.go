@@ -23,6 +23,7 @@ type Downloader interface {
 
 type L1OriginSelectorIface interface {
 	FindL1Origin(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, error)
+	IsPastSeqDrift(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, bool, error)
 }
 
 type SequencerMetrics interface {
@@ -78,12 +79,34 @@ func (d *Sequencer) StartBuildingBlock(ctx context.Context) error {
 
 	d.log.Info("creating new block", "parent", l2Head, "l1Origin", l1Origin)
 
-	fetchCtx, cancel := context.WithTimeout(ctx, time.Second*20)
+	fetchCtx, cancel := context.WithTimeout(context.WithValue(ctx, derive.ModeKey, derive.ModeKeySequencer), time.Second*20)
 	defer cancel()
 
 	attrs, err := d.attrBuilder.PreparePayloadAttributes(fetchCtx, l2Head, l1Origin.ID())
 	if err != nil {
-		return err
+		if err != derive.ErrFetchReceipt {
+			return err
+		}
+		// okay we had a fetch receipts error - can we try current origin instead
+
+		// very odd if this error ever happens since we already did call it with same l2head and that is cached
+		// but safe than sorry
+		currentOrigin, pastSeqDrift, errSelect := d.l1OriginSelector.IsPastSeqDrift(fetchCtx, l2Head)
+		if errSelect != nil {
+			return derive.NewResetError(fmt.Errorf("impossible error for already cached origin selected %v", err))
+		}
+		if !pastSeqDrift { // we are okay to reuse the current origin if receipt fetching failed
+			d.log.Warn(
+				"receipt fetching for new epoch failed while still under sequencer drift so using current origin",
+				"current-origin", currentOrigin,
+				"next-origin", l1Origin,
+			)
+			attrs, err = d.attrBuilder.PreparePayloadAttributes(fetchCtx, l2Head, currentOrigin.ID())
+		}
+
+		if err != nil {
+			return err
+		}
 	}
 
 	// If our next L2 block timestamp is beyond the Sequencer drift threshold, then we must produce

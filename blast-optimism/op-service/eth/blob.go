@@ -4,10 +4,13 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -58,26 +61,20 @@ func (b *Blob) TerminalString() string {
 }
 
 func (b *Blob) ComputeKZGCommitment() (kzg4844.Commitment, error) {
-	return kzg4844.BlobToCommitment(*b.KZGBlob())
+	return kzg4844.BlobToCommitment(b.KZGBlob())
 }
 
 // KZGToVersionedHash computes the "blob hash" (a.k.a. versioned-hash) of a blob-commitment, as used in a blob-tx.
 // We implement it here because it is unfortunately not (currently) exposed by geth.
 func KZGToVersionedHash(commitment kzg4844.Commitment) (out common.Hash) {
-	// EIP-4844 spec:
-	//	def kzg_to_versioned_hash(commitment: KZGCommitment) -> VersionedHash:
-	//		return VERSIONED_HASH_VERSION_KZG + sha256(commitment)[1:]
-	h := sha256.New()
-	h.Write(commitment[:])
-	_ = h.Sum(out[:0])
-	out[0] = params.BlobTxHashVersion
-	return out
+	hasher := sha256.New()
+	return kzg4844.CalcBlobHashV1(hasher, &commitment)
 }
 
 // VerifyBlobProof verifies that the given blob and proof corresponds to the given commitment,
 // returning error if the verification fails.
 func VerifyBlobProof(blob *Blob, commitment kzg4844.Commitment, proof kzg4844.Proof) error {
-	return kzg4844.VerifyBlobProof(*blob.KZGBlob(), commitment, proof)
+	return kzg4844.VerifyBlobProof(blob.KZGBlob(), commitment, proof)
 }
 
 // FromData encodes the given input data into this blob. The encoding scheme is as follows:
@@ -285,3 +282,37 @@ func (b *Blob) Clear() {
 		b[i] = 0
 	}
 }
+
+// CalcBlobFeeDefault calculates the blob fee for the given header using eip4844.CalcBlobFee,
+// using the requests hash field of the header as a best-effort heuristic whether
+// Prague is active, and the default Ethereum blob schedule.
+//
+// This is to deal in a best-effort way with situations where the chain config is not
+// available, but it can be assumed that per the definition of the Prague fork that
+// Prague is active iff the requests hash field is present.
+func CalcBlobFeeDefault(header *types.Header) *big.Int {
+	// We make the assumption that eip4844.CalcBlobFee only needs
+	// - London and Cancun to be active
+	// - the Prague time to be set relative to the header time
+	// and that the caller assumes the default prod Ethereum Blob schedule config.
+	dummyChainCfg := &params.ChainConfig{
+		LondonBlock:        common.Big0,
+		CancunTime:         ptr(uint64(0)),
+		BlobScheduleConfig: params.DefaultBlobSchedule,
+	}
+	// We assume that the requests hash is set iff Prague is active.
+	if header.RequestsHash != nil {
+		dummyChainCfg.PragueTime = ptr(uint64(0))
+	}
+	return eip4844.CalcBlobFee(dummyChainCfg, header)
+}
+
+func CalcBlobFeeCancun(excessBlobGas uint64) *big.Int {
+	// Dummy Cancun header for calculation.
+	cancunHeader := &types.Header{
+		ExcessBlobGas: &excessBlobGas,
+	}
+	return CalcBlobFeeDefault(cancunHeader)
+}
+
+func ptr[T any](t T) *T { return &t }

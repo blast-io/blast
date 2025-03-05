@@ -2,6 +2,7 @@ package derive
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -38,6 +39,16 @@ func NewFetchingAttributesBuilder(rollupCfg *rollup.Config, l1 L1ReceiptsFetcher
 	}
 }
 
+const (
+	ModeKeyVerifier  = "verifier"
+	ModeKeySequencer = "sequencer"
+	ModeKey          = "running-mode"
+)
+
+var (
+	ErrFetchReceipt = errors.New("receipt fetching failed")
+)
+
 // PreparePayloadAttributes prepares a PayloadAttributes template that is ready to build a L2 block with deposits only, on top of the given l2Parent, with the given epoch as L1 origin.
 // The template defaults to NoTxPool=true, and no sequencer transactions: the caller has to modify the template to add transactions,
 // by setting NoTxPool=false as sequencer, or by appending batch transactions as verifier.
@@ -59,7 +70,15 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	if l2Parent.L1Origin.Number != epoch.Number {
 		info, receipts, err := ba.l1.FetchReceipts(ctx, epoch.Hash)
 		if err != nil {
-			return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info and receipts: %w", err))
+			if ctx.Value(ModeKey) == ModeKeySequencer {
+				// special case error for sequencer to attempt again but with current origin
+				// when building block and still under sequencer drift
+				return nil, ErrFetchReceipt
+			} else if ctx.Value(ModeKey) == ModeKeyVerifier {
+				return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info and receipts: %w", err))
+			} else {
+				return nil, NewCriticalError(fmt.Errorf("running in unknown mode - neither sequencer or verifier"))
+			}
 		}
 		if l2Parent.L1Origin.Hash != info.ParentHash() {
 			return nil, NewResetError(

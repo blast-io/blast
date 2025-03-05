@@ -21,6 +21,7 @@ import (
 	"errors"
 	"time"
 
+	pble "github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
@@ -125,10 +126,11 @@ type Config struct {
 	LightNoSyncServe bool `toml:",omitempty"` // Whether to serve light clients before syncing
 
 	// Database options
-	SkipBcVersionCheck bool `toml:"-"`
-	DatabaseHandles    int  `toml:"-"`
-	DatabaseCache      int
-	DatabaseFreezer    string
+	SkipBcVersionCheck  bool `toml:"-"`
+	DatabaseHandles     int  `toml:"-"`
+	DatabaseCache       int
+	DatabaseFreezer     string
+	PebbleFormatVersion pble.FormatMajorVersion
 
 	TrieCleanCache int
 	TrieDirtyCache int

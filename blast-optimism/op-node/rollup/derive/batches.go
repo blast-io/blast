@@ -3,6 +3,7 @@ package derive
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -135,7 +136,13 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 				}
 				nextOrigin := l1Blocks[1]
 				if batch.Timestamp >= nextOrigin.Time { // check if the next L1 origin could have been adopted
-					log.Info("batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid")
+					log.Warn(
+						"batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
+						"time-exceeded-drift", time.Duration(batch.Timestamp-max)*time.Second,
+						"time-exceeded-origin", time.Duration(batch.Timestamp-nextOrigin.Time)*time.Second,
+						"l1-origin", batch.EpochNum,
+						"l1-next-origin", nextOrigin.Number,
+					)
 					return BatchDrop
 				} else {
 					log.Info("continuing with empty batch before late L1 block to preserve L2 time invariant")

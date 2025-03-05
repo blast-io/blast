@@ -33,6 +33,16 @@ func NewL1OriginSelector(log log.Logger, cfg *rollup.Config, l1 L1Blocks) *L1Ori
 	}
 }
 
+func (los *L1OriginSelector) IsPastSeqDrift(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, bool, error) {
+	currentOrigin, err := los.l1.L1BlockRefByHash(ctx, l2Head.L1Origin.Hash)
+	if err != nil {
+		return eth.L1BlockRef{}, false, err
+	}
+
+	pastSeqDrift := l2Head.Time+los.cfg.BlockTime > currentOrigin.Time+los.cfg.MaxSequencerDrift
+	return currentOrigin, pastSeqDrift, nil
+}
+
 // FindL1Origin determines what the next L1 Origin should be.
 // The L1 Origin is either the L2 Head's Origin, or the following L1 block
 // if the next L2 block's time is greater than or equal to the L2 Head's Origin.

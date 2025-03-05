@@ -37,6 +37,7 @@ const (
 	MetricsCategory    = "METRICS AND STATS"
 	MiscCategory       = "MISC"
 	DeprecatedCategory = "ALIASED (deprecated)"
+	BlastCategory      = "BLAST"
 )
 
 func init() {

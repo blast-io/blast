@@ -142,6 +142,10 @@ func (fn testOriginSelectorFn) FindL1Origin(ctx context.Context, l2Head eth.L2Bl
 	return fn(ctx, l2Head)
 }
 
+func (fn testOriginSelectorFn) IsPastSeqDrift(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, bool, error) {
+	return eth.L1BlockRef{}, false, nil
+}
+
 var _ L1OriginSelectorIface = (testOriginSelectorFn)(nil)
 
 // TestSequencerChaosMonkey runs the sequencer in a mocked adversarial environment with

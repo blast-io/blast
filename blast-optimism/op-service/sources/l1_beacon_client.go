@@ -161,8 +161,9 @@ func NewL1BeaconClient(cl BeaconClient, cfg L1BeaconClientConfig, fallbacks ...B
 	cs := append([]BlobSideCarsFetcher{cl}, fallbacks...)
 	return &L1BeaconClient{
 		cl:   cl,
-		pool: NewClientPool[BlobSideCarsFetcher](cs...),
-		cfg:  cfg}
+		pool: NewClientPool(cs...),
+		cfg:  cfg,
+	}
 }
 
 type TimeToSlotFn func(timestamp uint64) (uint64, error)
@@ -204,7 +205,7 @@ func (cl *L1BeaconClient) fetchSidecars(ctx context.Context, slot uint64, hashes
 	for i := 0; i < cl.pool.Len(); i++ {
 		f := cl.pool.Get()
 		resp, err := f.BeaconBlobSideCars(ctx, cl.cfg.FetchAllSidecars, slot, hashes)
-		if err != nil {
+		if err != nil || len(resp.Data) == 0 {
 			cl.pool.MoveToNext()
 			errs = append(errs, err)
 		} else {

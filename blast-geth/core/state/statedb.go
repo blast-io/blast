@@ -130,6 +130,7 @@ type StateDB struct {
 	SnapshotStorageReads time.Duration
 	SnapshotCommits      time.Duration
 	TrieDBCommits        time.Duration
+	DevAllocateUpdates   time.Duration
 
 	AccountUpdated int
 	StorageUpdated int

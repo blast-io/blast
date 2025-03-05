@@ -307,23 +307,24 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			// then override the local chain-config with that from the registry.
 			if overrides != nil && overrides.ApplySuperchainUpgrades && config.IsOptimism() && config.ChainID != nil && config.ChainID.IsUint64() {
 				if _, ok := superchain.OPChains[config.ChainID.Uint64()]; ok {
-					conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
-					if err != nil {
-						log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
-					} else {
-						*config = *conf
-					}
+					// conf, err := params.LoadOPStackChainConfig(config.ChainID.Uint64())
+					// if err != nil {
+					// 	log.Warn("failed to load chain config from superchain-registry, skipping override", "err", err, "chain_id", config.ChainID)
+					// } else {
+					// 	*config = *conf
+					// }
 				}
 			}
 
-			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
-				// Apply Optimism Goerli regolith time
-				config.RegolithTime = &params.OptimismGoerliRegolithTime
-			}
-			if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
-				// Apply Base Goerli regolith time
-				config.RegolithTime = &params.BaseGoerliRegolithTime
-			}
+			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.OPGoerliChainID)) == 0 {
+			// 	// Apply Optimism Goerli regolith time
+			// 	config.RegolithTime = &params.OptimismGoerliRegolithTime
+			// }
+			// if config.IsOptimism() && config.ChainID != nil && config.ChainID.Cmp(big.NewInt(params.BaseGoerliChainID)) == 0 {
+			// 	// Apply Base Goerli regolith time
+			// 	config.RegolithTime = &params.BaseGoerliRegolithTime
+			// }
+
 			if overrides != nil && overrides.OverrideCancun != nil {
 				config.CancunTime = overrides.OverrideCancun
 			}
@@ -333,8 +334,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 			if overrides != nil && overrides.OverrideOptimismCanyon != nil {
 				config.CanyonTime = overrides.OverrideOptimismCanyon
 				config.ShanghaiTime = overrides.OverrideOptimismCanyon
-				if config.Optimism != nil && config.Optimism.EIP1559DenominatorCanyon == 0 {
-					config.Optimism.EIP1559DenominatorCanyon = 250
+				if config.Optimism != nil && config.Optimism.EIP1559DenominatorCanyon == nil {
+					denom := uint64(250)
+					config.Optimism.EIP1559DenominatorCanyon = &denom
 				}
 			}
 			if overrides != nil && overrides.OverrideOptimismEcotone != nil {
@@ -419,7 +421,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	if head == nil {
 		return newcfg, stored, errors.New("missing head header")
 	}
-	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time)
+	var genesisTimestamp *uint64
+	if genesis != nil {
+		genesisTimestamp = &genesis.Timestamp
+	}
+
+	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time, genesisTimestamp)
 	if compatErr != nil && ((head.Number.Uint64() != 0 && compatErr.RewindToBlock != 0) || (head.Time != 0 && compatErr.RewindToTime != 0)) {
 		return newcfg, stored, compatErr
 	}
@@ -471,8 +478,8 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return params.MainnetChainConfig
 	case ghash == params.SepoliaGenesisHash:
 		return params.SepoliaChainConfig
-	case ghash == params.GoerliGenesisHash:
-		return params.GoerliChainConfig
+	// case ghash == params.GoerliGenesisHash:
+	// 	return params.GoerliChainConfig
 	default:
 		return params.AllEthashProtocolChanges
 	}
@@ -548,6 +555,10 @@ func (g *Genesis) ToBlock() *types.Block {
 				head.BlobGasUsed = new(uint64)
 			}
 		}
+		if conf.IsPrague(num, g.Timestamp) {
+			head.RequestsHash = &types.EmptyRequestsHash
+		}
+
 	}
 	return types.NewBlock(head, nil, nil, nil, trie.NewStackTrie(nil)).WithWithdrawals(withdrawals)
 }
@@ -609,16 +620,16 @@ func DefaultGenesisBlock() *Genesis {
 }
 
 // DefaultGoerliGenesisBlock returns the Görli network genesis block.
-func DefaultGoerliGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.GoerliChainConfig,
-		Timestamp:  1548854791,
-		ExtraData:  hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:   10485760,
-		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(goerliAllocData),
-	}
-}
+// func DefaultGoerliGenesisBlock() *Genesis {
+// 	return &Genesis{
+// 		Config:     params.GoerliChainConfig,
+// 		Timestamp:  1548854791,
+// 		ExtraData:  hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+// 		GasLimit:   10485760,
+// 		Difficulty: big.NewInt(1),
+// 		Alloc:      decodePrealloc(goerliAllocData),
+// 	}
+// }
 
 // DefaultSepoliaGenesisBlock returns the Sepolia network genesis block.
 func DefaultSepoliaGenesisBlock() *Genesis {

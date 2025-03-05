@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
@@ -126,18 +127,27 @@ func toWordSize(size uint64) uint64 {
 // A Message contains the data derived from a single transaction that is relevant to state
 // processing.
 type Message struct {
-	To            *common.Address
-	From          common.Address
-	Nonce         uint64
-	Value         *big.Int
-	GasLimit      uint64
-	GasPrice      *big.Int
-	GasFeeCap     *big.Int
-	GasTipCap     *big.Int
-	Data          []byte
-	AccessList    types.AccessList
-	BlobGasFeeCap *big.Int
-	BlobHashes    []common.Hash
+	To                    *common.Address
+	From                  common.Address
+	Nonce                 uint64
+	Value                 *big.Int
+	GasLimit              uint64
+	GasPrice              *big.Int
+	GasFeeCap             *big.Int
+	GasTipCap             *big.Int
+	Data                  []byte
+	AccessList            types.AccessList
+	BlobGasFeeCap         *big.Int
+	BlobHashes            []common.Hash
+	SetCodeAuthorizations []types.SetCodeAuthorization
+
+	// When SkipNonceChecks is true, the message nonce is not checked against the
+	// account nonce in state.
+	// This field will be set to true for operations like RPC eth_call.
+	SkipNonceChecks bool
+
+	// When SkipFromEOACheck is true, the message sender is not checked to be an EOA.
+	SkipFromEOACheck bool
 
 	// When SkipAccountChecks is true, the message nonce is not checked against the
 	// account nonce in state. It also disables checking that the sender is an EOA.
@@ -444,6 +454,12 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		contractCreation = msg.To == nil
 		gasTracker       = vm.NewGasTracker()
 	)
+
+	if stateHandle, ok := st.evm.StateDB.(*state.StateDB); ok {
+		defer func() {
+			stateHandle.DevAllocateUpdates += gasTracker.AllocateDevGasUpdates
+		}()
+	}
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
 	gas, err := IntrinsicGas(msg.Data, msg.AccessList, contractCreation, rules.IsHomestead, rules.IsIstanbul, rules.IsShanghai)

@@ -17,12 +17,10 @@ type CapturingHandler struct {
 }
 
 func CaptureLogger(t Testing, level log.Lvl) (_ log.Logger, ch *CapturingHandler) {
-	l := Logger(t, level)
-	return l, nil
-	// return LoggerWithHandlerMod(t, level, func(h interface{}) interface{} {
-	// 	ch = &CapturingHandler{handler: h, Logs: new([]*slog.Record)}
-	// 	return ch
-	// }), ch
+	return LoggerWithHandlerMod(t, level, func(h interface{}) interface{} {
+		ch = &CapturingHandler{handler: h.(slog.Handler), Logs: new([]*slog.Record)}
+		return ch
+	}), ch
 }
 
 func (c *CapturingHandler) Enabled(context.Context, slog.Level) bool {

@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -52,8 +53,15 @@ func (m *MeteredL1Fetcher) InfoAndTxsByHash(ctx context.Context, hash common.Has
 	return m.inner.InfoAndTxsByHash(ctx, hash)
 }
 
+var (
+	FailureEnabled bool
+)
+
 func (m *MeteredL1Fetcher) FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error) {
 	defer m.recordTime("FetchReceipts")()
+	if FailureEnabled {
+		return nil, nil, errors.New("failure enabled for testing")
+	}
 	return m.inner.FetchReceipts(ctx, blockHash)
 }
 

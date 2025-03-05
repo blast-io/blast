@@ -954,10 +954,7 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		config.BlockOverrides.Apply(&vmctx)
 	}
 	// Execute the trace
-	msg, err := args.ToMessage(api.backend.RPCGasCap(), block.BaseFee())
-	if err != nil {
-		return nil, err
-	}
+	msg := args.ToMessage(block.BaseFee(), true, true)
 
 	var traceConfig *TraceConfig
 	if config != nil {

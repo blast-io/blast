@@ -84,8 +84,9 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 	if expected := l2SafeHead.Time + aq.config.BlockTime; expected != batch.Timestamp {
 		return nil, NewResetError(fmt.Errorf("valid batch has bad timestamp %d, expected %d", batch.Timestamp, expected))
 	}
-	fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	fetchCtx, cancel := context.WithTimeout(context.WithValue(ctx, ModeKey, ModeKeyVerifier), 20*time.Second)
 	defer cancel()
+
 	attrs, err := aq.builder.PreparePayloadAttributes(fetchCtx, l2SafeHead, batch.Epoch())
 	if err != nil {
 		return nil, err

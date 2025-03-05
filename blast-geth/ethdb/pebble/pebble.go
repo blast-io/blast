@@ -46,6 +46,8 @@ const (
 	// metricsGatheringInterval specifies the interval to retrieve pebble database
 	// compaction, io and pause stats to report to the user.
 	metricsGatheringInterval = 3 * time.Second
+	// numLevels is the level number of pebble sst files
+	numLevels = 7
 )
 
 // Database is a persistent key-value store based on the pebble storage engine.
@@ -90,6 +92,7 @@ type Database struct {
 }
 
 func (d *Database) onCompactionBegin(info pebble.CompactionInfo) {
+	// d.log.Warn("starting compaction", "job-id", info.JobID)
 	if d.activeComp == 0 {
 		d.compStartTime = time.Now()
 	}
@@ -103,6 +106,7 @@ func (d *Database) onCompactionBegin(info pebble.CompactionInfo) {
 }
 
 func (d *Database) onCompactionEnd(info pebble.CompactionInfo) {
+	// d.log.Warn("finished compaction", "job-id", info.JobID, "took", info.Duration)
 	if d.activeComp == 1 {
 		d.compTime.Add(int64(time.Since(d.compStartTime)))
 	} else if d.activeComp == 0 {
@@ -122,9 +126,12 @@ func (d *Database) onWriteStallEnd() {
 // panicLogger is just a noop logger to disable Pebble's internal logger.
 //
 // TODO(karalabe): Remove when Pebble sets this as the default.
-type panicLogger struct{}
+type panicLogger struct {
+	lgr log.Logger
+}
 
 func (l panicLogger) Infof(format string, args ...interface{}) {
+	//
 }
 
 func (l panicLogger) Fatalf(format string, args ...interface{}) {
@@ -133,7 +140,7 @@ func (l panicLogger) Fatalf(format string, args ...interface{}) {
 
 // New returns a wrapped pebble DB object. The namespace is the prefix that the
 // metrics reporting should use for surfacing internal stats.
-func New(file string, cache int, handles int, namespace string, readonly bool, ephemeral bool) (*Database, error) {
+func New(file string, cache int, handles int, namespace string, readonly bool, ephemeral bool, formatVersion pebble.FormatMajorVersion) (*Database, error) {
 	// Ensure we have some minimal caching and file guarantees
 	if cache < minCache {
 		cache = minCache
@@ -193,15 +200,15 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 
 		// Per-level options. Options for at least one level must be specified. The
 		// options for the last level are used for all subsequent levels.
-		Levels: []pebble.LevelOptions{
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-		},
+		// Levels: []pebble.LevelOptions{
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// 	{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+		// },
 		ReadOnly: readonly,
 		EventListener: &pebble.EventListener{
 			CompactionBegin: db.onCompactionBegin,
@@ -209,12 +216,32 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 			WriteStallBegin: db.onWriteStallBegin,
 			WriteStallEnd:   db.onWriteStallEnd,
 		},
-		Logger: panicLogger{}, // TODO(karalabe): Delete when this is upstreamed in Pebble
+		Levels:             make([]pebble.LevelOptions, numLevels),
+		Logger:             panicLogger{lgr: logger}, // TODO(karalabe): Delete when this is upstreamed in Pebble
+		FormatMajorVersion: pebble.FormatNewest,
 	}
+
+	for i := 0; i < len(opt.Levels); i++ {
+		l := &opt.Levels[i]
+		l.BlockSize = 32 << 10       // 32 KB
+		l.IndexBlockSize = 256 << 10 // 256 KB
+		l.FilterPolicy = bloom.FilterPolicy(10)
+		l.FilterType = pebble.TableFilter
+		if i > 0 {
+			l.TargetFileSize = opt.Levels[i-1].TargetFileSize * 2
+		}
+		l.EnsureDefaults()
+	}
+
 	// Disable seek compaction explicitly. Check https://github.com/ethereum/go-ethereum/pull/20130
 	// for more details.
 	opt.Experimental.ReadSamplingMultiplier = -1
-
+	// blast adjustments
+	opt.Experimental.MaxWriterConcurrency = runtime.NumCPU()
+	opt.Experimental.ForceWriterParallelism = true
+	opt.Experimental.SecondaryCacheSizeBytes = 64 << 20 // 64MB
+	opt.TargetByteDeletionRate = 512 << 20              // 512 MB
+	opt.Experimental.ReadCompactionRate = 50 << 20      // 50 mb
 	// Open the db and recover any potential corruptions
 	innerDB, err := pebble.Open(file, opt)
 	if err != nil {
@@ -235,6 +262,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	db.nonlevel0CompGauge = metrics.NewRegisteredGauge(namespace+"compact/nonlevel0", nil)
 	db.seekCompGauge = metrics.NewRegisteredGauge(namespace+"compact/seek", nil)
 	db.manualMemAllocGauge = metrics.NewRegisteredGauge(namespace+"memory/manualalloc", nil)
+	log.Info("opened pebble database", "format-major-version", innerDB.FormatMajorVersion())
 
 	// Start up the metrics gathering and return
 	go db.meter(metricsGatheringInterval, namespace)
@@ -580,8 +608,8 @@ func (b *batch) Reset() {
 func (b *batch) Replay(w ethdb.KeyValueWriter) error {
 	reader := b.b.Reader()
 	for {
-		kind, k, v, ok := reader.Next()
-		if !ok {
+		kind, k, v, ok, err := reader.Next()
+		if !ok || err != nil {
 			break
 		}
 		// The (k,v) slices might be overwritten if the batch is reset/reused,
