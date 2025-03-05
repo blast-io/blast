@@ -308,10 +308,6 @@ func (s *EthClient) PayloadByLabel(ctx context.Context, label eth.BlockLabel) (*
 	return s.payloadCall(ctx, "eth_getBlockByNumber", label)
 }
 
-var (
-	DOSTOP bool
-)
-
 // FetchReceipts returns a block info and all of the receipts associated with transactions in the block.
 // It verifies the receipt hash in the block header against the receipt hash of the fetched receipts
 // to ensure that the execution engine did not fail to return any receipts.
@@ -322,11 +318,6 @@ func (s *EthClient) FetchReceipts(ctx context.Context, blockHash common.Hash) (e
 	}
 
 	txHashes, _ := eth.TransactionsToHashes(txs), eth.ToBlockID(info)
-	if DOSTOP {
-		fmt.Println("results", info, txs, err, len(txs), txHashes)
-		panic("stop here")
-	}
-
 	receipts, err := s.recProvider.FetchReceipts(ctx, info, txHashes)
 	if err != nil {
 		return nil, nil, err

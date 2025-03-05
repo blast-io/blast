@@ -718,16 +718,16 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 
 	// Execute the call.
 	msg := &core.Message{
-		From:              call.From,
-		To:                call.To,
-		Value:             call.Value,
-		GasLimit:          call.Gas,
-		GasPrice:          call.GasPrice,
-		GasFeeCap:         call.GasFeeCap,
-		GasTipCap:         call.GasTipCap,
-		Data:              call.Data,
-		AccessList:        call.AccessList,
-		SkipAccountChecks: true,
+		From:            call.From,
+		To:              call.To,
+		Value:           call.Value,
+		GasLimit:        call.Gas,
+		GasPrice:        call.GasPrice,
+		GasFeeCap:       call.GasFeeCap,
+		GasTipCap:       call.GasTipCap,
+		Data:            call.Data,
+		AccessList:      call.AccessList,
+		SkipNonceChecks: true,
 	}
 
 	// Create a new environment which holds all relevant information
