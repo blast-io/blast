@@ -1376,6 +1376,10 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 		return 0, err
 	}
 
+	if err := args.CallDefaults(gasCap, header.BaseFee, b.ChainConfig().ChainID); err != nil {
+		return 0, err
+	}
+
 	// Recap the highest gas limit with account's available balance.
 	if feeCap.BitLen() != 0 {
 		balance := state.GetBalance(*args.From) // from can't be nil
