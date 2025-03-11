@@ -1850,7 +1850,7 @@ func AccessList(ctx context.Context, b Backend, blockNrOrHash rpc.BlockNumberOrH
 	}
 
 	// Ensure any missing fields are filled, extract the recipient and input data
-	if err := args.setDefaults(ctx, b, false); err != nil {
+	if err := args.setFeeDefaults(ctx, b, header); err != nil {
 		return nil, 0, nil, err
 	}
 	var to common.Address
