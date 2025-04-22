@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/log"
@@ -19,17 +20,19 @@ type L1Blocks interface {
 }
 
 type L1OriginSelector struct {
-	log log.Logger
-	cfg *rollup.Config
+	log  log.Logger
+	cfg  *rollup.Config
+	spec *rollup.ChainSpec
 
 	l1 L1Blocks
 }
 
 func NewL1OriginSelector(log log.Logger, cfg *rollup.Config, l1 L1Blocks) *L1OriginSelector {
 	return &L1OriginSelector{
-		log: log,
-		cfg: cfg,
-		l1:  l1,
+		log:  log,
+		cfg:  cfg,
+		spec: rollup.NewChainSpec(cfg),
+		l1:   l1,
 	}
 }
 
@@ -38,8 +41,9 @@ func (los *L1OriginSelector) IsPastSeqDrift(ctx context.Context, l2Head eth.L2Bl
 	if err != nil {
 		return eth.L1BlockRef{}, false, err
 	}
+	msd := los.spec.MaxSequencerDrift(currentOrigin.Time)
+	pastSeqDrift := l2Head.Time+los.cfg.BlockTime-currentOrigin.Time > msd
 
-	pastSeqDrift := l2Head.Time+los.cfg.BlockTime > currentOrigin.Time+los.cfg.MaxSequencerDrift
 	return currentOrigin, pastSeqDrift, nil
 }
 
@@ -52,14 +56,17 @@ func (los *L1OriginSelector) FindL1Origin(ctx context.Context, l2Head eth.L2Bloc
 	if err != nil {
 		return eth.L1BlockRef{}, err
 	}
+	msd := los.spec.MaxSequencerDrift(currentOrigin.Time)
 	log := los.log.New("current", currentOrigin, "current_time", currentOrigin.Time,
 		"l2_head", l2Head, "l2_head_time", l2Head.Time)
 
 	// If we are past the sequencer depth, we may want to advance the origin, but need to still
 	// check the time of the next origin.
-	pastSeqDrift := l2Head.Time+los.cfg.BlockTime > currentOrigin.Time+los.cfg.MaxSequencerDrift
+	_, pastSeqDrift, _ := los.IsPastSeqDrift(ctx, l2Head)
 	if pastSeqDrift {
-		log.Warn("Next L2 block time is past the sequencer drift + current origin time")
+		log.Warn("Next L2 block time is past the sequencer drift + current origin time",
+			"max-drift", time.Duration(time.Second*time.Duration((msd))),
+		)
 	}
 
 	// Attempt to find the next L1 origin block, where the next origin is the immediate child of

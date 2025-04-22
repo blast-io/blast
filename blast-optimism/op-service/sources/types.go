@@ -6,15 +6,13 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/holiman/uint256"
-
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
-
-	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/holiman/uint256"
 )
 
 // Note: these types are used, instead of the geth types, to enable:
@@ -164,20 +162,6 @@ func (block *RPCBlock) Verify() error {
 		return fmt.Errorf("failed to verify transactions list: computed %s but RPC said %s", computed, block.TxHash)
 	}
 
-	// Withdrawals validation is different between L1 and L2.
-	// It is possible to determine that it is an L2 block if the first transaction is a deposit.
-	// The genesis block does not have transactions, but does have a known fee-recipient predeploy address.
-	// isL2 := (len(block.Transactions) > 0 && block.Transactions[0].IsDepositTx()) ||
-	// 	(block.Number == 0 && block.Coinbase == predeploys.SequencerFeeVaultAddr)
-	// if isL2 {
-	// 	if err := block.validateL2Withdrawals(block.Withdrawals, block.WithdrawalsRoot); err != nil {
-	// 		return err
-	// 	}
-	// } else {
-	// 	if err := block.validateL1Withdrawals(block.Withdrawals, block.WithdrawalsRoot); err != nil {
-	// 		return err
-	// 	}
-	// }
 	return nil
 }
 
@@ -197,15 +181,6 @@ func (block *RPCBlock) validateL1Withdrawals(withdrawals *types.Withdrawals, wit
 	} else {
 		if withdrawals != nil {
 			return fmt.Errorf("expected no withdrawals due to missing withdrawals-root, but got %d", len(*withdrawals))
-		}
-	}
-	return nil
-}
-
-func (block *RPCBlock) validateL2Withdrawals(withdrawals *types.Withdrawals, withdrawalsRoot *common.Hash) error {
-	if withdrawalsRoot != nil {
-		if !(withdrawals != nil && len(*withdrawals) == 0) {
-			return fmt.Errorf("expected empty withdrawals, but got %d", len(*withdrawals))
 		}
 	}
 	return nil
@@ -279,7 +254,6 @@ func (block *RPCBlock) ExecutionPayloadEnvelope(trustCache bool) (*eth.Execution
 	return &eth.ExecutionPayloadEnvelope{
 		ParentBeaconBlockRoot: block.ParentBeaconRoot,
 		ExecutionPayload:      payload,
-		RequestsHash:          block.RequestsHash,
 	}, nil
 }
 

@@ -51,7 +51,8 @@ target "op-node" {
     OP_STACK_GO_BUILDER = "op-stack-go"
   }
   contexts = {
-    op-stack-go: "target:op-stack-go"
+    op-stack-go = "target:op-stack-go"
+    blast-geth = "../blast-geth"
   }
   platforms = split(",", PLATFORMS)
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-node:${tag}"]

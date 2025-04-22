@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/cmd/batch_decoder/fetch"
 	"github.com/ethereum-optimism/optimism/op-node/cmd/batch_decoder/reassemble"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/client"
+	"github.com/ethereum-optimism/optimism/op-service/sources"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/urfave/cli/v2"
@@ -55,6 +59,12 @@ func main() {
 					Usage:    "L1 RPC URL",
 					EnvVars:  []string{"L1_RPC"},
 				},
+				&cli.StringFlag{
+					Name:     "l1.beacon",
+					Required: false,
+					Usage:    "Address of L1 Beacon-node HTTP endpoint to use",
+					EnvVars:  []string{"L1_BEACON"},
+				},
 				&cli.IntFlag{
 					Name:  "concurrent-requests",
 					Value: 10,
@@ -62,28 +72,41 @@ func main() {
 				},
 			},
 			Action: func(cliCtx *cli.Context) error {
-				client, err := ethclient.Dial(cliCtx.String("l1"))
+				l1Client, err := ethclient.Dial(cliCtx.String("l1"))
 				if err != nil {
 					log.Fatal(err)
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
-				chainID, err := client.ChainID(ctx)
+				chainID, err := l1Client.ChainID(ctx)
 				if err != nil {
 					log.Fatal(err)
+				}
+				beaconAddr := cliCtx.String("l1.beacon")
+				var beacon *sources.L1BeaconClient
+				if beaconAddr != "" {
+					beaconClient := sources.NewBeaconHTTPClient(client.NewBasicHTTPClient(beaconAddr, nil))
+					beaconCfg := sources.L1BeaconClientConfig{FetchAllSidecars: false}
+					beacon = sources.NewL1BeaconClient(beaconClient, beaconCfg)
+					_, err := beacon.GetVersion(ctx)
+					if err != nil {
+						log.Fatal(fmt.Errorf("failed to check L1 Beacon API version: %w", err))
+					}
+				} else {
+					fmt.Println("L1 Beacon endpoint not set. Unable to fetch post-ecotone channel frames")
 				}
 				config := fetch.Config{
 					Start:   uint64(cliCtx.Int("start")),
 					End:     uint64(cliCtx.Int("end")),
 					ChainID: chainID,
 					BatchSenders: map[common.Address]struct{}{
-						common.HexToAddress(cliCtx.String("sender")): struct{}{},
+						common.HexToAddress(cliCtx.String("sender")): {},
 					},
 					BatchInbox:         common.HexToAddress(cliCtx.String("inbox")),
 					OutDirectory:       cliCtx.String("out"),
 					ConcurrentRequests: uint64(cliCtx.Int("concurrent-requests")),
 				}
-				totalValid, totalInvalid := fetch.Batches(client, config)
+				totalValid, totalInvalid := fetch.Batches(l1Client, beacon, config)
 				fmt.Printf("Fetched batches in range [%v,%v). Found %v valid & %v invalid batches\n", config.Start, config.End, totalValid, totalInvalid)
 				fmt.Printf("Fetch Config: Chain ID: %v. Inbox Address: %v. Valid Senders: %v.\n", config.ChainID, config.BatchInbox, config.BatchSenders)
 				fmt.Printf("Wrote transactions with batches to %v\n", config.OutDirectory)
@@ -92,13 +115,8 @@ func main() {
 		},
 		{
 			Name:  "reassemble",
-			Usage: "Reassembles channels from fetched batches",
+			Usage: "Reassembles channels from fetched batch transactions and decode batches",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  "inbox",
-					Value: "0xff00000000000000000000000000000000000420",
-					Usage: "Batch Inbox Address",
-				},
 				&cli.StringFlag{
 					Name:  "in",
 					Value: "/tmp/batch_decoder/transactions_cache",
@@ -109,14 +127,62 @@ func main() {
 					Value: "/tmp/batch_decoder/channel_cache",
 					Usage: "Cache directory for the found channels",
 				},
+				&cli.Uint64Flag{
+					Name:  "l2-chain-id",
+					Value: 10,
+					Usage: "L2 chain id for span batch derivation. Default value from op-mainnet.",
+				},
+				&cli.Uint64Flag{
+					Name:  "l2-genesis-timestamp",
+					Value: 1686068903,
+					Usage: "L2 genesis time for span batch derivation. Default value from op-mainnet. " +
+						"Superchain-registry prioritized when given value is inconsistent.",
+				},
+				&cli.Uint64Flag{
+					Name:  "l2-block-time",
+					Value: 2,
+					Usage: "L2 block time for span batch derivation. Default value from op-mainnet. " +
+						"Superchain-registry prioritized when given value is inconsistent.",
+				},
+				&cli.StringFlag{
+					Name:  "inbox",
+					Value: "0xFF00000000000000000000000000000000000010",
+					Usage: "Batch Inbox Address. Default value from op-mainnet. " +
+						"Superchain-registry prioritized when given value is inconsistent.",
+				},
 			},
 			Action: func(cliCtx *cli.Context) error {
-				config := reassemble.Config{
-					BatchInbox:   common.HexToAddress(cliCtx.String("inbox")),
-					InDirectory:  cliCtx.String("in"),
-					OutDirectory: cliCtx.String("out"),
+				var (
+					L2GenesisTime     uint64         = cliCtx.Uint64("l2-genesis-timestamp")
+					L2BlockTime       uint64         = cliCtx.Uint64("l2-block-time")
+					BatchInboxAddress common.Address = common.HexToAddress(cliCtx.String("inbox"))
+				)
+				L2ChainID := new(big.Int).SetUint64(cliCtx.Uint64("l2-chain-id"))
+				rollupCfg, err := rollup.LoadOPStackRollupConfig(L2ChainID.Uint64())
+				if err == nil {
+					// prioritize superchain config
+					if L2GenesisTime != rollupCfg.Genesis.L2Time {
+						L2GenesisTime = rollupCfg.Genesis.L2Time
+						fmt.Printf("L2GenesisTime overridden: %v\n", L2GenesisTime)
+					}
+					if L2BlockTime != rollupCfg.BlockTime {
+						L2BlockTime = rollupCfg.BlockTime
+						fmt.Printf("L2BlockTime overridden: %v\n", L2BlockTime)
+					}
+					if BatchInboxAddress != rollupCfg.BatchInboxAddress {
+						BatchInboxAddress = rollupCfg.BatchInboxAddress
+						fmt.Printf("BatchInboxAddress overridden: %v\n", BatchInboxAddress)
+					}
 				}
-				reassemble.Channels(config)
+				config := reassemble.Config{
+					BatchInbox:    BatchInboxAddress,
+					InDirectory:   cliCtx.String("in"),
+					OutDirectory:  cliCtx.String("out"),
+					L2ChainID:     L2ChainID,
+					L2GenesisTime: L2GenesisTime,
+					L2BlockTime:   L2BlockTime,
+				}
+				reassemble.Channels(config, rollupCfg)
 				return nil
 			},
 		},

@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.21.3-alpine3.18 as builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine3.21 as builder
 
 RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
 
@@ -6,17 +6,20 @@ RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
 COPY ./go.mod /app/go.mod
 COPY ./go.sum /app/go.sum
 
-COPY --from=blast-geth . /blast-geth
+COPY --from=op-geth . /blast-geth
 
 WORKDIR /app
 
 RUN echo "go mod cache: $(go env GOMODCACHE)"
 RUN echo "go build cache: $(go env GOCACHE)"
 
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
-
 # NOTE: the Dockerfile.dockerignore file effectively describes all dependencies
 COPY . /app
+
+# Required for blast repo build - copy blockchain dependencies from blast-geth folder
+COPY --from=blast-geth / /blast-geth/
+
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
 
 # We avoid copying the full .git dir into the build for just some metadata.
 # Instead, specify:
@@ -49,28 +52,31 @@ ARG TARGETOS TARGETARCH
 # The "id" defaults to the value of "target", the cache will thus be reused during this build.
 # "sharing" defaults to "shared", the cache will thus be available to other concurrent docker builds.
 
-# RUN --mount=type=cache,target=/root/.cache/go-build cd cannon && make cannon  \
-#     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$CANNON_VERSION"
-# note: we only build the host, that's all the user needs. No Go MIPS cross-build in docker
-# RUN --mount=type=cache,target=/root/.cache/go-build cd op-program && make op-program-host  \
-#     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_PROGRAM_VERSION"
+# RUN cd cannon && make cannon  \
+#    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$CANNON_VERSION"
 
-# RUN --mount=type=cache,target=/root/.cache/go-build cd op-heartbeat && make op-heartbeat  \
+# note: we only build the host, that's all the user needs. No Go MIPS cross-build in docker
+# RUN cd op-program && make op-program-host  \
+#    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_PROGRAM_VERSION"
+
+# RUN cd op-heartbeat && make op-heartbeat  \
 #     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_HEARTBEAT_VERSION"
-# RUN --mount=type=cache,target=/root/.cache/go-build cd op-wheel && make op-wheel  \
+# RUN cd op-wheel && make op-wheel  \
 #     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_WHEEL_VERSION"
 
-RUN --mount=type=cache,target=/root/.cache/go-build cd op-node && make op-node  \
+RUN cd op-node && make op-node  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_NODE_VERSION"
-# RUN --mount=type=cache,target=/root/.cache/go-build cd op-challenger && make op-challenger  \
+
+# RUN cd op-challenger && make op-challenger  \
 #     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_CHALLENGER_VERSION"
-RUN --mount=type=cache,target=/root/.cache/go-build cd op-batcher && make op-batcher  \
+
+RUN cd op-batcher && make op-batcher  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_BATCHER_VERSION"
-RUN --mount=type=cache,target=/root/.cache/go-build cd op-proposer && make op-proposer  \
+RUN cd op-proposer && make op-proposer  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_PROPOSER_VERSION"
 
 
-FROM alpine:3.18
+FROM alpine:3.21
 
 # COPY --from=builder /app/cannon/bin/cannon /usr/local/bin/
 # COPY --from=builder /app/op-program/bin/op-program /usr/local/bin/

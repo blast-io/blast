@@ -11,11 +11,13 @@ import (
 )
 
 const (
-	RollupConfigFlagName    = "rollup.config"
-	NetworkFlagName         = "network"
-	CanyonOverrideFlagName  = "override.canyon"
-	DeltaOverrideFlagName   = "override.delta"
-	EcotoneOverrideFlagName = "override.ecotone"
+	RollupConfigFlagName               = "rollup.config"
+	NetworkFlagName                    = "network"
+	CanyonOverrideFlagName             = "override.canyon"
+	DeltaOverrideFlagName              = "override.delta"
+	EcotoneOverrideFlagName            = "override.ecotone"
+	TaigaOverrideFlagName              = "override.taiga"
+	PectraBlobScheduleOverrideFlagName = "override.pectrablobschedule"
 )
 
 func CLIFlags(envPrefix string, category string) []cli.Flag {
@@ -38,6 +40,20 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Name:     EcotoneOverrideFlagName,
 			Usage:    "Manually specify the Ecotone fork timestamp, overriding the bundled setting",
 			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_ECOTONE"),
+			Hidden:   false,
+			Category: category,
+		},
+		&cli.Uint64Flag{
+			Name:     TaigaOverrideFlagName,
+			Usage:    "Manually specify the Taiga fork timestamp, overriding the bundled setting",
+			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_TAIGA"),
+			Hidden:   false,
+			Category: category,
+		},
+		&cli.Uint64Flag{
+			Name:     PectraBlobScheduleOverrideFlagName,
+			Usage:    "Manually specify the PectraBlobSchedule fork timestamp, overriding the bundled setting",
+			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_PECTRABLOBSCHEDULE"),
 			Hidden:   false,
 			Category: category,
 		},

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	_ "net/http/pprof"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-batcher/rpc"
 	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 
 	// plasma "github.com/ethereum-optimism/optimism/op-plasma"
 
@@ -310,7 +313,7 @@ func (bs *BatcherService) initRPCServer(cfg *CLIConfig) error {
 		oprpc.WithLogger(bs.Log),
 	)
 	if cfg.RPC.EnableAdmin {
-		adminAPI := rpc.NewAdminAPI(bs.driver, bs.Metrics, bs.Log)
+		adminAPI := rpc.NewAdminAPI(bs.driver, bs.Metrics, bs.Log, bs.SendReorg)
 		server.AddAPI(rpc.GetAdminAPI(adminAPI))
 		bs.Log.Info("Admin RPC enabled")
 	}
@@ -319,6 +322,75 @@ func (bs *BatcherService) initRPCServer(cfg *CLIConfig) error {
 		return fmt.Errorf("unable to start RPC server: %w", err)
 	}
 	bs.rpcServer = server
+	return nil
+}
+
+func (bs *BatcherService) SendReorg(ctx context.Context, pickBlock uint64) error {
+	clk, err := bs.EndpointProvider.EthClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	blk, err := clk.BlockByNumber(ctx, new(big.Int).SetUint64(pickBlock))
+	if err != nil {
+		return err
+	}
+
+	batch, l1Info, err := derive.BlockToSingularBatch(bs.RollupConfig, blk)
+	if err != nil {
+		return err
+	}
+
+	bs.driver.Log.Info(
+		"running manual batch sending on a block - warning could be a reorg",
+		"made-batch", batch,
+	)
+
+	channelBuilder, err := NewChannelBuilder(bs.ChannelConfig, *bs.RollupConfig, l1Info.Number)
+	if err != nil {
+		return err
+	}
+	sizeAdded, err := channelBuilder.co.AddSingularBatch(batch, l1Info.SequenceNumber)
+
+	if err != nil {
+		return err
+	}
+
+	if sizeAdded == 0 {
+		return errors.New("rlp encoded is 0 that cant be right")
+	}
+
+	if err := channelBuilder.co.Flush(); err != nil {
+		return err
+	}
+
+	if err := channelBuilder.closeAndOutputAllFrames(); err != nil {
+		return err
+	}
+
+	bs.driver.Log.Info("as rlp encoed, singular batch size", "size", sizeAdded)
+
+	txdata := txData{frames: make([]frameData, 0, 1)}
+	frame := channelBuilder.NextFrame()
+	txdata.frames = append(txdata.frames, frame)
+	asCallData := txdata.CallData()
+	candidate := txmgr.TxCandidate{
+		To:     &bs.RollupConfig.BatchInboxAddress,
+		TxData: asCallData,
+	}
+
+	intrinsicGas, err := core.IntrinsicGas(candidate.TxData, nil, false, true, true, false)
+	if err != nil {
+		return err
+	}
+	candidate.GasLimit = intrinsicGas
+	bs.driver.Log.Info("sending off batcher one off tx")
+	rcpt, err := bs.TxManager.Send(ctx, candidate)
+	if err != nil {
+		return err
+	}
+
+	bs.driver.Log.Info("kicked off and confirmed tx", "hash", rcpt.TxHash.Hex())
 	return nil
 }
 

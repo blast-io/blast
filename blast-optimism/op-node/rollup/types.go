@@ -59,7 +59,7 @@ type Config struct {
 	//
 	// Note: When L1 has many 1 second consecutive blocks, and L2 grows at fixed 2 seconds,
 	// the L2 time may still grow beyond this difference.
-	MaxSequencerDrift uint64 `json:"max_sequencer_drift"`
+	MaxSequencerDrift uint64 `json:"max_sequencer_drift,omitempty"`
 	// Number of epochs (L1 blocks) per sequencing window, including the epoch L1 origin block itself
 	SeqWindowSize uint64 `json:"seq_window_size"`
 	// Number of L1 blocks between when a channel can be opened and when it must be closed by.
@@ -87,6 +87,10 @@ type Config struct {
 	// Active if EcotoneTime != nil && L2 block timestamp >= *EcotoneTime, inactive otherwise.
 	EcotoneTime *uint64 `json:"ecotone_time,omitempty"`
 
+	// TaigaTime sets the activation time of the Taiga network upgrade
+	// Active if TaigaTime != nil && L2 block timestamp >= *TaigaTime, inactive otherwise
+	TaigaTime *uint64 `json:"taiga_time,omitempty"`
+
 	// FjordTime sets the activation time of the Fjord network upgrade.
 	// Active if FjordTime != nil && L2 block timestamp >= *FjordTime, inactive otherwise.
 	FjordTime *uint64 `json:"fjord_time,omitempty"`
@@ -107,6 +111,14 @@ type Config struct {
 
 	// L1 address that declares the protocol versions, optional (Beta feature)
 	ProtocolVersionsAddress common.Address `json:"protocol_versions_address,omitempty"`
+
+	// PectraBlobScheduleTime sets the time until which (but not including) the blob base fee
+	// calculations for the L1 Block Info use the pre-Prague=Cancun blob parameters.
+	// This feature is optional and if not active, the L1 Block Info calculation uses the Prague
+	// blob parameters for the first L1 Prague block, as was intended.
+	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
+	// epoch.
+	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -275,16 +287,19 @@ func (cfg *Config) Check() error {
 		return ErrL2ChainIDNotPositive
 	}
 
-	if err := checkFork(cfg.RegolithTime, cfg.CanyonTime, "regolith", "canyon"); err != nil {
+	if err := checkFork(cfg.RegolithTime, cfg.CanyonTime, Regolith, Canyon); err != nil {
 		return err
 	}
-	if err := checkFork(cfg.CanyonTime, cfg.DeltaTime, "canyon", "delta"); err != nil {
+	if err := checkFork(cfg.CanyonTime, cfg.DeltaTime, Canyon, Delta); err != nil {
 		return err
 	}
-	if err := checkFork(cfg.DeltaTime, cfg.EcotoneTime, "delta", "ecotone"); err != nil {
+	if err := checkFork(cfg.DeltaTime, cfg.EcotoneTime, Delta, Ecotone); err != nil {
 		return err
 	}
-	if err := checkFork(cfg.EcotoneTime, cfg.FjordTime, "ecotone", "fjord"); err != nil {
+	if err := checkFork(cfg.EcotoneTime, cfg.TaigaTime, Ecotone, Taiga); err != nil {
+		return err
+	}
+	if err := checkFork(cfg.TaigaTime, cfg.FjordTime, Taiga, Fjord); err != nil {
 		return err
 	}
 
@@ -292,7 +307,7 @@ func (cfg *Config) Check() error {
 }
 
 // checkFork checks that fork A is before or at the same time as fork B
-func checkFork(a, b *uint64, aName, bName string) error {
+func checkFork(a, b *uint64, aName, bName ForkName) error {
 	if a == nil && b == nil {
 		return nil
 	}
@@ -332,12 +347,50 @@ func (c *Config) IsEcotone(timestamp uint64) bool {
 	return c.EcotoneTime != nil && timestamp >= *c.EcotoneTime
 }
 
+func (c *Config) IsTaiga(timestamp uint64) bool {
+	return c.TaigaTime != nil && timestamp >= *c.TaigaTime
+}
+
+func (c *Config) IsRegolithActivationBlock(l2BlockTime uint64) bool {
+	return c.IsRegolith(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsRegolith(l2BlockTime-c.BlockTime)
+}
+
+func (c *Config) IsCanyonActivationBlock(l2BlockTime uint64) bool {
+	return c.IsCanyon(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsCanyon(l2BlockTime-c.BlockTime)
+}
+
+func (c *Config) IsDeltaActivationBlock(l2BlockTime uint64) bool {
+	return c.IsDelta(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsDelta(l2BlockTime-c.BlockTime)
+}
+
 // IsEcotoneActivationBlock returns whether the specified block is the first block subject to the
 // Ecotone upgrade. Ecotone activation at genesis does not count.
 func (c *Config) IsEcotoneActivationBlock(l2BlockTime uint64) bool {
 	return c.IsEcotone(l2BlockTime) &&
 		l2BlockTime >= c.BlockTime &&
 		!c.IsEcotone(l2BlockTime-c.BlockTime)
+}
+
+// IsTaigaActivationBlock returns whether the specified block is the first block subject to the
+// Taiga upgrade. Taiga activation at genesis does not count.
+func (c *Config) IsTaigaActivationBlock(l2BlockTime uint64) bool {
+	return c.IsTaiga(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsTaiga(l2BlockTime-c.BlockTime)
+}
+
+// IsFjordActivationBlock returns whether the specified block is the first block subject to the
+// Fjord upgrade.
+func (c *Config) IsFjordActivationBlock(l2BlockTime uint64) bool {
+	return c.IsFjord(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsFjord(l2BlockTime-c.BlockTime)
 }
 
 // IsFjord returns true if the Fjord hardfork is active at or past the given timestamp.
@@ -420,6 +473,7 @@ func (c *Config) Description(l2Chains map[string]string) string {
 	banner += fmt.Sprintf("  - Canyon: %s\n", fmtForkTimeOrUnset(c.CanyonTime))
 	banner += fmt.Sprintf("  - Delta: %s\n", fmtForkTimeOrUnset(c.DeltaTime))
 	banner += fmt.Sprintf("  - Ecotone: %s\n", fmtForkTimeOrUnset(c.EcotoneTime))
+	banner += fmt.Sprintf("  - Taiga: %s\n", fmtForkTimeOrUnset(c.TaigaTime))
 	banner += fmt.Sprintf("  - Fjord: %s\n", fmtForkTimeOrUnset(c.FjordTime))
 	banner += fmt.Sprintf("  - Interop: %s\n", fmtForkTimeOrUnset(c.InteropTime))
 
@@ -444,16 +498,26 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 	if networkL1 == "" {
 		networkL1 = "unknown L1"
 	}
-	log.Info("Rollup Config", "l2_chain_id", c.L2ChainID, "l2_network", networkL2, "l1_chain_id", c.L1ChainID,
+
+	ctx := []any{
+		"l2_chain_id", c.L2ChainID, "l2_network", networkL2, "l1_chain_id", c.L1ChainID,
 		"l1_network", networkL1, "l2_start_time", c.Genesis.L2Time, "l2_block_hash", c.Genesis.L2.Hash.String(),
 		"l2_block_number", c.Genesis.L2.Number, "l1_block_hash", c.Genesis.L1.Hash.String(),
 		"l1_block_number", c.Genesis.L1.Number, "regolith_time", fmtForkTimeOrUnset(c.RegolithTime),
 		"canyon_time", fmtForkTimeOrUnset(c.CanyonTime),
 		"delta_time", fmtForkTimeOrUnset(c.DeltaTime),
 		"ecotone_time", fmtForkTimeOrUnset(c.EcotoneTime),
+		"taiga_time", fmtForkTimeOrUnset(c.TaigaTime),
 		"fjord_time", fmtForkTimeOrUnset(c.FjordTime),
 		"interop_time", fmtForkTimeOrUnset(c.InteropTime),
-	)
+	}
+
+	if c.PectraBlobScheduleTime != nil {
+		// only print in config if set at all
+		ctx = append(ctx, "pectra_blob_schedule_time", fmtForkTimeOrUnset(c.PectraBlobScheduleTime))
+	}
+
+	log.Info("Rollup Config", ctx...)
 }
 
 func fmtForkTimeOrUnset(v *uint64) string {

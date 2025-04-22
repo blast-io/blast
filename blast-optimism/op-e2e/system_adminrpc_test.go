@@ -198,7 +198,8 @@ func TestPostUnsafePayload(t *testing.T) {
 
 	blockNumberOne, err := l2Seq.BlockByNumber(ctx, big.NewInt(1))
 	require.NoError(t, err)
-	payload, err := eth.BlockAsPayload(blockNumberOne, sys.RollupConfig.CanyonTime)
+
+	payload, err := eth.BlockAsPayload(blockNumberOne, sys.L2GenesisCfg.Config)
 	require.NoError(t, err)
 	err = rollupClient.PostUnsafePayload(ctx, &eth.ExecutionPayloadEnvelope{ExecutionPayload: payload})
 	require.NoError(t, err)
@@ -207,7 +208,7 @@ func TestPostUnsafePayload(t *testing.T) {
 	// Test validation
 	blockNumberTwo, err := l2Seq.BlockByNumber(ctx, big.NewInt(2))
 	require.NoError(t, err)
-	payload, err = eth.BlockAsPayload(blockNumberTwo, sys.RollupConfig.CanyonTime)
+	payload, err = eth.BlockAsPayload(blockNumberTwo, sys.L2GenesisCfg.Config)
 	require.NoError(t, err)
 	payload.BlockHash = common.Hash{0xaa}
 	err = rollupClient.PostUnsafePayload(ctx, &eth.ExecutionPayloadEnvelope{ExecutionPayload: payload})

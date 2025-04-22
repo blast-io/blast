@@ -253,6 +253,14 @@ func applyOverrides(ctx *cli.Context, rollupConfig *rollup.Config) {
 		ecotone := ctx.Uint64(opflags.EcotoneOverrideFlagName)
 		rollupConfig.EcotoneTime = &ecotone
 	}
+	if ctx.IsSet(opflags.TaigaOverrideFlagName) {
+		taiga := ctx.Uint64(opflags.TaigaOverrideFlagName)
+		rollupConfig.TaigaTime = &taiga
+	}
+	if ctx.IsSet(opflags.PectraBlobScheduleOverrideFlagName) {
+		pectrablobschedule := ctx.Uint64(opflags.PectraBlobScheduleOverrideFlagName)
+		rollupConfig.PectraBlobScheduleTime = &pectrablobschedule
+	}
 }
 
 func NewSnapshotLogger(ctx *cli.Context) (log.Logger, error) {

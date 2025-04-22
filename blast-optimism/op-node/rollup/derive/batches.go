@@ -7,8 +7,10 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 type BatchWithL1InclusionBlock struct {
@@ -79,7 +81,8 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 
 	// dependent on above timestamp check. If the timestamp is correct, then it must build on top of the safe head.
 	if batch.ParentHash != l2SafeHead.Hash {
-		log.Warn("ignoring batch with mismatching parent hash", "current_safe_head", l2SafeHead.Hash)
+		encode, _ := rlp.EncodeToBytes(batch)
+		log.Warn("ignoring batch with mismatching parent hash", "current_safe_head", l2SafeHead.Hash, "rlp-encoded", common.Bytes2Hex(encode))
 		return BatchDrop
 	}
 
@@ -123,8 +126,9 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 		return BatchDrop
 	}
 
+	spec := rollup.NewChainSpec(cfg)
 	// Check if we ran out of sequencer time drift
-	if max := batchOrigin.Time + cfg.MaxSequencerDrift; batch.Timestamp > max {
+	if max := batchOrigin.Time + spec.MaxSequencerDrift(batchOrigin.Time); batch.Timestamp > max {
 		if len(batch.Transactions) == 0 {
 			// If the sequencer is co-operating by producing an empty batch,
 			// then allow the batch if it was the right thing to do to maintain the L2 time >= L1 time invariant.
@@ -303,8 +307,9 @@ func checkSpanBatch(ctx context.Context, cfg *rollup.Config, log log.Logger, l1B
 			return BatchDrop
 		}
 
+		spec := rollup.NewChainSpec(cfg)
 		// Check if we ran out of sequencer time drift
-		if max := l1Origin.Time + cfg.MaxSequencerDrift; blockTimestamp > max {
+		if max := l1Origin.Time + spec.MaxSequencerDrift(l1Origin.Time); blockTimestamp > max {
 			if len(batch.GetBlockTransactions(i)) == 0 {
 				// If the sequencer is co-operating by producing an empty batch,
 				// then allow the batch if it was the right thing to do to maintain the L2 time >= L1 time invariant.

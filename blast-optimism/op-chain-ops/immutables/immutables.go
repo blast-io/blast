@@ -162,7 +162,6 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 		{
 			Name: "Shares",
 			Args: []interface{}{
-				immutable["Shares"]["price"],
 				immutable["Shares"]["reporter"],
 			},
 		},
@@ -298,15 +297,11 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 	case "SchemaRegistry":
 		_, tx, _, err = bindings.DeploySchemaRegistry(opts, backend)
 	case "Shares":
-		sharePrice, ok := deployment.Args[0].(*hexutil.Big)
-		if !ok {
-			return nil, fmt.Errorf("invalid type for sharePrice")
-		}
-		reporter, ok := deployment.Args[1].(common.Address)
+		reporter, ok := deployment.Args[0].(common.Address)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for reporter")
 		}
-		_, tx, _, err = bindings.DeployShares(opts, backend, sharePrice.ToInt(), reporter)
+		_, tx, _, err = bindings.DeployShares(opts, backend, reporter)
 	case "USDB":
 		bridge, ok := deployment.Args[0].(common.Address)
 		if !ok {

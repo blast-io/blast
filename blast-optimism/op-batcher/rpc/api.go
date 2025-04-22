@@ -15,16 +15,24 @@ type BatcherDriver interface {
 	StopBatchSubmitting(ctx context.Context) error
 }
 
+type ReorgSender func(context.Context, uint64) error
+
 type adminAPI struct {
 	*rpc.CommonAdminAPI
-	b BatcherDriver
+	b           BatcherDriver
+	reorgSender ReorgSender
 }
 
-func NewAdminAPI(dr BatcherDriver, m metrics.RPCMetricer, log log.Logger) *adminAPI {
+func NewAdminAPI(dr BatcherDriver, m metrics.RPCMetricer, log log.Logger, sender ReorgSender) *adminAPI {
 	return &adminAPI{
 		CommonAdminAPI: rpc.NewCommonAdminAPI(m, log),
 		b:              dr,
+		reorgSender:    sender,
 	}
+}
+
+func (a *adminAPI) SendReorgBatch(ctx context.Context, l2BlockNumber uint64) error {
+	return a.reorgSender(ctx, l2BlockNumber)
 }
 
 func GetAdminAPI(api *adminAPI) gethrpc.API {

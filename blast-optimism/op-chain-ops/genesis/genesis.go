@@ -144,9 +144,7 @@ func NewL1Genesis(config *DeployConfig) (*core.Genesis, error) {
 		LondonBlock:         big.NewInt(0),
 		ArrowGlacierBlock:   big.NewInt(0),
 		GrayGlacierBlock:    big.NewInt(0),
-		ShanghaiTime:        nil,
-		CancunTime:          nil,
-		PragueTime:          nil,
+		BlobScheduleConfig:  params.DefaultBlobSchedule,
 	}
 
 	extraData := make([]byte, 0)

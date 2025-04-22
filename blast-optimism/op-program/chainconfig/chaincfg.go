@@ -10,16 +10,16 @@ import (
 var OPGoerliChainConfig, OPSepoliaChainConfig, OPMainnetChainConfig *params.ChainConfig
 
 func init() {
-	mustLoadConfig := func(chainID uint64) *params.ChainConfig {
-		cfg, err := params.LoadOPStackChainConfig(chainID)
-		if err != nil {
-			panic(err)
-		}
-		return cfg
-	}
-	OPGoerliChainConfig = mustLoadConfig(420)
-	OPSepoliaChainConfig = mustLoadConfig(11155420)
-	OPMainnetChainConfig = mustLoadConfig(10)
+	// mustLoadConfig := func(chainID uint64) *params.ChainConfig {
+	// 	cfg, err := params.LoadOPStackChainConfig(chainID)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	return cfg
+	// }
+	// OPGoerliChainConfig = mustLoadConfig(420)
+	// OPSepoliaChainConfig = mustLoadConfig(11155420)
+	// OPMainnetChainConfig = mustLoadConfig(10)
 }
 
 var L2ChainConfigsByChainID = map[uint64]*params.ChainConfig{
@@ -37,5 +37,6 @@ func RollupConfigByChainID(chainID uint64) (*rollup.Config, error) {
 }
 
 func ChainConfigByChainID(chainID uint64) (*params.ChainConfig, error) {
-	return params.LoadOPStackChainConfig(chainID)
+	//	return params.LoadOPStackChainConfig(chainID)
+	return nil, nil
 }

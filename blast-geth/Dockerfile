@@ -4,13 +4,18 @@ ARG VERSION=""
 ARG BUILDNUM=""
 
 # Build Geth in a stock Go builder container
-FROM golang:1.21-alpine as builder
+FROM golang:1.24-alpine3.21 as builder
 
 RUN apk add --no-cache gcc musl-dev linux-headers git
 
 # Get dependencies - will also be cached if we won't change go.mod/go.sum
 COPY go.mod /go-ethereum/
 COPY go.sum /go-ethereum/
+
+COPY blockchain/go.mod /go-ethereum/blockchain/go.mod
+COPY blockchain/go.sum /go-ethereum/blockchain/go.sum
+COPY blockchain/iface.go /go-ethereum/blockchain/iface.go
+
 RUN cd /go-ethereum && go mod download
 
 ADD . /go-ethereum

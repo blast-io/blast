@@ -173,6 +173,10 @@ func allExist(filenames ...string) error {
 	return nil
 }
 
+func FindMonorepoRoot(startDir string) (string, error) {
+	return findMonorepoRoot(startDir)
+}
+
 // findMonorepoRoot will recursively search upwards for a go.mod file.
 // This depends on the structure of the monorepo having a go.mod file at the root.
 func findMonorepoRoot(startDir string) (string, error) {
