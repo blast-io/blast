@@ -70,7 +70,7 @@ func NewL2Genesis(config *DeployConfig, block *types.Block) (*core.Genesis, erro
 		Optimism: &params.OptimismConfig{
 			EIP1559Denominator:       eip1559Denom,
 			EIP1559Elasticity:        eip1559Elasticity,
-			EIP1559DenominatorCanyon: eip1559DenomCanyon,
+			EIP1559DenominatorCanyon: &eip1559DenomCanyon,
 		},
 	}
 
@@ -144,8 +144,7 @@ func NewL1Genesis(config *DeployConfig) (*core.Genesis, error) {
 		LondonBlock:         big.NewInt(0),
 		ArrowGlacierBlock:   big.NewInt(0),
 		GrayGlacierBlock:    big.NewInt(0),
-		ShanghaiTime:        nil,
-		CancunTime:          nil,
+		BlobScheduleConfig:  params.DefaultBlobSchedule,
 	}
 
 	extraData := make([]byte, 0)
@@ -185,6 +184,11 @@ func NewL1Genesis(config *DeployConfig) (*core.Genesis, error) {
 	if !config.L1UseClique && config.L1CancunTimeOffset != nil {
 		cancunTime := uint64(timestamp) + uint64(*config.L1CancunTimeOffset)
 		chainConfig.CancunTime = &cancunTime
+	}
+
+	if !config.L1UseClique && config.L1PragueTimeOffset != nil {
+		pragueTime := uint64(timestamp) + uint64(*config.L1PragueTimeOffset)
+		chainConfig.PragueTime = &pragueTime
 	}
 
 	return &core.Genesis{

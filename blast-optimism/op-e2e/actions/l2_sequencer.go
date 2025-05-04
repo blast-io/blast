@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	// "github.com/ethereum-optimism/optimism/op-node/node/safedb"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
@@ -32,6 +34,10 @@ func (m *MockL1OriginSelector) FindL1Origin(ctx context.Context, l2Head eth.L2Bl
 	return m.actual.FindL1Origin(ctx, l2Head)
 }
 
+func (m *MockL1OriginSelector) IsPastSeqDrift(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, bool, error) {
+	return m.actual.IsPastSeqDrift(ctx, l2Head)
+}
+
 // L2Sequencer is an actor that functions like a rollup node,
 // without the full P2P/API/Node stack, but just the derivation state, and simplified driver with sequencing ability.
 type L2Sequencer struct {
@@ -41,7 +47,20 @@ type L2Sequencer struct {
 
 	failL2GossipUnsafeBlock error // mock error
 
-	mockL1OriginSelector *MockL1OriginSelector
+	mockL1OriginSelector  *MockL1OriginSelector
+	mockL1ReceiptsFetcher *MockL1ReceiptsFetcher
+}
+
+type MockL1ReceiptsFetcher struct {
+	derive.L1ReceiptsFetcher
+	failReceipts bool
+}
+
+func (m *MockL1ReceiptsFetcher) FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error) {
+	if m.failReceipts {
+		return nil, nil, errors.New("failing on making receipts enabled")
+	}
+	return m.L1ReceiptsFetcher.FetchReceipts(ctx, blockHash)
 }
 
 func NewL2Sequencer(t Testing, log log.Logger, l1 derive.L1Fetcher, blobSrc derive.L1BlobsFetcher,
@@ -53,7 +72,8 @@ func NewL2Sequencer(t Testing, log log.Logger, l1 derive.L1Fetcher, blobSrc deri
 		eng, cfg, &sync.Config{},
 		//safedb.Disabled,
 	)
-	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, eng)
+	l1ReceiptWrapper := &MockL1ReceiptsFetcher{L1ReceiptsFetcher: l1}
+	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ReceiptWrapper, eng)
 	seqConfDepthL1 := driver.NewConfDepth(seqConfDepth, ver.l1State.L1Head, l1)
 	l1OriginSelector := &MockL1OriginSelector{
 		actual: driver.NewL1OriginSelector(log, cfg, seqConfDepthL1),
@@ -62,6 +82,7 @@ func NewL2Sequencer(t Testing, log log.Logger, l1 derive.L1Fetcher, blobSrc deri
 		L2Verifier:              *ver,
 		sequencer:               driver.NewSequencer(log, cfg, ver.engine, attrBuilder, l1OriginSelector, metrics.NoopMetrics),
 		mockL1OriginSelector:    l1OriginSelector,
+		mockL1ReceiptsFetcher:   l1ReceiptWrapper,
 		failL2GossipUnsafeBlock: nil,
 	}
 }

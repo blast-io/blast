@@ -93,6 +93,9 @@ type Header struct {
 
 	// ParentBeaconRoot was added by EIP-4788 and is ignored in legacy headers.
 	ParentBeaconRoot *common.Hash `json:"parentBeaconBlockRoot" rlp:"optional"`
+
+	// RequestsHash was added by EIP-7685 and is ignored in legacy headers.
+	RequestsHash *common.Hash `json:"requestsHash" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -304,6 +307,10 @@ func CopyHeader(h *Header) *Header {
 		cpy.ParentBeaconRoot = new(common.Hash)
 		*cpy.ParentBeaconRoot = *h.ParentBeaconRoot
 	}
+	if h.RequestsHash != nil {
+		cpy.RequestsHash = new(common.Hash)
+		*cpy.RequestsHash = *h.RequestsHash
+	}
 	return &cpy
 }
 
@@ -383,7 +390,8 @@ func (b *Block) BaseFee() *big.Int {
 	return new(big.Int).Set(b.header.BaseFee)
 }
 
-func (b *Block) BeaconRoot() *common.Hash { return b.header.ParentBeaconRoot }
+func (b *Block) BeaconRoot() *common.Hash   { return b.header.ParentBeaconRoot }
+func (b *Block) RequestsHash() *common.Hash { return b.header.RequestsHash }
 
 func (b *Block) ExcessBlobGas() *uint64 {
 	var excessBlobGas *uint64

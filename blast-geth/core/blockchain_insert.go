@@ -39,7 +39,7 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
-func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool) {
+func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool, gasTrackerTook, trieDBCommitTook, storageCommitTook, accountCommitTook time.Duration, gTrackerCount int) {
 	// Fetch the timings for the batch
 	var (
 		now     = mclock.Now()
@@ -83,6 +83,21 @@ func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, sn
 		if setHead {
 			log.Info("Imported new chain segment", context...)
 		} else {
+			if gasTrackerTook > 0 {
+				context = append(context, []interface{}{"gastracker-dev-allocate", gasTrackerTook}...)
+			}
+			if trieDBCommitTook > 0 {
+				context = append(context, []interface{}{"triedb-commit", trieDBCommitTook}...)
+			}
+			if storageCommitTook > 0 {
+				context = append(context, []interface{}{"storage-commit", storageCommitTook}...)
+			}
+			if accountCommitTook > 0 {
+				context = append(context, []interface{}{"account-commit", accountCommitTook}...)
+			}
+			if gTrackerCount > 0 {
+				context = append(context, []interface{}{"gtracker-count", gTrackerCount}...)
+			}
 			log.Info("Imported new potential chain segment", context...)
 		}
 		// Bump the stats reported to the next section

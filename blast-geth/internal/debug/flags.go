@@ -30,14 +30,11 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
-	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
-var Memsize memsizeui.Handler
 
 var (
 	verbosityFlag = &cli.IntFlag{
@@ -153,6 +150,16 @@ var (
 		Usage:    "Write execution trace to the given file",
 		Category: flags.LoggingCategory,
 	}
+	flightRecordingFlag = &cli.BoolFlag{
+		Name:     "trace.flight-recording",
+		Usage:    "enable flight recording",
+		Category: flags.BlastCategory,
+	}
+	flightRecordingDirFlag = &cli.StringFlag{
+		Name:     "trace.flight-recording-dir",
+		Usage:    "what directory to write the flight recordings",
+		Category: flags.BlastCategory,
+	}
 )
 
 // Flags holds all command-line flags required for debugging.
@@ -177,6 +184,8 @@ var Flags = []cli.Flag{
 	blockprofilerateFlag,
 	cpuprofileFlag,
 	traceFlag,
+	flightRecordingFlag,
+	flightRecordingDirFlag,
 }
 
 var (
@@ -327,7 +336,7 @@ func StartPProf(address string, withMetrics bool) {
 	if withMetrics {
 		exp.Exp(metrics.DefaultRegistry)
 	}
-	http.Handle("/memsize/", http.StripPrefix("/memsize", &Memsize))
+
 	log.Info("Starting pprof server", "addr", fmt.Sprintf("http://%s/debug/pprof", address))
 	go func() {
 		if err := http.ListenAndServe(address, nil); err != nil {

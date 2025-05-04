@@ -132,7 +132,7 @@ func NewBeaconEndpointConfig(ctx *cli.Context) node.L1BeaconEndpointSetup {
 	return &node.L1BeaconEndpointConfig{
 		BeaconAddr:             ctx.String(flags.BeaconAddr.Name),
 		BeaconHeader:           ctx.String(flags.BeaconHeader.Name),
-		BeaconArchiverAddr:     ctx.String(flags.BeaconArchiverAddr.Name),
+		BeaconFallbackAddrs:    ctx.StringSlice(flags.BeaconFallbackAddrs.Name),
 		BeaconCheckIgnore:      ctx.Bool(flags.BeaconCheckIgnore.Name),
 		BeaconFetchAllSidecars: ctx.Bool(flags.BeaconFetchAllSidecars.Name),
 	}
@@ -253,12 +253,22 @@ func applyOverrides(ctx *cli.Context, rollupConfig *rollup.Config) {
 		ecotone := ctx.Uint64(opflags.EcotoneOverrideFlagName)
 		rollupConfig.EcotoneTime = &ecotone
 	}
+	if ctx.IsSet(opflags.TaigaOverrideFlagName) {
+		taiga := ctx.Uint64(opflags.TaigaOverrideFlagName)
+		rollupConfig.TaigaTime = &taiga
+	}
+	if ctx.IsSet(opflags.PectraBlobScheduleOverrideFlagName) {
+		pectrablobschedule := ctx.Uint64(opflags.PectraBlobScheduleOverrideFlagName)
+		rollupConfig.PectraBlobScheduleTime = &pectrablobschedule
+	}
 }
 
 func NewSnapshotLogger(ctx *cli.Context) (log.Logger, error) {
 	snapshotFile := ctx.String(flags.SnapshotLog.Name)
 	if snapshotFile == "" {
-		return log.New(log.DiscardHandler()), nil
+		lg := log.New()
+		lg.SetHandler(log.DiscardHandler())
+		return lg, nil
 	}
 
 	sf, err := os.OpenFile(snapshotFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -267,8 +277,10 @@ func NewSnapshotLogger(ctx *cli.Context) (log.Logger, error) {
 	}
 	// handler := log.JSONHandler(sf)
 	// return log.NewLogger(handler), nil
+	lg := log.New()
 	handler := log.StreamHandler(sf, log.JSONFormat())
-	return log.New(handler), nil
+	lg.SetHandler(handler)
+	return lg, nil
 }
 
 func NewSyncConfig(ctx *cli.Context, log log.Logger) (*sync.Config, error) {

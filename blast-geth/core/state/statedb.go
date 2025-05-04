@@ -130,12 +130,13 @@ type StateDB struct {
 	SnapshotStorageReads time.Duration
 	SnapshotCommits      time.Duration
 	TrieDBCommits        time.Duration
+	DevAllocateUpdates   time.Duration
 
-	AccountUpdated int
-	StorageUpdated int
-	AccountDeleted int
-	StorageDeleted int
-
+	AccountUpdated   int
+	StorageUpdated   int
+	AccountDeleted   int
+	StorageDeleted   int
+	DevAllocateCount int
 	// Testing hooks
 	onCommit func(states *triestate.Set) // Hook invoked when commit is performed
 }

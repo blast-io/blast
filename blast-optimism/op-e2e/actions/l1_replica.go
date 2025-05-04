@@ -41,8 +41,7 @@ type L1Replica struct {
 	l1Database ethdb.Database
 	l1Cfg      *core.Genesis
 	l1Signer   types.Signer
-
-	failL1RPC func() error // mock error
+	failL1RPC  func() error // mock error
 }
 
 // NewL1Replica constructs a L1Replica starting at the given genesis.

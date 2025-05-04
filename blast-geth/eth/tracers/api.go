@@ -953,12 +953,17 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		}
 		config.BlockOverrides.Apply(&vmctx)
 	}
+
 	// Execute the trace
-	msg, err := args.ToMessage(api.backend.RPCGasCap(), block.BaseFee())
-	if err != nil {
+	if err := args.CallDefaults(api.backend.RPCGasCap(), vmctx.BaseFee, api.backend.ChainConfig().ChainID); err != nil {
 		return nil, err
 	}
-
+	msg := args.ToMessage(block.BaseFee(), true, true)
+	// Lower the basefee to 0 to avoid breaking EVM
+	// invariants (basefee < feecap).
+	if msg.GasPrice.Sign() == 0 {
+		vmctx.BaseFee = new(big.Int)
+	}
 	var traceConfig *TraceConfig
 	if config != nil {
 		traceConfig = &config.TraceConfig

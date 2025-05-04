@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -18,8 +20,10 @@ type GasParameters struct {
 }
 
 type GasTracker struct {
-	allocations map[common.Address]uint64
-	gasUsed     uint64
+	allocations           map[common.Address]uint64
+	gasUsed               uint64
+	AllocateDevGasUpdates time.Duration
+	AllocateCount         int
 }
 
 func (gtm *GasTracker) GetGasUsedByContract(address common.Address) uint64 {
@@ -49,6 +53,13 @@ func (gtm *GasTracker) AllocateDevGas(gasPrice *big.Int, refund uint64, state St
 	// net gas used is 0 or gas consumed is <= refund
 	if gtm.gasUsed == 0 || gtm.gasUsed <= refund {
 		return
+	}
+
+	if metrics.Enabled {
+		defer func(start time.Time, amount int) {
+			gtm.AllocateDevGasUpdates += time.Since(start)
+			gtm.AllocateCount += amount
+		}(time.Now(), len(gtm.allocations))
 	}
 
 	remainingGas := new(big.Int).SetUint64(gtm.gasUsed - refund)

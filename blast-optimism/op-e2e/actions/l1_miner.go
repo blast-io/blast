@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils"
@@ -44,6 +45,7 @@ type L1Miner struct {
 
 // NewL1Miner creates a new L1Replica that can also build blocks.
 func NewL1Miner(t Testing, log log.Logger, genesis *core.Genesis) *L1Miner {
+	genesis.Config.BlobScheduleConfig = params.DefaultBlobSchedule
 	rep := NewL1Replica(t, log, genesis)
 	return &L1Miner{
 		L1Replica: *rep,
@@ -94,7 +96,8 @@ func (s *L1Miner) ActL1StartBlock(timeDelta uint64) Action {
 		}
 		if s.l1Cfg.Config.IsCancun(header.Number, header.Time) {
 			header.BlobGasUsed = new(uint64)
-			header.ExcessBlobGas = new(uint64)
+			excessBlobGas := eip4844.CalcExcessBlobGas(s.l1Cfg.Config, parent, header.Time)
+			header.ExcessBlobGas = &excessBlobGas
 			root := crypto.Keccak256Hash([]byte("fake-beacon-block-root"), header.Number.Bytes())
 			header.ParentBeaconRoot = &root
 		}
@@ -106,7 +109,6 @@ func (s *L1Miner) ActL1StartBlock(timeDelta uint64) Action {
 		s.l1Transactions = make([]*types.Transaction, 0)
 		s.pendingIndices = make(map[common.Address]uint64)
 		s.l1BuildingBlobSidecars = make([]*types.BlobTxSidecar, 0)
-
 		s.l1GasPool = new(core.GasPool).AddGas(header.GasLimit)
 	}
 }
@@ -171,6 +173,11 @@ func (s *L1Miner) IncludeTx(t Testing, tx *types.Transaction) {
 		}
 		*s.l1BuildingHeader.BlobGasUsed += receipt.BlobGasUsed
 	}
+
+	if tx.Type() == types.SetCodeTxType {
+		require.True(t, s.l1Cfg.Config.IsPrague(s.l1BuildingHeader.Number, s.l1BuildingHeader.Time), "L1 must be prague to process setcode tx")
+	}
+
 }
 
 func (s *L1Miner) ActL1SetFeeRecipient(coinbase common.Address) {
@@ -182,6 +189,7 @@ func (s *L1Miner) ActL1SetFeeRecipient(coinbase common.Address) {
 
 // ActL1EndBlock finishes the new L1 block, and applies it to the chain as unsafe block
 func (s *L1Miner) ActL1EndBlock(t Testing) {
+	t.Helper()
 	if !s.l1Building {
 		t.InvalidAction("cannot end L1 block when not building block")
 		return
@@ -194,18 +202,9 @@ func (s *L1Miner) ActL1EndBlock(t Testing) {
 	if s.l1Cfg.Config.IsShanghai(s.l1BuildingHeader.Number, s.l1BuildingHeader.Time) {
 		block = block.WithWithdrawals(make([]*types.Withdrawal, 0))
 	}
-	if s.l1Cfg.Config.IsCancun(s.l1BuildingHeader.Number, s.l1BuildingHeader.Time) {
-		parent := s.l1Chain.GetHeaderByHash(s.l1BuildingHeader.ParentHash)
-		var (
-			parentExcessBlobGas uint64
-			parentBlobGasUsed   uint64
-		)
-		if parent.ExcessBlobGas != nil {
-			parentExcessBlobGas = *parent.ExcessBlobGas
-			parentBlobGasUsed = *parent.BlobGasUsed
-		}
-		excessBlobGas := eip4844.CalcExcessBlobGas(parentExcessBlobGas, parentBlobGasUsed)
-		s.l1BuildingHeader.ExcessBlobGas = &excessBlobGas
+
+	if s.l1Cfg.Config.IsPrague(s.l1BuildingHeader.Number, s.l1BuildingHeader.Time) {
+		s.l1BuildingHeader.RequestsHash = &types.EmptyRequestsHash
 	}
 
 	// Write state changes to db
@@ -225,11 +224,12 @@ func (s *L1Miner) ActL1EndBlock(t Testing) {
 	}
 	_, err = s.l1Chain.InsertChain(types.Blocks{block})
 	if err != nil {
-		t.Fatalf("failed to insert block into l1 chain")
+		t.Fatalf("failed to insert block into l1 chain: %w", err)
 	}
 }
 
 func (s *L1Miner) ActEmptyBlock(t Testing) {
+	t.Helper()
 	s.ActL1StartBlock(12)(t)
 	s.ActL1EndBlock(t)
 }

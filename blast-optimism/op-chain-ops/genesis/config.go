@@ -120,9 +120,12 @@ type DeployConfig struct {
 	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Delta hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Delta.
 	L2GenesisDeltaTimeOffset *hexutil.Uint64 `json:"l2GenesisDeltaTimeOffset,omitempty"`
-	// L2GenesisEcotoneTimeOffset is the number of seconds after genesis block that Eclipse hard fork activates.
+	// L2GenesisEcotoneTimeOffset is the number of seconds after genesis block that Ecotone hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Delta.
 	L2GenesisEcotoneTimeOffset *hexutil.Uint64 `json:"l2GenesisEcotoneTimeOffset,omitempty"`
+	// L2GenesisTaigaTimeOffset is the number of seconds after genesis block that Taiga hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Delta.
+	L2GenesisTaigaTimeOffset *hexutil.Uint64 `json:"l2GenesisTaigaTimeOffset,omitempty"`
 	// L2GenesisDeltaTimeOffset is the number of seconds after genesis block that Fjord hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Delta.
 	L2GenesisFjordTimeOffset *hexutil.Uint64 `json:"l2GenesisFjordTimeOffset,omitempty"`
@@ -255,8 +258,16 @@ type DeployConfig struct {
 	USDInsuranceFee     *hexutil.Big `json:"usdInsuranceFee"`
 	USDWithdrawalBuffer *hexutil.Big `json:"usdWithdrawalBuffer"`
 
+	// Optional Forks
+
+	// L2GenesisPectraBlobScheduleTimeOffset is the number of seconds after genesis block that the PectraBlobSchedule fix activates.
+	// Set it to 0 to activate at genesis. Nil to disable the PectraBlobSchedule fix.
+	L2GenesisPectraBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisPectraBlobScheduleTimeOffset,omitempty"`
+
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
+	// When Prague activates. Relative to L1 genesis.
+	L1PragueTimeOffset *hexutil.Uint64 `json:"l1PragueTimeOffset,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -649,6 +660,17 @@ func (d *DeployConfig) EcotoneTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
+func (d *DeployConfig) TaigaTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisTaigaTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisTaigaTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
 func (d *DeployConfig) FjordTime(genesisTime uint64) *uint64 {
 	if d.L2GenesisFjordTimeOffset == nil {
 		return nil
@@ -666,6 +688,17 @@ func (d *DeployConfig) InteropTime(genesisTime uint64) *uint64 {
 	}
 	v := uint64(0)
 	if offset := *d.L2GenesisInteropTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) PectraBlobScheduleTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisPectraBlobScheduleTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisPectraBlobScheduleTimeOffset; offset > 0 {
 		v = genesisTime + uint64(offset)
 	}
 	return &v
@@ -713,6 +746,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		EcotoneTime:            d.EcotoneTime(l1StartBlock.Time()),
 		FjordTime:              d.FjordTime(l1StartBlock.Time()),
 		InteropTime:            d.InteropTime(l1StartBlock.Time()),
+		PectraBlobScheduleTime: d.PectraBlobScheduleTime(l1StartBlock.Time()),
 	}, nil
 }
 

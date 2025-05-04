@@ -12,7 +12,6 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -327,12 +326,12 @@ func MakeSidecar(blobs []*eth.Blob) (*types.BlobTxSidecar, []common.Hash, error)
 	for i, blob := range blobs {
 		rawBlob := *blob.KZGBlob()
 		sidecar.Blobs = append(sidecar.Blobs, rawBlob)
-		commitment, err := kzg4844.BlobToCommitment(rawBlob)
+		commitment, err := kzg4844.BlobToCommitment(&rawBlob)
 		if err != nil {
 			return nil, nil, fmt.Errorf("cannot compute KZG commitment of blob %d in tx candidate: %w", i, err)
 		}
 		sidecar.Commitments = append(sidecar.Commitments, commitment)
-		proof, err := kzg4844.ComputeBlobProof(rawBlob, commitment)
+		proof, err := kzg4844.ComputeBlobProof(&rawBlob, commitment)
 		if err != nil {
 			return nil, nil, fmt.Errorf("cannot compute KZG proof for fast commitment verification of blob %d in tx candidate: %w", i, err)
 		}
@@ -599,7 +598,7 @@ func (m *SimpleTxManager) queryReceipt(ctx context.Context, txHash common.Hash, 
 
 	m.metr.RecordBaseFee(tip.BaseFee)
 	if tip.ExcessBlobGas != nil {
-		blobFee := eip4844.CalcBlobFee(*tip.ExcessBlobGas)
+		blobFee := eth.CalcBlobFeeDefault(tip)
 		m.metr.RecordBlobBaseFee(blobFee)
 	}
 
@@ -755,7 +754,7 @@ func (m *SimpleTxManager) suggestGasPriceCaps(ctx context.Context) (*big.Int, *b
 
 	var blobFee *big.Int
 	if head.ExcessBlobGas != nil {
-		blobFee = eip4844.CalcBlobFee(*head.ExcessBlobGas)
+		blobFee = eth.CalcBlobFeeDefault(head)
 		m.metr.RecordBlobBaseFee(blobFee)
 	}
 	return tip, baseFee, blobFee, nil

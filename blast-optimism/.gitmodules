@@ -21,3 +21,7 @@
 	path = op-geth
 	url = git@github.com:blast-io/op-geth.git
 	branch = blast-mainnet-master
+[submodule "go-ethereum"]
+	path = geth-plugin
+	url = git@github.com:blast-io/go-ethereum.git
+	branch = europa/plugin-l1

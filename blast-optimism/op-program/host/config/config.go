@@ -118,18 +118,18 @@ func NewConfig(
 	l2Claim common.Hash,
 	l2ClaimBlockNum uint64,
 ) *Config {
-	_, err := params.LoadOPStackChainConfig(l2Genesis.ChainID.Uint64())
-	isCustomConfig := err != nil
+	// _, err := params.LoadOPStackChainConfig(l2Genesis.ChainID.Uint64())
+	// isCustomConfig := err != nil
 	return &Config{
-		Rollup:              rollupCfg,
-		L2ChainConfig:       l2Genesis,
-		L1Head:              l1Head,
-		L2Head:              l2Head,
-		L2OutputRoot:        l2OutputRoot,
-		L2Claim:             l2Claim,
-		L2ClaimBlockNumber:  l2ClaimBlockNum,
-		L1RPCKind:           sources.RPCKindStandard,
-		IsCustomChainConfig: isCustomConfig,
+		Rollup:             rollupCfg,
+		L2ChainConfig:      l2Genesis,
+		L1Head:             l1Head,
+		L2Head:             l2Head,
+		L2OutputRoot:       l2OutputRoot,
+		L2Claim:            l2Claim,
+		L2ClaimBlockNumber: l2ClaimBlockNum,
+		L1RPCKind:          sources.RPCKindStandard,
+		// IsCustomChainConfig: isCustomConfig,
 	}
 }
 
@@ -171,11 +171,11 @@ func NewConfigFromCLI(log log.Logger, ctx *cli.Context) (*Config, error) {
 		if ch == nil {
 			return nil, fmt.Errorf("flag %s is required for network %s", flags.L2GenesisPath.Name, networkName)
 		}
-		cfg, err := params.LoadOPStackChainConfig(ch.ChainID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load chain config for chain %d: %w", ch.ChainID, err)
-		}
-		l2ChainConfig = cfg
+		// cfg, err := params.LoadOPStackChainConfig(ch.ChainID)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("failed to load chain config for chain %d: %w", ch.ChainID, err)
+		// }
+		// l2ChainConfig = cfg
 	} else {
 		l2ChainConfig, err = loadChainConfigFromGenesis(l2GenesisPath)
 		isCustomConfig = true

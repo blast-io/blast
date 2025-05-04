@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -287,7 +286,7 @@ func (s *L2Batcher) ActL2BatchSubmit(t Testing, txOpts ...func(tx *types.Dynamic
 		sidecar, blobHashes, err := txmgr.MakeSidecar([]*eth.Blob{&b})
 		require.NoError(t, err)
 		require.NotNil(t, pendingHeader.ExcessBlobGas, "need L1 header with 4844 properties")
-		blobBaseFee := eip4844.CalcBlobFee(*pendingHeader.ExcessBlobGas)
+		blobBaseFee := eth.CalcBlobFeeDefault(pendingHeader)
 		blobFeeCap := new(uint256.Int).Mul(uint256.NewInt(2), uint256.MustFromBig(blobBaseFee))
 		if blobFeeCap.Lt(uint256.NewInt(params.GWei)) { // ensure we meet 1 gwei geth tx-pool minimum
 			blobFeeCap = uint256.NewInt(params.GWei)
@@ -369,7 +368,7 @@ func (s *L2Batcher) ActL2BatchSubmitMultiBlob(t Testing, numBlobs int) {
 	sidecar, blobHashes, err := txmgr.MakeSidecar(blobs)
 	require.NoError(t, err)
 	require.NotNil(t, pendingHeader.ExcessBlobGas, "need L1 header with 4844 properties")
-	blobBaseFee := eip4844.CalcBlobFee(*pendingHeader.ExcessBlobGas)
+	blobBaseFee := eth.CalcBlobFeeDefault(pendingHeader)
 	blobFeeCap := new(uint256.Int).Mul(uint256.NewInt(2), uint256.MustFromBig(blobBaseFee))
 	if blobFeeCap.Lt(uint256.NewInt(params.GWei)) { // ensure we meet 1 gwei geth tx-pool minimum
 		blobFeeCap = uint256.NewInt(params.GWei)

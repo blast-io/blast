@@ -3,6 +3,7 @@ package derive
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -122,8 +123,9 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 		return BatchDrop
 	}
 
+	spec := rollup.NewChainSpec(cfg)
 	// Check if we ran out of sequencer time drift
-	if max := batchOrigin.Time + cfg.MaxSequencerDrift; batch.Timestamp > max {
+	if max := batchOrigin.Time + spec.MaxSequencerDrift(batchOrigin.Time); batch.Timestamp > max {
 		if len(batch.Transactions) == 0 {
 			// If the sequencer is co-operating by producing an empty batch,
 			// then allow the batch if it was the right thing to do to maintain the L2 time >= L1 time invariant.
@@ -135,7 +137,13 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 				}
 				nextOrigin := l1Blocks[1]
 				if batch.Timestamp >= nextOrigin.Time { // check if the next L1 origin could have been adopted
-					log.Info("batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid")
+					log.Warn(
+						"batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
+						"time-exceeded-drift", time.Duration(batch.Timestamp-max)*time.Second,
+						"time-exceeded-origin", time.Duration(batch.Timestamp-nextOrigin.Time)*time.Second,
+						"l1-origin", batch.EpochNum,
+						"l1-next-origin", nextOrigin.Number,
+					)
 					return BatchDrop
 				} else {
 					log.Info("continuing with empty batch before late L1 block to preserve L2 time invariant")
@@ -296,8 +304,9 @@ func checkSpanBatch(ctx context.Context, cfg *rollup.Config, log log.Logger, l1B
 			return BatchDrop
 		}
 
+		spec := rollup.NewChainSpec(cfg)
 		// Check if we ran out of sequencer time drift
-		if max := l1Origin.Time + cfg.MaxSequencerDrift; blockTimestamp > max {
+		if max := l1Origin.Time + spec.MaxSequencerDrift(l1Origin.Time); blockTimestamp > max {
 			if len(batch.GetBlockTransactions(i)) == 0 {
 				// If the sequencer is co-operating by producing an empty batch,
 				// then allow the batch if it was the right thing to do to maintain the L2 time >= L1 time invariant.

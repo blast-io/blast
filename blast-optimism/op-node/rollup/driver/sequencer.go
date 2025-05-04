@@ -23,6 +23,7 @@ type Downloader interface {
 
 type L1OriginSelectorIface interface {
 	FindL1Origin(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, error)
+	IsPastSeqDrift(ctx context.Context, l2Head eth.L2BlockRef) (eth.L1BlockRef, bool, error)
 }
 
 type SequencerMetrics interface {
@@ -34,6 +35,7 @@ type SequencerMetrics interface {
 type Sequencer struct {
 	log       log.Logger
 	rollupCfg *rollup.Config
+	spec      *rollup.ChainSpec
 
 	engine derive.EngineControl
 
@@ -52,6 +54,7 @@ func NewSequencer(log log.Logger, rollupCfg *rollup.Config, engine derive.Engine
 	return &Sequencer{
 		log:              log,
 		rollupCfg:        rollupCfg,
+		spec:             rollup.NewChainSpec(rollupCfg),
 		engine:           engine,
 		timeNow:          time.Now,
 		attrBuilder:      attributesBuilder,
@@ -78,24 +81,51 @@ func (d *Sequencer) StartBuildingBlock(ctx context.Context) error {
 
 	d.log.Info("creating new block", "parent", l2Head, "l1Origin", l1Origin)
 
-	fetchCtx, cancel := context.WithTimeout(ctx, time.Second*20)
+	fetchCtx, cancel := context.WithTimeout(context.WithValue(ctx, derive.ModeKey, derive.ModeKeySequencer), time.Second*20)
 	defer cancel()
 
 	attrs, err := d.attrBuilder.PreparePayloadAttributes(fetchCtx, l2Head, l1Origin.ID())
 	if err != nil {
-		return err
+		if err != derive.ErrFetchReceipt {
+			return err
+		}
+		// okay we had a fetch receipts error - can we try current origin instead
+
+		// very odd if this error ever happens since we already did call it with same l2head and that is cached
+		// but safe than sorry
+		currentOrigin, pastSeqDrift, errSelect := d.l1OriginSelector.IsPastSeqDrift(fetchCtx, l2Head)
+		if errSelect != nil {
+			return derive.NewResetError(fmt.Errorf("impossible error for already cached origin selected %v", err))
+		}
+		if !pastSeqDrift { // we are okay to reuse the current origin if receipt fetching failed
+			d.log.Warn(
+				"receipt fetching for new epoch failed while still under sequencer drift so using current origin",
+				"current-origin", currentOrigin,
+				"next-origin", l1Origin,
+			)
+			attrs, err = d.attrBuilder.PreparePayloadAttributes(fetchCtx, l2Head, currentOrigin.ID())
+		}
+
+		if err != nil {
+			return err
+		}
 	}
 
 	// If our next L2 block timestamp is beyond the Sequencer drift threshold, then we must produce
 	// empty blocks (other than the L1 info deposit and any user deposits). We handle this by
 	// setting NoTxPool to true, which will cause the Sequencer to not include any transactions
 	// from the transaction pool.
-	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.rollupCfg.MaxSequencerDrift
+	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.spec.MaxSequencerDrift(l1Origin.Time)
 
 	// For the Ecotone activation block we shouldn't include any sequencer transactions.
 	if d.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
 		attrs.NoTxPool = true
 		d.log.Info("Sequencing Ecotone upgrade block")
+	}
+
+	// For the Taiga activation block we can include sequencer transactions.
+	if d.rollupCfg.IsTaigaActivationBlock(uint64(attrs.Timestamp)) {
+		d.log.Info("Sequencing Taiga upgrade block")
 	}
 
 	d.log.Debug("prepared attributes for new block",

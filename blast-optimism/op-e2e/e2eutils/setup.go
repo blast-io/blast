@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/stretchr/testify/require"
 
@@ -79,6 +81,7 @@ type SetupData struct {
 	L1Cfg         *core.Genesis
 	L2Cfg         *core.Genesis
 	RollupCfg     *rollup.Config
+	ChainSpec     *rollup.ChainSpec
 	DeploymentsL1 *genesis.L1Deployments
 }
 
@@ -103,7 +106,6 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 	deployConf := deployParams.DeployConfig.Copy()
 	deployConf.L1GenesisBlockTimestamp = hexutil.Uint64(time.Now().Unix())
 	require.NoError(t, deployConf.Check())
-
 	l1Deployments := config.L1Deployments.Copy()
 	require.NoError(t, l1Deployments.Check(deployConf))
 
@@ -120,6 +122,7 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		l1Genesis.Alloc[addr] = val
 	}
 
+	l1Genesis.Config.BlobScheduleConfig = params.DefaultBlobSchedule
 	l1Block := l1Genesis.ToBlock()
 
 	l2Genesis, err := genesis.BuildL2Genesis(deployConf, l1Block)
@@ -161,8 +164,151 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		CanyonTime:             deployConf.CanyonTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		DeltaTime:              deployConf.DeltaTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		EcotoneTime:            deployConf.EcotoneTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		TaigaTime:              deployConf.TaigaTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		FjordTime:              deployConf.FjordTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		InteropTime:            deployConf.InteropTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		PectraBlobScheduleTime: deployConf.PectraBlobScheduleTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		// DAChallengeAddress:     l1Deployments.DataAvailabilityChallengeProxy,
+		// DAChallengeWindow:      deployConf.DAChallengeWindow,
+		// DAResolveWindow:        deployConf.DAResolveWindow,
+		// UsePlasma:              deployConf.UsePlasma,
+	}
+
+	require.NoError(t, rollupCfg.Check())
+
+	// Sanity check that the config is correct
+	require.Equal(t, deployParams.Secrets.Addresses().Batcher, deployParams.DeployConfig.BatchSenderAddress)
+	require.Equal(t, deployParams.Secrets.Addresses().SequencerP2P, deployParams.DeployConfig.P2PSequencerAddress)
+	require.Equal(t, deployParams.Secrets.Addresses().Proposer, deployParams.DeployConfig.L2OutputOracleProposer)
+
+	return &SetupData{
+		L1Cfg:         l1Genesis,
+		L2Cfg:         l2Genesis,
+		RollupCfg:     rollupCfg,
+		ChainSpec:     rollup.NewChainSpec(rollupCfg),
+		DeploymentsL1: l1Deployments,
+	}
+}
+
+func SystemConfigFromDeployConfig(deployConfig *genesis.DeployConfig) eth.SystemConfig {
+	return eth.SystemConfig{
+		BatcherAddr: deployConfig.BatchSenderAddress,
+		Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleOverhead))),
+		Scalar:      eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleScalar))),
+		GasLimit:    uint64(deployConfig.L2GenesisBlockGasLimit),
+	}
+}
+
+func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
+	isFjord := os.Getenv("OP_E2E_USE_FJORD") == "true"
+	isEcotone := isFjord || os.Getenv("OP_E2E_USE_ECOTONE") == "true"
+	isDelta := isEcotone || os.Getenv("OP_E2E_USE_DELTA") == "true"
+	isTaiga := isDelta || os.Getenv("OP_E2E_USE_TAIGA") == "true"
+
+	if isDelta {
+		deployConfig.L2GenesisDeltaTimeOffset = new(hexutil.Uint64)
+	}
+	if isEcotone {
+		deployConfig.L2GenesisEcotoneTimeOffset = new(hexutil.Uint64)
+	}
+	if isTaiga {
+		deployConfig.L2GenesisTaigaTimeOffset = new(hexutil.Uint64)
+	}
+	if isFjord {
+		deployConfig.L2GenesisFjordTimeOffset = new(hexutil.Uint64)
+	}
+
+	// Canyon and lower is activated by default
+	deployConfig.L2GenesisCanyonTimeOffset = new(hexutil.Uint64)
+	deployConfig.L2GenesisRegolithTimeOffset = new(hexutil.Uint64)
+}
+
+func UseFPAC() bool {
+	// return os.Getenv("OP_E2E_USE_FPAC") == "true"
+	return false
+}
+
+func UsePlasma() bool {
+	//	return os.Getenv("OP_E2E_USE_PLASMA") == "true"
+	return false
+}
+
+// Setup computes the testing setup configurations from deployment configuration and optional allocation parameters.
+func SetupPart1(
+	t require.TestingT, deployParams *DeployParams, alloc *AllocParams,
+) (*core.Genesis, *genesis.DeployConfig, *genesis.L1Deployments) {
+	deployConf := deployParams.DeployConfig.Copy()
+	deployConf.L1GenesisBlockTimestamp = hexutil.Uint64(time.Now().Unix())
+	require.NoError(t, deployConf.Check())
+	l1Deployments := config.L1Deployments.Copy()
+	require.NoError(t, l1Deployments.Check(deployConf))
+	l1Genesis, err := genesis.BuildL1DeveloperGenesis(deployConf, config.L1Allocs, l1Deployments, false)
+	require.NoError(t, err, "failed to create l1 genesis")
+	if alloc.PrefundTestUsers {
+		for _, addr := range deployParams.Addresses.All() {
+			l1Genesis.Alloc[addr] = core.GenesisAccount{
+				Balance: Ether(1e12),
+			}
+		}
+	}
+	for addr, val := range alloc.L1Alloc {
+		l1Genesis.Alloc[addr] = val
+	}
+
+	l1Genesis.Config.BlobScheduleConfig = params.DefaultBlobSchedule
+
+	// l1Block := l1Genesis.ToBlock()
+	return l1Genesis, deployConf, l1Deployments
+}
+
+func SetupPart2(
+	t require.TestingT, deployParams *DeployParams, alloc *AllocParams, deployConf *genesis.DeployConfig,
+	l1Block *types.Block, l1Genesis *core.Genesis, l1Deployments *genesis.L1Deployments,
+) *SetupData {
+
+	l2Genesis, err := genesis.BuildL2Genesis(deployConf, l1Block)
+	require.NoError(t, err, "failed to create l2 genesis")
+	if alloc.PrefundTestUsers {
+		for _, addr := range deployParams.Addresses.All() {
+			l2Genesis.Alloc[addr] = core.GenesisAccount{
+				Balance: Ether(1e12),
+			}
+		}
+	}
+	for addr, val := range alloc.L2Alloc {
+		l2Genesis.Alloc[addr] = val
+	}
+
+	rollupCfg := &rollup.Config{
+		Genesis: rollup.Genesis{
+			L1: eth.BlockID{
+				Hash:   l1Block.Hash(),
+				Number: 0,
+			},
+			L2: eth.BlockID{
+				Hash:   l2Genesis.ToBlock().Hash(),
+				Number: 0,
+			},
+			L2Time:       uint64(deployConf.L1GenesisBlockTimestamp),
+			SystemConfig: SystemConfigFromDeployConfig(deployConf),
+		},
+		BlockTime:              deployConf.L2BlockTime,
+		MaxSequencerDrift:      deployConf.MaxSequencerDrift,
+		SeqWindowSize:          deployConf.SequencerWindowSize,
+		ChannelTimeout:         deployConf.ChannelTimeout,
+		L1ChainID:              new(big.Int).SetUint64(deployConf.L1ChainID),
+		L2ChainID:              new(big.Int).SetUint64(deployConf.L2ChainID),
+		BatchInboxAddress:      deployConf.BatchInboxAddress,
+		DepositContractAddress: deployConf.OptimismPortalProxy,
+		L1SystemConfigAddress:  deployConf.SystemConfigProxy,
+		RegolithTime:           deployConf.RegolithTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		CanyonTime:             deployConf.CanyonTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		DeltaTime:              deployConf.DeltaTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		EcotoneTime:            deployConf.EcotoneTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		TaigaTime:              deployConf.TaigaTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		FjordTime:              deployConf.FjordTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		InteropTime:            deployConf.InteropTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		PectraBlobScheduleTime: deployConf.PectraBlobScheduleTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		// DAChallengeAddress:     l1Deployments.DataAvailabilityChallengeProxy,
 		// DAChallengeWindow:      deployConf.DAChallengeWindow,
 		// DAResolveWindow:        deployConf.DAResolveWindow,
@@ -182,41 +328,4 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		RollupCfg:     rollupCfg,
 		DeploymentsL1: l1Deployments,
 	}
-}
-
-func SystemConfigFromDeployConfig(deployConfig *genesis.DeployConfig) eth.SystemConfig {
-	return eth.SystemConfig{
-		BatcherAddr: deployConfig.BatchSenderAddress,
-		Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleOverhead))),
-		Scalar:      eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleScalar))),
-		GasLimit:    uint64(deployConfig.L2GenesisBlockGasLimit),
-	}
-}
-
-func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
-	isFjord := os.Getenv("OP_E2E_USE_FJORD") == "true"
-	isEcotone := isFjord || os.Getenv("OP_E2E_USE_ECOTONE") == "true"
-	isDelta := isEcotone || os.Getenv("OP_E2E_USE_DELTA") == "true"
-	if isDelta {
-		deployConfig.L2GenesisDeltaTimeOffset = new(hexutil.Uint64)
-	}
-	if isEcotone {
-		deployConfig.L2GenesisEcotoneTimeOffset = new(hexutil.Uint64)
-	}
-	if isFjord {
-		deployConfig.L2GenesisFjordTimeOffset = new(hexutil.Uint64)
-	}
-	// Canyon and lower is activated by default
-	deployConfig.L2GenesisCanyonTimeOffset = new(hexutil.Uint64)
-	deployConfig.L2GenesisRegolithTimeOffset = new(hexutil.Uint64)
-}
-
-func UseFPAC() bool {
-	// return os.Getenv("OP_E2E_USE_FPAC") == "true"
-	return false
-}
-
-func UsePlasma() bool {
-	//	return os.Getenv("OP_E2E_USE_PLASMA") == "true"
-	return false
 }

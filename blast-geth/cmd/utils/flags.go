@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	pble "github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -104,6 +105,16 @@ var (
 		Value:    node.DefaultConfig.DBEngine,
 		Category: flags.EthCategory,
 	}
+	PebbleUpgradeFormatSpecifyFlag = &cli.StringFlag{
+		Name:     "db.pebble.upgradeformat",
+		Usage:    "Specify pebble db format to upgrade to",
+		Category: flags.BlastCategory,
+	}
+	PebbleFormatSpecifyFlag = &cli.StringFlag{
+		Name:     "db.pebble.format",
+		Usage:    "Specify pebble db format",
+		Category: flags.BlastCategory,
+	}
 	AncientFlag = &flags.DirectoryFlag{
 		Name:     "datadir.ancient",
 		Usage:    "Root directory for ancient data (default = inside chaindata)",
@@ -161,7 +172,7 @@ var (
 		Name:    "op-network",
 		Aliases: []string{"beta.op-network"},
 		Usage: "Select a pre-configured OP-Stack network (warning: op-mainnet and op-goerli require special sync," +
-			" datadir is recommended), options: " + strings.Join(params.OPStackChainNames(), ", "),
+			" datadir is recommended), options: ", // + strings.Join(params.OPStackChainNames(), ", "),
 		Category: flags.EthCategory,
 	}
 
@@ -1031,7 +1042,7 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 var (
 	// TestnetFlags is the flag group of all built-in supported testnets.
 	TestnetFlags = []cli.Flag{
-		GoerliFlag,
+		// GoerliFlag,
 		SepoliaFlag,
 		HoleskyFlag,
 	}
@@ -1044,6 +1055,8 @@ var (
 		AncientFlag,
 		RemoteDBFlag,
 		DBEngineFlag,
+		PebbleFormatSpecifyFlag,
+		PebbleUpgradeFormatSpecifyFlag,
 		StateSchemeFlag,
 		HttpHeaderFlag,
 	}
@@ -1063,9 +1076,9 @@ func MakeDataDir(ctx *cli.Context) string {
 		if ctx.Bool(HoleskyFlag.Name) {
 			return filepath.Join(path, "holesky")
 		}
-		if ctx.IsSet(OPNetworkFlag.Name) {
-			return filepath.Join(path, ctx.String(OPNetworkFlag.Name))
-		}
+		// if ctx.IsSet(OPNetworkFlag.Name) {
+		// 	return filepath.Join(path, ctx.String(OPNetworkFlag.Name))
+		// }
 		return path
 	}
 	Fatalf("Cannot determine default data directory, please set manually (--datadir)")
@@ -1126,8 +1139,8 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 			urls = params.HoleskyBootnodes
 		case ctx.Bool(SepoliaFlag.Name):
 			urls = params.SepoliaBootnodes
-		case ctx.Bool(GoerliFlag.Name):
-			urls = params.GoerliBootnodes
+			// case ctx.Bool(GoerliFlag.Name):
+			// 	urls = params.GoerliBootnodes
 		}
 	}
 	cfg.BootstrapNodes = mustParseBootnodes(urls)
@@ -1544,6 +1557,12 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 		log.Info(fmt.Sprintf("Using %s as db engine", dbEngine))
 		cfg.DBEngine = dbEngine
 	}
+	if ctx.IsSet(PebbleFormatSpecifyFlag.Name) {
+		cfg.PebbleFormatVersion = pble.FormatMajorVersion(ctx.Int(PebbleFormatSpecifyFlag.Name))
+		if cfg.PebbleFormatVersion > pble.FormatNewest {
+			Fatalf("Invalid choice for pebble format %v greater than maximum possible %v", cfg.PebbleFormatVersion, pble.FormatNewest)
+		}
+	}
 }
 
 func setSmartCard(ctx *cli.Context, cfg *node.Config) {
@@ -1920,12 +1939,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 		cfg.Genesis = core.DefaultSepoliaGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.SepoliaGenesisHash)
-	case ctx.Bool(GoerliFlag.Name):
-		if !ctx.IsSet(NetworkIdFlag.Name) {
-			cfg.NetworkId = 5
-		}
-		cfg.Genesis = core.DefaultGoerliGenesisBlock()
-		SetDNSDiscoveryDefaults(cfg, params.GoerliGenesisHash)
+	// case ctx.Bool(GoerliFlag.Name):
+	// 	if !ctx.IsSet(NetworkIdFlag.Name) {
+	// 		cfg.NetworkId = 5
+	// 	}
+	// 	cfg.Genesis = core.DefaultGoerliGenesisBlock()
+	// 	SetDNSDiscoveryDefaults(cfg, params.GoerliGenesisHash)
 	case ctx.Bool(DeveloperFlag.Name):
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337
@@ -2164,11 +2183,11 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
 // MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.
 func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.Database {
 	var (
-		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
-		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
-
-		err     error
-		chainDb ethdb.Database
+		cache      = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
+		handles    = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
+		pbleFormat = pble.FormatMajorVersion(ctx.Int(PebbleFormatSpecifyFlag.Name))
+		err        error
+		chainDb    ethdb.Database
 	)
 	switch {
 	case ctx.IsSet(RemoteDBFlag.Name):
@@ -2179,9 +2198,9 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 		}
 		chainDb = remotedb.New(client)
 	case ctx.String(SyncModeFlag.Name) == "light":
-		chainDb, err = stack.OpenDatabase("lightchaindata", cache, handles, "", readonly)
+		chainDb, err = stack.OpenDatabase("lightchaindata", cache, handles, "", readonly, pble.FormatMostCompatible)
 	default:
-		chainDb, err = stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(AncientFlag.Name), "", readonly)
+		chainDb, err = stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(AncientFlag.Name), "", readonly, pbleFormat)
 	}
 	if err != nil {
 		Fatalf("Could not open database: %v", err)
@@ -2202,11 +2221,11 @@ func tryMakeReadOnlyDatabase(ctx *cli.Context, stack *node.Node) ethdb.Database 
 }
 
 func IsNetworkPreset(ctx *cli.Context) bool {
-	for _, flag := range NetworkFlags {
-		if ctx.IsSet(flag.Names()[0]) {
-			return true
-		}
-	}
+	// for _, flag := range NetworkFlags {
+	// 	if ctx.IsSet(flag.Names()[0]) {
+	// 		return true
+	// 	}
+	// }
 	return false
 }
 
@@ -2243,19 +2262,19 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 		genesis = core.DefaultHoleskyGenesisBlock()
 	case ctx.Bool(SepoliaFlag.Name):
 		genesis = core.DefaultSepoliaGenesisBlock()
-	case ctx.Bool(GoerliFlag.Name):
-		genesis = core.DefaultGoerliGenesisBlock()
-	case ctx.IsSet(OPNetworkFlag.Name):
-		name := ctx.String(OPNetworkFlag.Name)
-		ch, err := params.OPStackChainIDByName(name)
-		if err != nil {
-			Fatalf("failed to load OP-Stack chain %q: %v", name, err)
-		}
-		genesis, err := core.LoadOPStackGenesis(ch)
-		if err != nil {
-			Fatalf("failed to load genesis for OP-Stack chain %q (%d): %v", name, ch, err)
-		}
-		return genesis
+	// case ctx.Bool(GoerliFlag.Name):
+	// 	genesis = core.DefaultGoerliGenesisBlock()
+	// case ctx.IsSet(OPNetworkFlag.Name):
+	// 	name := ctx.String(OPNetworkFlag.Name)
+	// 	ch, err := params.OPStackChainIDByName(name)
+	// 	if err != nil {
+	// 		Fatalf("failed to load OP-Stack chain %q: %v", name, err)
+	// 	}
+	// 	genesis, err := core.LoadOPStackGenesis(ch)
+	// 	if err != nil {
+	// 		Fatalf("failed to load genesis for OP-Stack chain %q (%d): %v", name, ch, err)
+	// 	}
+	// 	return genesis
 	case ctx.Bool(DeveloperFlag.Name):
 		Fatalf("Developer chains are ephemeral")
 	}

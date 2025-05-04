@@ -100,7 +100,7 @@ func (h *Hardhat) initDeployments() error {
 			}
 			var deployment Deployment
 			if err := json.Unmarshal(file, &deployment); err != nil {
-				return err
+				return fmt.Errorf("file %s had problem %w", name, err)
 			}
 
 			deployment.Name = filepath.Base(name[:len(name)-5])

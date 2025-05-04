@@ -272,16 +272,29 @@ func L1InfoDeposit(rollupCfg *rollup.Config, sysCfg eth.SystemConfig, seqNumber 
 	var data []byte
 	if isEcotoneButNotFirstBlock(rollupCfg, l2BlockTime) {
 		l1BlockInfo.BlobBaseFee = block.BlobBaseFee()
+
+		// Apply Cancun blob base fee calculation if this chain needs the L1 Pectra
+		// blob schedule fix , blast-testnet sepolia
+		if t := rollupCfg.PectraBlobScheduleTime; t != nil && block.Time() < *t {
+			if ebg := block.ExcessBlobGas(); ebg != nil {
+				l1BlockInfo.BlobBaseFee = eth.CalcBlobFeeCancun(*ebg)
+			} else {
+				// If L1 isn't on Cancun yet. It should already have been set
+				// to nil above in this case anyways.
+				l1BlockInfo.BlobBaseFee = nil
+			}
+		}
+
 		if l1BlockInfo.BlobBaseFee == nil {
 			// The L2 spec states to use the MIN_BLOB_GASPRICE from EIP-4844 if not yet active on L1.
 			l1BlockInfo.BlobBaseFee = big.NewInt(1)
 		}
-		blobBaseFeeScalar, baseFeeScalar, err := sysCfg.EcotoneScalars()
+		scalars, err := sysCfg.EcotoneScalars()
 		if err != nil {
 			return nil, err
 		}
-		l1BlockInfo.BlobBaseFeeScalar = blobBaseFeeScalar
-		l1BlockInfo.BaseFeeScalar = baseFeeScalar
+		l1BlockInfo.BlobBaseFeeScalar = scalars.BlobBaseFeeScalar
+		l1BlockInfo.BaseFeeScalar = scalars.BaseFeeScalar
 		out, err := l1BlockInfo.marshalBinaryEcotone()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal Ecotone l1 block info: %w", err)

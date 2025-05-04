@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -1003,12 +1002,13 @@ func TestL1InfoContract(t *testing.T) {
 			BatcherAddr:    sys.RollupConfig.Genesis.SystemConfig.BatcherAddr,
 		}
 		if sys.RollupConfig.IsEcotone(b.Time()) && !sys.RollupConfig.IsEcotoneActivationBlock(b.Time()) {
-			blobBaseFeeScalar, baseFeeScalar, err := sys.RollupConfig.Genesis.SystemConfig.EcotoneScalars()
+			scalars, err := sys.RollupConfig.Genesis.SystemConfig.EcotoneScalars()
 			require.NoError(t, err)
+			blobBaseFeeScalar, baseFeeScalar := scalars.BlobBaseFeeScalar, scalars.BaseFeeScalar
 			l1blocks[h].BlobBaseFeeScalar = blobBaseFeeScalar
 			l1blocks[h].BaseFeeScalar = baseFeeScalar
 			if excess := b.ExcessBlobGas(); excess != nil {
-				l1blocks[h].BlobBaseFee = eip4844.CalcBlobFee(*excess)
+				l1blocks[h].BlobBaseFee = eth.CalcBlobFeeDefault(b.Header())
 			} else {
 				l1blocks[h].BlobBaseFee = big.NewInt(1)
 			}

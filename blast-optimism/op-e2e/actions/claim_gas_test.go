@@ -2,17 +2,24 @@ package actions
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"math/big"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
+	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	"github.com/ethereum-optimism/optimism/op-e2e/config"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/sources"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -21,9 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -195,16 +200,11 @@ func TestGasTrackerClaim(gt *testing.T) {
 	}
 }
 
-func readConfigAndHeaderFromDB(t *testing.T, path string) (*core.Genesis, *params.ChainConfig, *types.Header, time.Time) {
-	nodeCfg := &node.Config{
-		Name:    "geth",
-		DataDir: path,
-		P2P:     p2p.Config{NoDiscovery: true, NoDial: true},
-	}
-
+func readConfigAndHeaderFromDB(t *testing.T, pathDB string) (*core.Genesis, *params.ChainConfig, *types.Header, time.Time) {
+	nodeCfg := &node.Config{Name: "geth", DataDir: pathDB, P2P: p2p.Config{NoDiscovery: true, NoDial: true}}
 	n, err := node.New(nodeCfg)
 	require.NoError(t, err, "loading up chain-db died")
-	dbHandle, err := n.OpenDatabase("chaindata", 0, 0, "", true)
+	dbHandle, err := n.OpenDatabase("chaindata", 0, 0, "", true, 0)
 	require.NoError(t, err, "loading up database handle to chaindata died")
 	gen, err := core.ReadGenesis(dbHandle)
 	require.NoError(t, err, "reading genesis in chaindata died")
@@ -223,104 +223,150 @@ func TestBlastE2EMainnet(gt *testing.T) {
 	t := NewDefaultTesting(gt)
 	lg := testlog.Logger(t, log.LvlDebug)
 
+	// keep them outside the repo because gopls will die trying to analyze it
 	const (
-		ethMainnetDB   = "/Volumes/eth-chaindata/mainnet"
-		blastMainnetDB = "/Volumes/eth-chaindata/blast-mainnet-chaindata"
+		// ethMainnetDB          = "/Volumes/eth-chaindata/mainnet"
+		// ethMainnetFreezerDB   = "/Volumes/eth-chaindata/mainnet-ancient"
+		blastMainnetDB        = "/Volumes/eth-chaindata/blast-mainnet-chaindata"
+		blastMainnetFreezerDB = "/Volumes/eth-chaindata/blast-mainnet-chaindata/geth/chaindata/ancient"
 	)
 
-	// keep it outside the repo because gopls will die trying to analyze it
-	genEthereumMainnet, chainConfigEthereumMainnet, hdrEthMain, hdrTimeEthMain := readConfigAndHeaderFromDB(gt, ethMainnetDB)
+	// Note you cannot trust the state root from ethereum mainnet node loaded up because the
+	// StateAccount changed in structure and hence its state root will always be computed differently
+	// genEthereumMainnet, chainConfigEthereumMainnet, hdrEthMain, hdrTimeEthMain := readConfigAndHeaderFromDB(gt, ethMainnetDB)
 	genBlastMainnet, chainConfigBlastMainnet, hdrBlastMain, hdrTimeBlastMain := readConfigAndHeaderFromDB(gt, blastMainnetDB)
 
-	_ = hdrEthMain
-	_ = hdrBlastMain
-	_ = hdrTimeEthMain
+	lg.Info(
+		"loaded up existing mainnet dbs",
+		// "eth-mainnet-head", hdrEthMain.Number,
+		// "eth-mainnet-ts", hdrTimeEthMain,
+		// "eth-chain-config in db", chainConfigEthereumMainnet,
+		"blast-mainnet-head", hdrBlastMain.Number,
+		"blast-mainnet-ts", hdrTimeBlastMain,
+		"blast-chain-config in db", chainConfigBlastMainnet,
+	)
 
 	var mainnetRollup rollup.Config
 	require.Nil(t, json.Unmarshal(blastMainnetRollup, &mainnetRollup), "couldnt unmarshal blast mainnet rollup")
 
-	nodeCfgEthGeth := &node.Config{
-		Name:        "geth",
-		WSHost:      "127.0.0.1",
-		WSPort:      2001,
-		WSModules:   []string{"debug", "admin", "eth", "txpool", "net", "rpc", "web3", "personal"},
-		HTTPModules: []string{"debug", "admin", "eth", "txpool", "net", "rpc", "web3", "personal"},
-		DataDir:     ethMainnetDB,
-		P2P:         p2p.Config{NoDiscovery: true, NoDial: true},
-	}
-
-	nodeCfgBlastGeth := &node.Config{
-		Name:        "geth",
-		WSHost:      "127.0.0.1",
-		WSPort:      2002,
-		WSModules:   []string{"debug", "admin", "eth", "txpool", "net", "rpc", "web3", "personal"},
-		HTTPModules: []string{"debug", "admin", "eth", "txpool", "net", "rpc", "web3", "personal"},
-		DataDir:     blastMainnetDB,
-		P2P:         p2p.Config{NoDiscovery: true, NoDial: true},
-	}
-
-	nodeEth, err := node.New(nodeCfgEthGeth)
-	require.NoError(t, err, "loading up eth geth died")
-
-	nodeBlast, err := node.New(nodeCfgBlastGeth)
-	require.NoError(t, err, "loading up blast geth died")
-
 	// lets say the next block it cranks over
-	ecotoneTime := uint64(hdrTimeBlastMain.Add(time.Second * time.Duration(mainnetRollup.BlockTime)).Unix())
-	ethCfgL2Geth := &ethconfig.Config{
-		NetworkId:                 genBlastMainnet.Config.ChainID.Uint64(),
-		Genesis:                   genBlastMainnet,
-		RollupDisableTxPoolGossip: true,
-		OverrideOptimismEcotone:   &ecotoneTime,
-	}
-	ethCfgL1Geth := &ethconfig.Config{
-		NetworkId:                 genEthereumMainnet.Config.ChainID.Uint64(),
-		Genesis:                   genEthereumMainnet,
-		RollupDisableTxPoolGossip: true,
-	}
+	ecotoneTS := hdrTimeBlastMain.Add(time.Second * time.Duration(mainnetRollup.BlockTime))
+	ecotoneTime := uint64(ecotoneTS.Unix())
 
-	backendL1Geth, err := eth.New(nodeEth, ethCfgL1Geth)
-	require.NoError(t, err)
-	backendL2Blast, err := eth.New(nodeBlast, ethCfgL2Geth)
-	require.NoError(t, err)
+	mainnetRollup.DeltaTime = &ecotoneTime
+	mainnetRollup.EcotoneTime = &ecotoneTime
 
-	backendL1Geth.Merger().FinalizePoS()
-	backendL2Blast.Merger().FinalizePoS()
+	cwd, _ := os.Getwd()
+	root, _ := config.FindMonorepoRoot(cwd)
+	deployConfigPath := filepath.Join(root, "packages", "contracts-bedrock", "deploy-config", "blast-mainnet.json")
+	deployConfig, err := genesis.NewDeployConfig(deployConfigPath)
+	require.NoError(t, err, "deploy config died")
+	lg.Info("deploy config loaded", "config", deployConfig)
 
-	nodeEth.RegisterAPIs(tracers.APIs(backendL1Geth.APIBackend))
-	nodeBlast.RegisterAPIs(tracers.APIs(backendL2Blast.APIBackend))
-
-	require.NoError(t, nodeEth.Start(), "failed to start L1 geth node")
-	require.NoError(t, nodeBlast.Start(), "failed to start L2 blast node")
-
-	lg.Info("finished loading up nodes")
-
-	l1MinerGeth := &L1Miner{
-		L1Replica: L1Replica{
-			log:        lg,
-			node:       nodeEth,
-			eth:        backendL1Geth,
-			l1Chain:    backendL1Geth.BlockChain(),
-			l1Database: backendL1Geth.ChainDb(),
-			l1Cfg:      genEthereumMainnet,
-			l1Signer:   types.LatestSigner(chainConfigEthereumMainnet),
-			failL1RPC:  nil,
-		}, blobStore: e2eutils.NewBlobStore(),
+	sd := &e2eutils.SetupData{
+		// L1Cfg:     genEthereumMainnet,
+		L2Cfg:     genBlastMainnet,
+		RollupCfg: &mainnetRollup,
 	}
 
-	l2MinerBlast := &L1Miner{
-		L1Replica: L1Replica{
-			log:        lg,
-			node:       nodeBlast,
-			eth:        backendL1Geth,
-			l1Chain:    backendL1Geth.BlockChain(),
-			l1Database: backendL1Geth.ChainDb(),
-			l1Cfg:      genBlastMainnet,
-			l1Signer:   types.LatestSigner(chainConfigBlastMainnet),
-			failL1RPC:  nil,
-		}, blobStore: e2eutils.NewBlobStore(),
-	}
+	jwtPath := e2eutils.WriteDefaultJWT(t)
+	seqEngine := NewL2Engine(
+		t, lg, sd.L2Cfg, sd.RollupCfg.Genesis.L1, jwtPath,
+		func(ethCfg *ethconfig.Config, nodeCfg *node.Config) error {
+			nodeCfg.Name = "geth"
+			nodeCfg.WSPort = 2002
+			nodeCfg.DataDir = blastMainnetDB
+			nodeCfg.P2P = p2p.Config{NoDiscovery: true, NoDial: true}
 
-	_ = l1MinerGeth
-	_ = l2MinerBlast
+			ethCfg.NetworkId = sd.L2Cfg.Config.ChainID.Uint64()
+			ethCfg.Genesis = genBlastMainnet
+			ethCfg.RollupDisableTxPoolGossip = true
+			ethCfg.OverrideCancun = &ecotoneTime
+			ethCfg.OverrideOptimismEcotone = &ecotoneTime
+			return nil
+		},
+	)
+	t.Cleanup(func() {
+		// Must do this otherwise it will write the trie to disk and the DB will be useless
+		seqEngine.l2Chain.SetHead(hdrBlastMain.Number.Uint64())
+	})
+
+	// seqEngine.l2Chain.SetHead(3349547)
+
+	l2Cl, err := sources.NewEngineClient(seqEngine.RPCClient(), lg, nil, sources.EngineClientDefaultConfig(sd.RollupCfg))
+	require.NoError(t, err, "new engine client died")
+	sequencer := NewL2Sequencer(t, lg, &mockL1Fetcher{
+		lg: lg,
+	}, nil, l2Cl, sd.RollupCfg, 0)
+	lg.Info(
+		"finished loading up nodes, ecotone time picked for next block",
+		"blast mainnet header", hdrTimeBlastMain,
+		"ecotone time will be", ecotoneTS,
+	)
+
+	// hack - lying with the mock origin - TODO get eth mainnet header at this moment?
+	// Or load up the block info contract call and then find it with cast, yea that's the right way
+	// yes that will take time, first lets get this way maybe working
+	sequencer.mockL1OriginSelector.originOverride = eth.InfoToL1BlockRef(eth.HeaderBlockInfo(hdrBlastMain))
+	// yes a huge hack but let's see what we can do
+	sequencer.engine.SetUnsafeHead(eth.L2BlockRef{
+		Hash:           hdrBlastMain.Hash(),
+		Number:         hdrBlastMain.Number.Uint64(),
+		ParentHash:     hdrBlastMain.ParentHash,
+		Time:           hdrBlastMain.Time,
+		L1Origin:       eth.BlockID{Hash: hdrBlastMain.Hash(), Number: hdrBlastMain.Number.Uint64()},
+		SequenceNumber: 0,
+	})
+
+	sequencer.ActL2StartBlock(t)
+	sequencer.ActL2EndBlock(t)
+	blk := seqEngine.l2Chain.GetBlockByNumber(hdrBlastMain.Number.Uint64() + 1)
+	require.Equal(t, len(blk.Transactions()), 7, "should be 7 ecotone upgrade txs")
+}
+
+type mockL1Fetcher struct {
+	derive.L1Fetcher
+	lg                log.Logger
+	realMainnetHeader *types.Header
+}
+
+type mockBlock struct {
+	eth.BlockInfo
+	realMainnetHeader *types.Header
+}
+
+// better to do it with this real deserialized ethereum mainnet header
+// and hold onto the params to give them for these overriden methods
+// but that can be done for extending with a syncing test
+func newMockBlock(mainnetHeader *types.Header) *mockBlock {
+	return &mockBlock{}
+}
+
+func (m *mockBlock) Time() uint64 {
+	return 0
+}
+
+func (m *mockBlock) NumberU64() uint64 {
+	return 0
+}
+
+func (m *mockBlock) BaseFee() *big.Int {
+	return big.NewInt(params.InitialBaseFee)
+}
+
+func (m *mockBlock) Hash() common.Hash {
+	return common.Hash{}
+}
+
+func (m *mockBlock) ParentBeaconRoot() *common.Hash {
+	return &common.Hash{}
+}
+
+func (m *mockBlock) MixDigest() common.Hash {
+	return common.Hash{}
+}
+
+func (m *mockL1Fetcher) InfoByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, error) {
+	m.lg.Info("mock l1 fetcher queried", "hash", hash)
+	return newMockBlock(m.realMainnetHeader), nil
 }

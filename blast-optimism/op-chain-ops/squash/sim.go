@@ -19,8 +19,9 @@ import (
 )
 
 type staticChain struct {
-	startTime uint64
-	blockTime uint64
+	startTime   uint64
+	blockTime   uint64
+	chainConfig *params.ChainConfig
 }
 
 func (d *staticChain) Engine() consensus.Engine {
@@ -49,6 +50,10 @@ func (d *staticChain) GetHeader(h common.Hash, n uint64) *types.Header {
 		BaseFee:         big.NewInt(7),
 		WithdrawalsHash: &types.EmptyWithdrawalsHash,
 	}
+}
+
+func (sim *staticChain) Config() *params.ChainConfig {
+	return sim.chainConfig
 }
 
 type simState struct {
@@ -182,7 +187,7 @@ func NewSimulator(db *state.MemoryStateDB) *SquashSim {
 	offsetBlocks := uint64(0)
 	genesisTime := uint64(17_000_000)
 	blockTime := uint64(2)
-	bc := &staticChain{startTime: genesisTime, blockTime: blockTime}
+	bc := &staticChain{startTime: genesisTime, blockTime: blockTime, chainConfig: db.Genesis().Config}
 	header := bc.GetHeader(common.Hash{}, genesisTime+offsetBlocks)
 	chainCfg := db.Genesis().Config
 	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, db)

@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -61,7 +60,7 @@ func DerivationWithFlakyL1RPC(gt *testing.T, deltaTimeOffset *hexutil.Uint64) {
 	dp := e2eutils.MakeDeployParams(t, defaultRollupTestParams)
 	dp.DeployConfig.L2GenesisDeltaTimeOffset = deltaTimeOffset
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelError) // mute all the temporary derivation errors that we forcefully create
+	log := testlog.Logger(t, log.LvlError) // mute all the temporary derivation errors that we forcefully create
 	_, _, miner, sequencer, _, verifier, _, batcher := setupReorgTestActors(t, dp, sd, log)
 
 	rng := rand.New(rand.NewSource(1234))
@@ -101,7 +100,7 @@ func FinalizeWhileSyncing(gt *testing.T, deltaTimeOffset *hexutil.Uint64) {
 	dp := e2eutils.MakeDeployParams(t, defaultRollupTestParams)
 	dp.DeployConfig.L2GenesisDeltaTimeOffset = deltaTimeOffset
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelError) // mute all the temporary derivation errors that we forcefully create
+	log := testlog.Logger(t, log.LvlError) // mute all the temporary derivation errors that we forcefully create
 	_, _, miner, sequencer, _, verifier, _, batcher := setupReorgTestActors(t, dp, sd, log)
 
 	sequencer.ActL2PipelineFull(t)
@@ -145,7 +144,7 @@ func TestUnsafeSync(gt *testing.T) {
 	t := NewDefaultTesting(gt)
 	dp := e2eutils.MakeDeployParams(t, defaultRollupTestParams)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelInfo)
+	log := testlog.Logger(t, log.LvlInfo)
 
 	sd, _, _, sequencer, seqEng, verifier, _, _ := setupReorgTestActors(t, dp, sd, log)
 	seqEngCl, err := sources.NewEngineClient(seqEng.RPCClient(), log, nil, sources.EngineClientDefaultConfig(sd.RollupCfg))
@@ -451,7 +450,7 @@ func TestBackupUnsafeReorgForkChoiceInputError(gt *testing.T) {
 	// forceNextSafeAttributes is called
 	sequencer.ActL2PipelineStep(t)
 	// mock forkChoiceUpdate error while restoring previous unsafe chain using backupUnsafe.
-	seqEng.ActL2RPCFail(t, eth.InputError{Inner: errors.New("mock L2 RPC error"), Code: eth.InvalidForkchoiceState})
+	seqEng.ActL2RPCFail(t)
 
 	// TryBackupUnsafeReorg is called
 	sequencer.ActL2PipelineStep(t)
@@ -593,7 +592,7 @@ func TestBackupUnsafeReorgForkChoiceNotInputError(gt *testing.T) {
 	serverErrCnt := 2
 	for i := 0; i < serverErrCnt; i++ {
 		// mock forkChoiceUpdate failure while restoring previous unsafe chain using backupUnsafe.
-		seqEng.ActL2RPCFail(t, engine.GenericServerError)
+		seqEng.ActL2RPCFail(t)
 		// TryBackupUnsafeReorg is called - forkChoiceUpdate returns GenericServerError so retry
 		sequencer.ActL2PipelineStep(t)
 		// backupUnsafeHead not emptied yet
@@ -622,7 +621,7 @@ func TestELSync(gt *testing.T) {
 	t := NewDefaultTesting(gt)
 	dp := e2eutils.MakeDeployParams(t, defaultRollupTestParams)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelInfo)
+	log := testlog.Logger(t, log.LvlInfo)
 
 	miner, seqEng, sequencer := setupSequencerTest(t, sd, log)
 	// Enable engine P2P sync
@@ -688,9 +687,9 @@ func TestELSyncTransitionstoCL(gt *testing.T) {
 	t := NewDefaultTesting(gt)
 	dp := e2eutils.MakeDeployParams(t, defaultRollupTestParams)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	logger := testlog.Logger(t, log.LevelInfo)
+	logger := testlog.Logger(t, log.LvlInfo)
 
-	captureLog, captureLogHandler := testlog.CaptureLogger(t, log.LevelInfo)
+	captureLog, captureLogHandler := testlog.CaptureLogger(t, log.LvlInfo)
 
 	miner, seqEng, sequencer := setupSequencerTest(t, sd, logger)
 	batcher := NewL2Batcher(logger, sd.RollupCfg, DefaultBatcherCfg(dp), sequencer.RollupClient(), miner.EthClient(), seqEng.EthClient(), seqEng.EngineClient(t, sd.RollupCfg))
@@ -838,7 +837,7 @@ func TestInvalidPayloadInSpanBatch(gt *testing.T) {
 	dp.DeployConfig.L2GenesisDeltaTimeOffset = &minTs
 	dp.DeployConfig.L2BlockTime = 2
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelInfo)
+	log := testlog.Logger(t, log.LvlInfo)
 	_, _, miner, sequencer, seqEng, verifier, _, batcher := setupReorgTestActors(t, dp, sd, log)
 	l2Cl := seqEng.EthClient()
 	rng := rand.New(rand.NewSource(1234))
@@ -943,7 +942,7 @@ func TestSpanBatchAtomicity_Consolidation(gt *testing.T) {
 	dp.DeployConfig.L2GenesisDeltaTimeOffset = &minTs
 	dp.DeployConfig.L2BlockTime = 2
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelInfo)
+	log := testlog.Logger(t, log.LvlInfo)
 	_, _, miner, sequencer, seqEng, verifier, _, batcher := setupReorgTestActors(t, dp, sd, log)
 	seqEngCl, err := sources.NewEngineClient(seqEng.RPCClient(), log, nil, sources.EngineClientDefaultConfig(sd.RollupCfg))
 	require.NoError(t, err)
@@ -1002,7 +1001,7 @@ func TestSpanBatchAtomicity_ForceAdvance(gt *testing.T) {
 	dp.DeployConfig.L2GenesisDeltaTimeOffset = &minTs
 	dp.DeployConfig.L2BlockTime = 2
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
-	log := testlog.Logger(t, log.LevelInfo)
+	log := testlog.Logger(t, log.LvlInfo)
 	_, _, miner, sequencer, _, verifier, _, batcher := setupReorgTestActors(t, dp, sd, log)
 
 	targetHeadNumber := uint64(6) // L1 block time / L2 block time

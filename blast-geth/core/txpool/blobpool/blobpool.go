@@ -403,7 +403,7 @@ func (p *BlobPool) Init(gasTip *big.Int, head *types.Header, reserve txpool.Addr
 		blobfee = uint256.MustFromBig(big.NewInt(params.BlobTxMinBlobGasprice))
 	)
 	if p.head.ExcessBlobGas != nil {
-		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(*p.head.ExcessBlobGas))
+		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(p.chain.Config(), p.head))
 	}
 	p.evict = newPriceHeap(basefee, blobfee, &p.index)
 
@@ -786,7 +786,7 @@ func (p *BlobPool) Reset(oldHead, newHead *types.Header) {
 		blobfee = uint256.MustFromBig(big.NewInt(params.BlobTxMinBlobGasprice))
 	)
 	if newHead.ExcessBlobGas != nil {
-		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(*newHead.ExcessBlobGas))
+		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(p.chain.Config(), newHead))
 	}
 	p.evict.reinit(basefee, blobfee, false)
 

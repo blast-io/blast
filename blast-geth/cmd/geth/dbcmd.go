@@ -22,11 +22,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -69,6 +71,8 @@ Remove blockchain and state databases`,
 			dbExportCmd,
 			dbMetadataCmd,
 			dbCheckStateContentCmd,
+			dbUpgradePebbleFormatCmd,
+			dbSayPebbleFormatCmd,
 		},
 	}
 	dbInspectCmd = &cli.Command{
@@ -193,7 +197,113 @@ WARNING: This is a low-level operation which may cause database corruption!`,
 		}, utils.NetworkFlags, utils.DatabaseFlags),
 		Description: "Shows metadata about the chain status.",
 	}
+	dbUpgradePebbleFormatCmd = &cli.Command{
+		Action: upgradePebble,
+		Name:   "upgrade-pebble-format",
+		Usage:  "upgrade pebble db format - warning no going back",
+		Flags: flags.Merge([]cli.Flag{
+			utils.PebbleFormatSpecifyFlag, utils.PebbleUpgradeFormatSpecifyFlag, utils.DataDirFlag, utils.AncientFlag,
+		}),
+		Description: "One way ratches up of pebble db format",
+	}
+	dbSayPebbleFormatCmd = &cli.Command{
+		Action:      sayPebbleFormat,
+		Name:        "say-pebble-format",
+		Usage:       "say pebble format of datadir and highest pebble version possible",
+		Flags:       flags.Merge([]cli.Flag{utils.DataDirFlag}),
+		Description: "Opens and prints the pebble DB format",
+	}
 )
+
+func sayPebbleFormat(ctx *cli.Context) error {
+	stack, _ := makeConfigNode(ctx)
+	path := stack.ResolvePath("chaindata")
+	log.Info("opening database", "path", path)
+	db, err := pebble.Open(path, &pebble.Options{
+		Cache:              pebble.NewCache(int64(16 * 1024 * 1024)),
+		MaxOpenFiles:       16,
+		ReadOnly:           true,
+		FormatMajorVersion: pebble.FormatMostCompatible,
+	})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	currentVersion := db.FormatMajorVersion()
+	log.Info("Opened pebble database", "current-pebble-format", currentVersion, "path", path, "latest-pebble-format", pebble.FormatNewest)
+
+	return nil
+}
+
+func upgradePebble(ctx *cli.Context) error {
+	if !ctx.IsSet(utils.PebbleUpgradeFormatSpecifyFlag.Name) {
+		return fmt.Errorf("need value for what pebble version to ratchet to")
+	}
+
+	if !ctx.IsSet(utils.PebbleFormatSpecifyFlag.Name) {
+		return fmt.Errorf("need value for what pebble version current db is")
+	}
+
+	currentFormatVersion := pebble.FormatMajorVersion(ctx.Int(utils.PebbleFormatSpecifyFlag.Name))
+	stack, config := makeConfigNode(ctx)
+	path := stack.ResolvePath("chaindata")
+	wanted := pebble.FormatMajorVersion(ctx.Int(utils.PebbleUpgradeFormatSpecifyFlag.Name))
+
+	doUpgrade := func(path, kind string) error {
+		log.Info("Opening existing database", "datadir", path)
+		db, err := pebble.Open(path, &pebble.Options{
+			Cache:                    pebble.NewCache(int64(16 * 1024 * 1024)),
+			MaxOpenFiles:             16,
+			MaxConcurrentCompactions: func() int { return runtime.NumCPU() },
+			FormatMajorVersion:       currentFormatVersion,
+		})
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+
+		currentVersion := db.FormatMajorVersion()
+		if wanted > pebble.FormatNewest {
+			return fmt.Errorf("nonsense format version requested, highest format version %v", pebble.FormatNewest)
+		}
+		if wanted < currentVersion {
+			return fmt.Errorf("cannot downgrade version in db %v desired %v", currentVersion, wanted)
+		}
+		if wanted == currentVersion {
+			return fmt.Errorf("current version already same as in db")
+		}
+
+		log.Info("Starting ratcheting up of pebble db format", "current-db-version", currentVersion, "upgrading-to", wanted, "kind", kind)
+		return db.RatchetFormatMajorVersion(wanted)
+	}
+
+	if common.FileExist(path) {
+		start := time.Now()
+		if err := doUpgrade(path, "chaindata"); err != nil {
+			return err
+		}
+		log.Info("Finished upgrading chaindata pebble format ", "duration", time.Since(start))
+	}
+
+	path = config.Eth.DatabaseFreezer
+	switch {
+	case path == "":
+		path = filepath.Join(stack.ResolvePath("chaindata"), "ancient")
+	case !filepath.IsAbs(path):
+		path = config.Node.ResolvePath(path)
+	}
+
+	if common.FileExist(path) {
+		start := time.Now()
+		if err := doUpgrade(path, "ancient"); err != nil {
+			return err
+		}
+		log.Info("Finished upgrading ancient", "duration", time.Since(start))
+	}
+
+	return nil
+}
 
 func removeDB(ctx *cli.Context) error {
 	stack, config := makeConfigNode(ctx)

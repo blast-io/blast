@@ -36,7 +36,7 @@ func TestGetVersion(t *testing.T) {
 func Test404NotFound(t *testing.T) {
 	InitParallel(t)
 
-	l := testlog.Logger(t, log.LevelInfo)
+	l := testlog.Logger(t, log.LvlInfo)
 
 	beaconApi := fakebeacon.NewBeacon(l, t.TempDir(), uint64(0), uint64(12))
 	t.Cleanup(func() {

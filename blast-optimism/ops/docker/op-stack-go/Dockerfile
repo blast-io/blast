@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.21.3-alpine3.18 as builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine3.21 as builder
 
 RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
 
@@ -55,10 +55,10 @@ ARG TARGETOS TARGETARCH
 # RUN --mount=type=cache,target=/root/.cache/go-build cd op-program && make op-program-host  \
 #     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_PROGRAM_VERSION"
 
-RUN --mount=type=cache,target=/root/.cache/go-build cd op-heartbeat && make op-heartbeat  \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_HEARTBEAT_VERSION"
-RUN --mount=type=cache,target=/root/.cache/go-build cd op-wheel && make op-wheel  \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_WHEEL_VERSION"
+# RUN --mount=type=cache,target=/root/.cache/go-build cd op-heartbeat && make op-heartbeat  \
+#     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_HEARTBEAT_VERSION"
+# RUN --mount=type=cache,target=/root/.cache/go-build cd op-wheel && make op-wheel  \
+#     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_WHEEL_VERSION"
 
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-node && make op-node  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_NODE_VERSION"
@@ -75,8 +75,8 @@ FROM alpine:3.18
 # COPY --from=builder /app/cannon/bin/cannon /usr/local/bin/
 # COPY --from=builder /app/op-program/bin/op-program /usr/local/bin/
 
-COPY --from=builder /app/op-heartbeat/bin/op-heartbeat /usr/local/bin/
-COPY --from=builder /app/op-wheel/bin/op-wheel /usr/local/bin/
+# COPY --from=builder /app/op-heartbeat/bin/op-heartbeat /usr/local/bin/
+# COPY --from=builder /app/op-wheel/bin/op-wheel /usr/local/bin/
 
 COPY --from=builder /app/op-node/bin/op-node /usr/local/bin/
 # COPY --from=builder /app/op-challenger/bin/op-challenger /usr/local/bin/

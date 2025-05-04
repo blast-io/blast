@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strings"
 
+	pble "github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -210,7 +211,8 @@ type Config struct {
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 
-	DBEngine string `toml:",omitempty"`
+	DBEngine            string                  `toml:",omitempty"`
+	PebbleFormatVersion pble.FormatMajorVersion `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

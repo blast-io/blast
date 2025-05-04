@@ -42,3 +42,5 @@ forkdiff:
 		--mount src=$(shell pwd),target=/host-pwd,type=bind \
 		protolambda/forkdiff:latest \
 		-repo /host-pwd/ -fork /host-pwd/fork.yaml -out /host-pwd/forkdiff.html
+plugin:
+	go build -o plugin-for-testing cmd/plugin/main.go

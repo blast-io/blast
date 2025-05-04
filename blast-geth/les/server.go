@@ -20,6 +20,7 @@ import (
 	"crypto/ecdsa"
 	"time"
 
+	pble "github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool"
@@ -78,7 +79,7 @@ type LesServer struct {
 }
 
 func NewLesServer(node *node.Node, e ethBackend, config *ethconfig.Config) (*LesServer, error) {
-	lesDb, err := node.OpenDatabase("les.server", 0, 0, "eth/db/lesserver/", false)
+	lesDb, err := node.OpenDatabase("les.server", 0, 0, "eth/db/lesserver/", false, pble.FormatMostCompatible)
 	if err != nil {
 		return nil, err
 	}
