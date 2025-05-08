@@ -34,9 +34,6 @@ For added context, we define a few types that are used in the following snippets
 /// @notice A custom type for a generic hash.
 type Hash is bytes32;
 
-/// @notice A dedicated timestamp type.
-type Timestamp is uint64;
-
 /// @notice The type of proof system being used.
 enum GameType {
     /// @dev The game will use a `IDisputeGame` implementation that utilizes fault proofs.
