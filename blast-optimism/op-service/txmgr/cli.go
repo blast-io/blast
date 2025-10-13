@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 
@@ -36,6 +37,7 @@ const (
 	TxSendTimeoutFlagName             = "txmgr.send-timeout"
 	TxNotInMempoolTimeoutFlagName     = "txmgr.not-in-mempool-timeout"
 	ReceiptQueryIntervalFlagName      = "txmgr.receipt-query-interval"
+	CellProofTimeFlagName             = "txmgr.cell-proof-time"
 )
 
 var (
@@ -65,10 +67,12 @@ type DefaultFlagValues struct {
 	TxSendTimeout             time.Duration
 	TxNotInMempoolTimeout     time.Duration
 	ReceiptQueryInterval      time.Duration
+	CellProofTime             uint64
 }
 
 var (
-	DefaultBatcherFlagValues = DefaultFlagValues{
+	defaultCellProofTime     uint64 = math.MaxUint64
+	DefaultBatcherFlagValues        = DefaultFlagValues{
 		NumConfirmations:          uint64(10),
 		SafeAbortNonceTooLowCount: uint64(3),
 		FeeLimitMultiplier:        uint64(5),
@@ -80,6 +84,7 @@ var (
 		TxSendTimeout:             0 * time.Second,
 		TxNotInMempoolTimeout:     2 * time.Minute,
 		ReceiptQueryInterval:      12 * time.Second,
+		CellProofTime:             defaultCellProofTime,
 	}
 	DefaultChallengerFlagValues = DefaultFlagValues{
 		NumConfirmations:          uint64(3),
@@ -93,6 +98,7 @@ var (
 		TxSendTimeout:             2 * time.Minute,
 		TxNotInMempoolTimeout:     1 * time.Minute,
 		ReceiptQueryInterval:      12 * time.Second,
+		CellProofTime:             defaultCellProofTime,
 	}
 )
 
@@ -186,6 +192,12 @@ func CLIFlagsWithDefaults(envPrefix string, defaults DefaultFlagValues) []cli.Fl
 			Value:   defaults.ReceiptQueryInterval,
 			EnvVars: prefixEnvVars("TXMGR_RECEIPT_QUERY_INTERVAL"),
 		},
+		&cli.Uint64Flag{
+			Name:    CellProofTimeFlagName,
+			Usage:   "Enables cell proofs in blob transactions for Fusaka (EIP-7742) compatibility from the provided unix timestamp. Should be set to the L1 Fusaka time. May be left blank for Ethereum Mainnet, Sepolia, Holesky, or Hoodi L1s.",
+			EnvVars: prefixEnvVars("TXMGR_CELL_PROOF_TIME"),
+			Value:   defaults.CellProofTime,
+		},
 	}, opsigner.CLIFlags(envPrefix)...)
 }
 
@@ -208,6 +220,7 @@ type CLIConfig struct {
 	NetworkTimeout            time.Duration
 	TxSendTimeout             time.Duration
 	TxNotInMempoolTimeout     time.Duration
+	CellProofTime             uint64
 }
 
 func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
@@ -225,6 +238,7 @@ func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
 		TxNotInMempoolTimeout:     defaults.TxNotInMempoolTimeout,
 		ReceiptQueryInterval:      defaults.ReceiptQueryInterval,
 		SignerCLIConfig:           opsigner.NewCLIConfig(),
+		CellProofTime:             defaults.CellProofTime,
 	}
 }
 
@@ -283,6 +297,7 @@ func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 		NetworkTimeout:            ctx.Duration(NetworkTimeoutFlagName),
 		TxSendTimeout:             ctx.Duration(TxSendTimeoutFlagName),
 		TxNotInMempoolTimeout:     ctx.Duration(TxNotInMempoolTimeoutFlagName),
+		CellProofTime:             ctx.Uint64(CellProofTimeFlagName),
 	}
 }
 
@@ -333,6 +348,8 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("invalid min tip cap: %w", err)
 	}
 
+	cellProofTime := fallbackToOsakaCellProofTimeIfKnown(chainID, cfg.CellProofTime)
+
 	return Config{
 		Backend:                   l1,
 		ResubmissionTimeout:       cfg.ResubmissionTimeout,
@@ -349,7 +366,19 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
 		Signer:                    signerFactory(chainID),
 		From:                      from,
+		CellProofTime:             cellProofTime,
 	}, nil
+}
+
+func fallbackToOsakaCellProofTimeIfKnown(chainID *big.Int, cellProofTime uint64) uint64 {
+	if cellProofTime != defaultCellProofTime {
+		return cellProofTime // We only fallback if nothing is set
+	}
+	l1ChainConfig := eth.L1ChainConfigByChainID(eth.ChainIDFromBig(chainID))
+	if l1ChainConfig != nil && l1ChainConfig.OsakaTime != nil {
+		return *l1ChainConfig.OsakaTime
+	}
+	return math.MaxUint64 // Network not known and no override specified, so we never use cell proofs
 }
 
 // Config houses parameters for altering the behavior of a SimpleTxManager.
@@ -407,6 +436,8 @@ type Config struct {
 	// Signer is used to sign transactions when the gas price is increased.
 	Signer opcrypto.SignerFn
 	From   common.Address
+	// CellProofTime is the time at which cell proofs are enabled in blob transaction (for Fusaka (EIP-7742) compatibility).
+	CellProofTime uint64
 }
 
 func (m Config) Check() error {
