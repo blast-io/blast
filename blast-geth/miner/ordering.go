@@ -99,9 +99,15 @@ func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address]
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(txByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
+		if accTxs[0] == nil {
+			continue
+		}
 		wrapped, err := newTxWithMinerFee(accTxs[0], from, baseFee)
 		if err != nil {
 			delete(txs, from)
+			continue
+		}
+		if wrapped == nil {
 			continue
 		}
 		heads = append(heads, wrapped)

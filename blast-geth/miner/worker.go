@@ -242,30 +242,34 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+	// blast fast receipt extension
+	fastReceiptFeed     event.Feed
+	fastReceiptIncoming chan *types.Receipt
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
 	worker := &worker{
-		config:             config,
-		chainConfig:        chainConfig,
-		engine:             engine,
-		eth:                eth,
-		chain:              eth.BlockChain(),
-		mux:                mux,
-		isLocalBlock:       isLocalBlock,
-		coinbase:           config.Etherbase,
-		extra:              config.ExtraData,
-		pendingTasks:       make(map[common.Hash]*task),
-		txsCh:              make(chan core.NewTxsEvent, txChanSize),
-		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
-		newWorkCh:          make(chan *newWorkReq),
-		getWorkCh:          make(chan *getWorkReq),
-		taskCh:             make(chan *task),
-		resultCh:           make(chan *types.Block, resultQueueSize),
-		startCh:            make(chan struct{}, 1),
-		exitCh:             make(chan struct{}),
-		resubmitIntervalCh: make(chan time.Duration),
-		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
+		config:              config,
+		chainConfig:         chainConfig,
+		engine:              engine,
+		eth:                 eth,
+		chain:               eth.BlockChain(),
+		mux:                 mux,
+		isLocalBlock:        isLocalBlock,
+		coinbase:            config.Etherbase,
+		extra:               config.ExtraData,
+		pendingTasks:        make(map[common.Hash]*task),
+		txsCh:               make(chan core.NewTxsEvent, txChanSize),
+		chainHeadCh:         make(chan core.ChainHeadEvent, chainHeadChanSize),
+		newWorkCh:           make(chan *newWorkReq),
+		getWorkCh:           make(chan *getWorkReq),
+		taskCh:              make(chan *task),
+		resultCh:            make(chan *types.Block, resultQueueSize),
+		startCh:             make(chan struct{}, 1),
+		exitCh:              make(chan struct{}),
+		resubmitIntervalCh:  make(chan time.Duration),
+		resubmitAdjustCh:    make(chan *intervalAdjust, resubmitAdjustChanSize),
+		fastReceiptIncoming: make(chan *types.Receipt, 64),
 	}
 	// Subscribe for transaction insertion events (whether from network or resurrects)
 	worker.txsSub = eth.TxPool().SubscribeTransactions(worker.txsCh, true)
@@ -291,11 +295,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 	worker.newpayloadTimeout = newpayloadTimeout
 
-	worker.wg.Add(4)
+	worker.wg.Add(5)
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
 	go worker.taskLoop()
+	go worker.authOnlyReceiptSend()
 
 	// Submit first work to initialize pending state.
 	if init {
@@ -560,48 +565,76 @@ func (w *worker) mainLoop() {
 			if w.chainConfig.Optimism != nil && !w.config.RollupComputePendingBlock {
 				continue // don't update the pending-block snapshot if we are not computing the pending block
 			}
-			// Apply transactions to the pending state if we're not sealing
-			//
-			// Note all transactions received may not be continuous with transactions
-			// already included in the current sealing block. These transactions will
-			// be automatically eliminated.
-			if !w.isRunning() && w.current != nil {
-				// If block is already full, abort
-				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
-					continue
-				}
-				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
-				for _, tx := range ev.Txs {
-					acc, _ := types.Sender(w.current.signer, tx)
-					txs[acc] = append(txs[acc], &txpool.LazyTransaction{
-						Pool:      w.eth.TxPool(), // We don't know where this came from, yolo resolve from everywhere
-						Hash:      tx.Hash(),
-						Tx:        nil, // Do *not* set this! We need to resolve it later to pull blobs in
-						Time:      tx.Time(),
-						GasFeeCap: tx.GasFeeCap(),
-						GasTipCap: tx.GasTipCap(),
-						Gas:       tx.Gas(),
-						BlobGas:   tx.BlobGas(),
-					})
-				}
-				txset := newTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
-				tcount := w.current.tcount
-				w.commitTransactions(w.current, txset, nil)
 
-				// Only update the snapshot if any new transactions were added
-				// to the pending block
-				if tcount != w.current.tcount {
-					w.updateSnapshot(w.current)
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						log.Error("programmer error panic occured during main loop transaction", "panic", err)
+					}
+				}()
+				// Apply transactions to the pending state if we're not sealing
+				//
+				// Note all transactions received may not be continuous with transactions
+				// already included in the current sealing block. These transactions will
+				// be automatically eliminated.
+				if !w.isRunning() && w.current != nil {
+					// If block is already full, abort
+					if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
+						return
+					}
+					txs, txsByTime :=
+						make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs)),
+						map[common.Address][]*txpool.LazyTransaction{}
+					for _, tx := range ev.Txs {
+						acc, _ := types.Sender(w.current.signer, tx)
+						if tx.AuthOnly.Load() {
+							txsByTime[acc] = append(txsByTime[acc], &txpool.LazyTransaction{
+								Pool:      w.eth.TxPool(), // We don't know where this came from, yolo resolve from everywhere
+								Hash:      tx.Hash(),
+								Tx:        nil, // Do *not* set this! We need to resolve it later to pull blobs in
+								Time:      tx.Time(),
+								GasFeeCap: tx.GasFeeCap(),
+								GasTipCap: tx.GasTipCap(),
+								Gas:       tx.Gas(),
+								BlobGas:   tx.BlobGas(),
+							})
+						} else {
+							txs[acc] = append(txs[acc], &txpool.LazyTransaction{
+								Pool:      w.eth.TxPool(), // We don't know where this came from, yolo resolve from everywhere
+								Hash:      tx.Hash(),
+								Tx:        nil, // Do *not* set this! We need to resolve it later to pull blobs in
+								Time:      tx.Time(),
+								GasFeeCap: tx.GasFeeCap(),
+								GasTipCap: tx.GasTipCap(),
+								Gas:       tx.Gas(),
+								BlobGas:   tx.BlobGas(),
+							})
+						}
+					}
+
+					txsetByTime := newTransactionsByTimeAndNonce(w.current.signer, txsByTime, w.current.header.BaseFee)
+					tcount := w.current.tcount
+					w.commitTransactions(w.current, txsetByTime, nil)
+
+					txset := newTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
+					tcount = w.current.tcount
+					w.commitTransactions(w.current, txset, nil)
+
+					// Only update the snapshot if any new transactions were added
+					// to the pending block
+					if tcount != w.current.tcount {
+						w.updateSnapshot(w.current)
+					}
+				} else {
+					// Special case, if the consensus engine is 0 period clique(dev mode),
+					// submit sealing work here since all empty submission will be rejected
+					// by clique. Of course the advance sealing(empty submission) is disabled.
+					if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+						w.commitWork(nil, time.Now().Unix())
+					}
 				}
-			} else {
-				// Special case, if the consensus engine is 0 period clique(dev mode),
-				// submit sealing work here since all empty submission will be rejected
-				// by clique. Of course the advance sealing(empty submission) is disabled.
-				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitWork(nil, time.Now().Unix())
-				}
-			}
-			w.newTxs.Add(int32(len(ev.Txs)))
+				w.newTxs.Add(int32(len(ev.Txs)))
+			}()
 
 		// System stopped
 		case <-w.exitCh:
@@ -609,6 +642,24 @@ func (w *worker) mainLoop() {
 		case <-w.txsSub.Err():
 			return
 		case <-w.chainHeadSub.Err():
+			return
+		}
+	}
+}
+
+func (w *worker) authOnlyReceiptSend() {
+	defer w.wg.Done()
+
+	for {
+		select {
+		case rcpt := <-w.fastReceiptIncoming:
+			if rcpt.Logs == nil {
+				rcpt.Logs = []*types.Log{}
+			}
+
+			log.Trace("sending fast receipt to feed")
+			w.fastReceiptFeed.Send(rcpt)
+		case <-w.exitCh:
 			return
 		}
 	}
@@ -782,20 +833,20 @@ func (w *worker) updateSnapshot(env *environment) {
 	w.snapshotState = env.state.Copy()
 }
 
-func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
+func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, *types.Receipt, error) {
 	if tx.Type() == types.BlobTxType {
 		return w.commitBlobTransaction(env, tx)
 	}
 	receipt, err := w.applyTransaction(env, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
-	return receipt.Logs, nil
+	return receipt.Logs, receipt, nil
 }
 
-func (w *worker) commitBlobTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
+func (w *worker) commitBlobTransaction(env *environment, tx *types.Transaction) ([]*types.Log, *types.Receipt, error) {
 	sc := tx.BlobTxSidecar()
 	if sc == nil {
 		panic("blob transaction without blobs in miner")
@@ -805,18 +856,18 @@ func (w *worker) commitBlobTransaction(env *environment, tx *types.Transaction) 
 	// and not during execution. This means core.ApplyTransaction will not return an error if the
 	// tx has too many blobs. So we have to explicitly check it here.
 	if (env.blobs+len(sc.Blobs))*params.BlobTxBlobGasPerBlob > params.MaxBlobGasPerBlock {
-		return nil, errors.New("max data blobs reached")
+		return nil, nil, errors.New("max data blobs reached")
 	}
 	receipt, err := w.applyTransaction(env, tx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	env.txs = append(env.txs, tx.WithoutBlobTxSidecar())
 	env.receipts = append(env.receipts, receipt)
 	env.sidecars = append(env.sidecars, sc)
 	env.blobs += len(sc.Blobs)
 	*env.header.BlobGasUsed += receipt.BlobGasUsed
-	return receipt.Logs, nil
+	return receipt.Logs, receipt, nil
 }
 
 // applyTransaction runs the transaction. If execution fails, state and gas pool are reverted.
@@ -833,7 +884,11 @@ func (w *worker) applyTransaction(env *environment, tx *types.Transaction) (*typ
 	return receipt, err
 }
 
-func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAndNonce, interrupt *atomic.Int32) error {
+func (w *worker) commitTransactions(env *environment, txs interface {
+	Peek() *txpool.LazyTransaction
+	Pop()
+	Shift()
+}, interrupt *atomic.Int32) error {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -889,7 +944,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 		// Start executing the transaction
 		env.state.SetTxContext(tx.Hash(), env.tcount)
 
-		logs, err := w.commitTransaction(env, tx)
+		logs, rcpt, err := w.commitTransaction(env, tx)
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
@@ -897,6 +952,10 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 			txs.Shift()
 
 		case errors.Is(err, nil):
+			if tx.AuthOnly.Load() {
+				log.Trace("sending fast receipt payload")
+				w.fastReceiptIncoming <- rcpt
+			}
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
@@ -1067,6 +1126,12 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) error {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("programmer error panic occured during fill transaction", "panic", err)
+		}
+	}()
+
 	pending := w.eth.TxPool().Pending(true)
 
 	// Split the pending transactions into locals and remotes.
@@ -1080,6 +1145,27 @@ func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) err
 
 	// Fill the block with all available pending transactions.
 	if len(localTxs) > 0 {
+		timePriv := map[common.Address][]*txpool.LazyTransaction{}
+		for k, v := range localTxs {
+			var txs []*txpool.LazyTransaction
+
+			for i, tx := range v {
+				if tx.Tx.AuthOnly.Load() {
+					txs = append(txs, tx)
+					v[i] = nil
+				}
+			}
+
+			if len(txs) > 0 {
+				timePriv[k] = txs
+			}
+		}
+
+		txsByTime := newTransactionsByTimeAndNonce(env.signer, timePriv, env.header.BaseFee)
+		if err := w.commitTransactions(env, txsByTime, interrupt); err != nil {
+			return err
+		}
+
 		txs := newTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 		if err := w.commitTransactions(env, txs, interrupt); err != nil {
 			return err
@@ -1108,7 +1194,7 @@ func (w *worker) generateWork(genParams *generateParams) *newPayloadResult {
 	for _, tx := range genParams.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
-		_, err := w.commitTransaction(work, tx)
+		_, _, err := w.commitTransaction(work, tx)
 		if err != nil {
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
@@ -1148,6 +1234,8 @@ func (w *worker) generateWork(genParams *generateParams) *newPayloadResult {
 		sidecars: work.sidecars,
 	}
 }
+
+// AcceptTx(tx *types.Transaction) (*types.Receipt, error)
 
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.

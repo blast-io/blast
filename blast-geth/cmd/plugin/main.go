@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"os"
 	"path"
 	"time"
 
+	"github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
@@ -24,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -43,8 +47,8 @@ type workState struct {
 }
 
 type pluginBlast struct {
-	log log.Logger
-
+	log          log.Logger
+	cfg          blockchain.NewChainStartingArgs
 	node         *node.Node
 	Eth          *eth.Ethereum
 	prefCoinbase common.Address
@@ -216,7 +220,10 @@ func (p *pluginBlast) WSEndpoint() (string, error) {
 }
 
 func (p *pluginBlast) AuthEndpoint() (string, error) {
-	return p.node.HTTPAuthEndpoint(), nil
+	if p.cfg.CatalystAuthEnabled {
+		return p.node.HTTPAuthEndpoint(), nil
+	}
+	return p.node.HTTPEndpoint(), nil
 }
 
 func (p *pluginBlast) SetFeeRecipient(addr string) error {
@@ -235,7 +242,7 @@ var (
 )
 
 func (p *pluginBlast) NewChain(startingArgs *blockchain.NewChainStartingArgs) blockchain.NewChainOrError {
-
+	p.cfg = *startingArgs
 	var gen *core.Genesis
 
 	p.log.Info(
@@ -259,21 +266,36 @@ func (p *pluginBlast) NewChain(startingArgs *blockchain.NewChainStartingArgs) bl
 			"schedule", gen.Config.BlobScheduleConfig,
 		)
 
-	} else {
-		// gen = core.DeveloperGenesisBlock(30_000_000, nil)
-		// gen.Config.CancunTime = startingArgs.WhenActivateCancun
-		// gen.Config.PragueTime = startingArgs.WhenActivatePrague
-		// for _addr, amt := range startingArgs.ExtraAllocs {
-		// 	addr := common.HexToAddress(_addr)
-		// 	if addr == (common.Address{}) {
-		// 		return nil, plugin.NewBasicError(ErrEmptyAddr)
-		// 	}
-		// 	_ = amt
-		// gen.Alloc[addr] = core.GenesisAlloc{
-		// 	Fix: amt,
-		// }
-		// }
+	} else if startingArgs.UseDatadir != "" {
+		//
+	} else if startingArgs.Faucet != "" {
+		p.log.Info("using developer genesis block", "faucet", startingArgs.Faucet)
+		gen = core.DeveloperGenesisBlock(30_000_000, common.HexToAddress(startingArgs.Faucet))
 
+		gen.Config.CancunTime = startingArgs.WhenActivateCancun
+		gen.Config.PragueTime = startingArgs.WhenActivatePrague
+		gen.Config.TerminalTotalDifficultyPassed = true
+
+		for _addr, amt := range startingArgs.ExtraAllocs {
+			addr := common.HexToAddress(_addr)
+			if addr == (common.Address{}) {
+				return blockchain.NewChainOrError{Err: plugin.NewBasicError(ErrEmptyAddr)}
+			}
+			gen.Alloc[addr] = core.GenesisAccount{
+				Balance: amt,
+			}
+		}
+
+	}
+
+	minerCfg := miner.DefaultConfig
+
+	if startingArgs.MinerRecommit > 0 {
+		minerCfg.Recommit = startingArgs.MinerRecommit
+	}
+
+	if startingArgs.MinerNewPayloadTimeout > 0 {
+		minerCfg.NewPayloadTimeout = startingArgs.MinerNewPayloadTimeout
 	}
 
 	ethCfg := &ethconfig.Config{
@@ -282,47 +304,37 @@ func (p *pluginBlast) NewChain(startingArgs *blockchain.NewChainStartingArgs) bl
 		RollupDisableTxPoolGossip: true,
 		StateScheme:               rawdb.HashScheme,
 		TrieTimeout:               5 * time.Minute,
-		TransactionHistory:        128,
 		DatabaseCache:             3096,
 		TrieCleanCache:            3096,
 		TrieDirtyCache:            3096,
-		SnapshotCache:             3096,
+		Miner:                     minerCfg,
 	}
 
 	namespaces := []string{
 		"debug", "admin", "eth", "txpool", "net",
-		"rpc", "web3", "personal", "engine",
+		"rpc", "web3", "personal", "engine", "blast",
 	}
 
 	nodeCfg := &node.Config{
 		Name:     "plugin-chain",
 		WSHost:   "127.0.0.1",
-		WSPort:   0,
+		WSPort:   startingArgs.WSPort,
 		HTTPHost: "127.0.0.1",
 		HTTPPort: 0,
 		// AuthAddr:    "127.0.0.1",
-		// AuthPort:    0,
-		WSModules:   namespaces,
-		HTTPModules: namespaces,
-		DataDir:     "", // in-memory
-		P2P:         p2p.Config{NoDiscovery: true, NoDial: true},
-		//		PebbleFormatVersion: pebble.FormatNewest,
+		AuthPort:            startingArgs.AuthPort,
+		WSModules:           namespaces,
+		HTTPModules:         namespaces,
+		P2P:                 p2p.Config{NoDiscovery: true, NoDial: true},
+		PebbleFormatVersion: pebble.FormatNewest,
 	}
 	if j := startingArgs.JWTFilePath; j != "" {
 		nodeCfg.JWTSecret = j
 	}
 
 	if d := startingArgs.UseDatadir; d != "" {
-		if path.Base(d) != nodeCfg.Name {
-			return blockchain.NewChainOrError{Err: plugin.NewBasicError(
-				fmt.Errorf("if giving data dir then name must end in `%v`", nodeCfg.Name),
-			)}
-		}
+		nodeCfg.Name = path.Base(d)
 		nodeCfg.DataDir = d
-	}
-
-	if startingArgs.AuthPort > 0 {
-		nodeCfg.AuthPort = startingArgs.AuthPort
 	}
 
 	n, err := node.New(nodeCfg)
@@ -342,10 +354,12 @@ func (p *pluginBlast) NewChain(startingArgs *blockchain.NewChainStartingArgs) bl
 		{Namespace: "eth", Service: filters.NewFilterAPI(filterSystem, false)},
 		// IF YOU DO THIS THEN IT BREAKS!
 		// {Namespace: "eth", Service: backend.APIBackend},
+		// {Namespace: "blast", Service: backend.NewBlastAPI()},
 	}
 
 	// By doing this, we dont have to use the auth port, the regular one works fine
 	if startingArgs.IncludeCatalystAPI {
+		catalyst.AuthEnabled = startingArgs.CatalystAuthEnabled
 		catalyst.Register(n, backend)
 	}
 
@@ -371,7 +385,27 @@ func (p *pluginBlast) NewChain(startingArgs *blockchain.NewChainStartingArgs) bl
 	if err != nil {
 		return blockchain.NewChainOrError{Err: plugin.NewBasicError(err)}
 	}
-	return blockchain.NewChainOrError{SerializedHeader: payload}
+
+	var headHash, safeHash, finalizedHash string
+
+	if startingArgs.UseDatadir == "" {
+		hsh := gen.ToBlock().Hash().Hex()
+		headHash = hsh
+		safeHash = hsh
+		finalizedHash = hsh
+	} else {
+		headHash = p.l1Chain.CurrentHeader().Hash().Hex()
+		safeHash = p.l1Chain.CurrentSafeBlock().Hash().Hex()
+		finalizedHash = p.l1Chain.CurrentFinalBlock().Hash().Hex()
+		payload, _ = json.Marshal(p.l1Chain.CurrentHeader())
+	}
+
+	return blockchain.NewChainOrError{
+		SerializedHeader: payload,
+		HeadHash:         headHash,
+		SafeHash:         safeHash,
+		FinalizedHash:    finalizedHash,
+	}
 }
 
 func (p *pluginBlast) StartBlock(timeDelta uint64) error {
@@ -446,7 +480,13 @@ var handshakeConfig = plugin.HandshakeConfig{
 }
 
 func main() {
+	glogger := log.NewGlogHandler(
+		log.StreamHandler(io.MultiWriter(os.Stdout, os.Stderr), log.TerminalFormat(true)),
+	)
+	glogger.Verbosity(log.LvlTrace)
+	log.Root().SetHandler(glogger)
 	log.PrintOrigins(true)
+
 	chain := &pluginBlast{
 		log: log.New("env", "blast-geth"),
 	}

@@ -13,6 +13,7 @@ import (
 type BatcherDriver interface {
 	StartBatchSubmitting() error
 	StopBatchSubmitting(ctx context.Context) error
+	ClosePendingChannelAndSend(ctx context.Context) error
 }
 
 type adminAPI struct {
@@ -40,4 +41,8 @@ func (a *adminAPI) StartBatcher(_ context.Context) error {
 
 func (a *adminAPI) StopBatcher(ctx context.Context) error {
 	return a.b.StopBatchSubmitting(ctx)
+}
+
+func (a *adminAPI) SendCurrentChannel(ctx context.Context) error {
+	return a.b.ClosePendingChannelAndSend(ctx)
 }

@@ -52,7 +52,7 @@ func TestLoadBlastPlugin(gt *testing.T) {
 	log.Info("now have handle on blast subproc", "ws", endpoint)
 	minerClient, err := ethclient.Dial(endpoint)
 	require.NoError(t, err)
-	miner := NewPluginBackedMiner(t, log, blastchain)
+	miner := NewPluginBackedMiner(t, log, blastchain, 2)
 
 	for _, addr := range addresses.All() {
 		checkBal, err := minerClient.BalanceAt(t.Ctx(), addr, nil)

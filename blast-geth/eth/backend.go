@@ -107,7 +107,8 @@ type Ethereum struct {
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 
-	nodeCloser func() error
+	nodeCloser    func() error
+	blastAuthPool *legacypool.LegacyPool
 }
 
 // New creates a new Ethereum object (including the
@@ -255,12 +256,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
+	eth.blastAuthPool = legacypool.New(config.TxPool, eth.blockchain)
 
-	txPools := []txpool.SubPool{legacyPool}
+	txPools := []txpool.SubPool{legacyPool, eth.blastAuthPool}
 	if !eth.BlockChain().Config().IsOptimism() {
 		blobPool := blobpool.New(config.BlobPool, eth.blockchain)
 		txPools = append(txPools, blobPool)
 	}
+
 	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, txPools)
 	if err != nil {
 		return nil, err
@@ -385,6 +388,9 @@ func (s *Ethereum) APIs() []rpc.API {
 		}, {
 			Namespace: "net",
 			Service:   s.netRPCService,
+		}, {
+			Namespace: "blast",
+			Service:   ethapi.NewBlastAPI(s.blockchain, s.blastAuthPool, s.miner),
 		},
 	}...)
 }

@@ -70,6 +70,9 @@ type Transaction struct {
 
 	// an indicator if this transaction is rejected during block building
 	rejected atomic.Bool
+
+	// txpool kind intended
+	AuthOnly atomic.Bool
 }
 
 // NewTx creates a new transaction.

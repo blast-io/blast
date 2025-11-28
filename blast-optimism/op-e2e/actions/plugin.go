@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ethereum-optimism/optimism/op-e2e/config"
+	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -22,11 +23,13 @@ import (
 type PluginBackedMiner struct {
 	blockchain.Chain
 	l1Building bool
+	blobStore  *e2eutils.BlobsStore
 	// per account, how many txs from the pool were already included in the block, since the pool is lagging
-	pendingIndices map[common.Address]uint64
-	l1Signer       types.Signer
-	t              Testing
-	handle         *ethclient.Client
+	pendingIndices  map[common.Address]uint64
+	l1Signer        types.Signer
+	t               Testing
+	handle          *ethclient.Client
+	assumeBlockTime uint64
 }
 
 type ChainRunner interface {
@@ -43,12 +46,14 @@ type ChainRunner interface {
 }
 
 func NewPluginBackedMiner(
-	t Testing, log log.Logger, chain blockchain.Chain,
+	t Testing, log log.Logger, chain blockchain.Chain, assumeBlockTime uint64,
 ) ChainRunner {
 	p := &PluginBackedMiner{
-		Chain:          chain,
-		t:              t,
-		pendingIndices: make(map[common.Address]uint64),
+		Chain:           chain,
+		t:               t,
+		pendingIndices:  make(map[common.Address]uint64),
+		assumeBlockTime: assumeBlockTime,
+		blobStore:       e2eutils.NewBlobStore(),
 	}
 
 	p.handle = p.EthClient()
@@ -56,7 +61,7 @@ func NewPluginBackedMiner(
 }
 
 func (s *PluginBackedMiner) ActEmptyBlock() *types.Block {
-	s.ActL1StartBlock(12)(s.t)
+	s.ActL1StartBlock(s.assumeBlockTime)(s.t)
 	return s.ActL1EndBlock(s.t)
 }
 
@@ -96,7 +101,7 @@ func (s *PluginBackedMiner) ActL1IncludeTx(from common.Address) Action {
 }
 
 func (s *PluginBackedMiner) BlobStore() derive.L1BlobsFetcher {
-	return nil
+	return s.blobStore
 }
 
 func (s *PluginBackedMiner) ActL1SetFeeRecipient(addr common.Address) {
@@ -165,15 +170,14 @@ func (s *PluginBackedMiner) ActL1EndBlock(t Testing) *types.Block {
 	s.l1Building = false
 	//	result, err :=
 	output := s.EndBlock()
-	var err error
+	if output.Err != nil {
+		t.Fatalf("problem making block %v", output.Err)
+	}
+	// var err error
 
 	// if output.Err.Message != "" {
 	// 	err = errors.New(output.Err.Message)
 	// }
-
-	if err != nil {
-		t.Fatalf("problem making block %v", err)
-	}
 
 	result := output.SerializedBlock
 
@@ -293,11 +297,4 @@ func loadPlugin(lgr log.Logger, opt pluginBuildOpt) (blockchain.Chain, *plugin.C
 	blastchain := raw.(blockchain.Chain)
 
 	return blastchain, client, nil
-}
-
-func compileAndLoadPlugin(t Testing, lgr log.Logger, opt pluginBuildOpt) blockchain.Chain {
-	require.NoError(t, buildPlugin(lgr, opt))
-	c, _, err := loadPlugin(lgr, opt)
-	require.NoError(t, err)
-	return c
 }

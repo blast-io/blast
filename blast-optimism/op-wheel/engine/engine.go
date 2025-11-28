@@ -144,6 +144,9 @@ type BlockBuildingSettings struct {
 	Random       common.Hash
 	FeeRecipient common.Address
 	BuildTime    time.Duration
+	GasLimit     uint64
+	// Transactions to force into the block (always at the start of the transactions list).
+	Transactions []eth.Data `json:"transactions,omitempty"`
 }
 
 func BuildBlock(ctx context.Context, client *sources.EngineAPIClient, status *StatusData, settings *BlockBuildingSettings) (*eth.ExecutionPayloadEnvelope, error) {
@@ -155,6 +158,15 @@ func BuildBlock(ctx context.Context, client *sources.EngineAPIClient, status *St
 		}
 	}
 	attrs := newPayloadAttributes(client.EngineVersionProvider(), timestamp, settings.Random, settings.FeeRecipient)
+	if settings.GasLimit > 0 {
+		gLimit := hexutil.Uint64(settings.GasLimit)
+		attrs.GasLimit = &gLimit
+	}
+
+	if len(settings.Transactions) > 0 {
+		attrs.Transactions = settings.Transactions
+	}
+
 	pre, err := client.ForkchoiceUpdate(ctx,
 		&eth.ForkchoiceState{
 			HeadBlockHash:      status.Head.Hash,

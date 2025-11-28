@@ -66,7 +66,7 @@ func setupReorgTestActorsWithL1Plugin(
 func TestPragueAgainstRealL1Geth(gt *testing.T) {
 	t := NewDefaultTesting(gt)
 	log := testlog.Logger(t, log.LvlDebug)
-	require.NoError(t, buildPlugin(log, blastPluginOpts))
+	require.NoError(t, buildPlugin(log, gethL1PluginOpts))
 	mnemonicCfg := e2eutils.DefaultMnemonicConfig
 	secrets, err := mnemonicCfg.Secrets()
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestPragueAgainstRealL1Geth(gt *testing.T) {
 		"doing-state-hash", sd.L1Cfg.StateHash == nil,
 	)
 
-	miner := NewPluginBackedMiner(t, log, plugin)
+	miner := NewPluginBackedMiner(t, log, plugin, defaultRollupTestParams.L1BlockTime)
 	_, _, sequencer, _, verifier, _, batcher := setupReorgTestActorsWithL1Plugin(t, dp, sd, log, miner)
 	l1Client := miner.EthClient()
 	currentBlock, err := l1Client.BlockByNumber(t.Ctx(), nil)

@@ -220,15 +220,16 @@ type BlockChain struct {
 	//  * nil: disable tx reindexer/deleter, but still index new blocks
 	txLookupLimit uint64
 
-	hc            *HeaderChain
-	rmLogsFeed    event.Feed
-	chainFeed     event.Feed
-	chainSideFeed event.Feed
-	chainHeadFeed event.Feed
-	logsFeed      event.Feed
-	blockProcFeed event.Feed
-	scope         event.SubscriptionScope
-	genesisBlock  *types.Block
+	hc              *HeaderChain
+	rmLogsFeed      event.Feed
+	chainFeed       event.Feed
+	chainSideFeed   event.Feed
+	chainHeadFeed   event.Feed
+	logsFeed        event.Feed
+	blockProcFeed   event.Feed
+	fastReceiptFeed event.Feed
+	scope           event.SubscriptionScope
+	genesisBlock    *types.Block
 
 	// This mutex synchronizes chain write operations.
 	// Readers don't need to take it, they can just read the database.
@@ -239,12 +240,12 @@ type BlockChain struct {
 	currentFinalBlock atomic.Pointer[types.Header] // Latest (consensus) finalized block
 	currentSafeBlock  atomic.Pointer[types.Header] // Latest (consensus) safe block
 
-	bodyCache     *lru.Cache[common.Hash, *types.Body]
-	bodyRLPCache  *lru.Cache[common.Hash, rlp.RawValue]
-	receiptsCache *lru.Cache[common.Hash, []*types.Receipt]
-	blockCache    *lru.Cache[common.Hash, *types.Block]
-	txLookupCache *lru.Cache[common.Hash, *rawdb.LegacyTxLookupEntry]
-
+	bodyCache          *lru.Cache[common.Hash, *types.Body]
+	bodyRLPCache       *lru.Cache[common.Hash, rlp.RawValue]
+	receiptsCache      *lru.Cache[common.Hash, []*types.Receipt]
+	blockCache         *lru.Cache[common.Hash, *types.Block]
+	txLookupCache      *lru.Cache[common.Hash, *rawdb.LegacyTxLookupEntry]
+	allTxReceiptsCache *lru.Cache[common.Hash, *types.Receipt]
 	// future blocks are blocks added for later processing
 	futureBlocks *lru.Cache[common.Hash, *types.Block]
 
@@ -291,21 +292,22 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	}
 
 	bc := &BlockChain{
-		chainConfig:   chainConfig,
-		cacheConfig:   cacheConfig,
-		db:            db,
-		triedb:        triedb,
-		triegc:        prque.New[int64, common.Hash](nil),
-		quit:          make(chan struct{}),
-		chainmu:       syncx.NewClosableMutex(),
-		bodyCache:     lru.NewCache[common.Hash, *types.Body](bodyCacheLimit),
-		bodyRLPCache:  lru.NewCache[common.Hash, rlp.RawValue](bodyCacheLimit),
-		receiptsCache: lru.NewCache[common.Hash, []*types.Receipt](receiptsCacheLimit),
-		blockCache:    lru.NewCache[common.Hash, *types.Block](blockCacheLimit),
-		txLookupCache: lru.NewCache[common.Hash, *rawdb.LegacyTxLookupEntry](txLookupCacheLimit),
-		futureBlocks:  lru.NewCache[common.Hash, *types.Block](maxFutureBlocks),
-		engine:        engine,
-		vmConfig:      vmConfig,
+		chainConfig:        chainConfig,
+		cacheConfig:        cacheConfig,
+		db:                 db,
+		triedb:             triedb,
+		triegc:             prque.New[int64, common.Hash](nil),
+		quit:               make(chan struct{}),
+		chainmu:            syncx.NewClosableMutex(),
+		bodyCache:          lru.NewCache[common.Hash, *types.Body](bodyCacheLimit),
+		bodyRLPCache:       lru.NewCache[common.Hash, rlp.RawValue](bodyCacheLimit),
+		receiptsCache:      lru.NewCache[common.Hash, []*types.Receipt](receiptsCacheLimit),
+		blockCache:         lru.NewCache[common.Hash, *types.Block](blockCacheLimit),
+		txLookupCache:      lru.NewCache[common.Hash, *rawdb.LegacyTxLookupEntry](txLookupCacheLimit),
+		allTxReceiptsCache: lru.NewCache[common.Hash, *types.Receipt](1024),
+		futureBlocks:       lru.NewCache[common.Hash, *types.Block](maxFutureBlocks),
+		engine:             engine,
+		vmConfig:           vmConfig,
 	}
 	bc.flushInterval.Store(int64(cacheConfig.TrieTimeLimit))
 	bc.forker = NewForkChoice(bc, shouldPreserve)
@@ -1830,6 +1832,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
 
+		for _, r := range receipts {
+			bc.allTxReceiptsCache.Add(r.TxHash, r)
+		}
+
 		// Update the metrics touched during block processing and validation
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete(in processing)
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete(in processing)
@@ -2596,4 +2602,9 @@ func (bc *BlockChain) SetTrieFlushInterval(interval time.Duration) {
 // GetTrieFlushInterval gets the in-memory tries flush interval
 func (bc *BlockChain) GetTrieFlushInterval() time.Duration {
 	return time.Duration(bc.flushInterval.Load())
+}
+
+func (bc *BlockChain) FastReceiptCache(hsh common.Hash) *types.Receipt {
+	rcpt, _ := bc.allTxReceiptsCache.Get(hsh)
+	return rcpt
 }

@@ -68,17 +68,18 @@ type BatchSubmitter struct {
 	running bool
 
 	// lastStoredBlock is the last block loaded into `state`. If it is empty it should be set to the l2 safe head.
-	lastStoredBlock eth.BlockID
-	lastL1Tip       eth.L1BlockRef
-
-	state *channelManager
+	lastStoredBlock    eth.BlockID
+	lastL1Tip          eth.L1BlockRef
+	sendPendingChannel chan struct{}
+	state              *channelManager
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
 func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	return &BatchSubmitter{
-		DriverSetup: setup,
-		state:       NewChannelManager(setup.Log, setup.Metr, setup.ChannelConfig, setup.RollupConfig),
+		DriverSetup:        setup,
+		sendPendingChannel: make(chan struct{}),
+		state:              NewChannelManager(setup.Log, setup.Metr, setup.ChannelConfig, setup.RollupConfig),
 	}
 }
 
@@ -331,6 +332,13 @@ func (l *BatchSubmitter) loop() {
 			publishAndWait()
 			l.Log.Info("Finished publishing all remaining channel data")
 			return
+		case <-l.sendPendingChannel:
+			if err := l.state.Close(); err != nil {
+				l.Log.Error("Issue with closing state via manual force send pending channel", "err", err)
+				continue
+			}
+			publishAndWait()
+			l.clearState(l.shutdownCtx)
 		}
 	}
 }
@@ -601,4 +609,18 @@ func logFields(xs ...any) (fs []any) {
 		}
 	}
 	return fs
+}
+
+func (l *BatchSubmitter) ClosePendingChannelAndSend(ctx context.Context) error {
+	withTimeout, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+	l.Log.Info("attempting to close out current pending channel and submit tx")
+
+	select {
+	case l.sendPendingChannel <- struct{}{}:
+	case <-withTimeout.Done():
+		return withTimeout.Err()
+	}
+
+	return nil
 }

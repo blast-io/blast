@@ -426,3 +426,7 @@ var _ cliapp.Lifecycle = (*BatcherService)(nil)
 func (bs *BatcherService) Driver() rpc.BatcherDriver {
 	return bs.driver
 }
+
+func (bs *BatcherService) ClosePendingChannelAndSend(ctx context.Context) error {
+	return bs.driver.ClosePendingChannelAndSend(ctx)
+}
