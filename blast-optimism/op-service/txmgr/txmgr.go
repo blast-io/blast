@@ -457,7 +457,7 @@ func (m *SimpleTxManager) sendTx(ctx context.Context, tx *types.Transaction) (*t
 
 	for {
 		if err := sendState.CriticalError(); err != nil {
-			m.txLogger(tx, false).Warn("Aborting transaction submission", "err", err)
+			m.txLogger(tx, true).Warn("Aborting transaction submission", "err", err)
 			return nil, fmt.Errorf("aborted tx send due to critical error: %w", err)
 		}
 		select {
