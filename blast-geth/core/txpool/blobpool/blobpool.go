@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -50,21 +51,28 @@ const (
 	// transaction. There can be multiple of these embedded into a single tx.
 	blobSize = params.BlobTxFieldElementsPerBlob * params.BlobTxBytesPerFieldElement
 
-	// maxBlobsPerTransaction is the maximum number of blobs a single transaction
-	// is allowed to contain. Whilst the spec states it's unlimited, the block
-	// data slots are protocol bound, which implicitly also limit this.
-	maxBlobsPerTransaction = params.MaxBlobGasPerBlock / params.BlobTxBlobGasPerBlob
-
 	// txAvgSize is an approximate byte size of a transaction metadata to avoid
 	// tiny overflows causing all txs to move a shelf higher, wasting disk space.
 	txAvgSize = 4 * 1024
 
-	// txMaxSize is the maximum size a single transaction can have, outside
-	// the included blobs. Since blob transactions are pulled instead of pushed,
-	// and only a small metadata is kept in ram, the rest is on disk, there is
-	// no critical limit that should be enforced. Still, capping it to some sane
-	// limit can never hurt.
+	// txBlobOverhead is an approximation of the overhead that an additional blob
+	// has on transaction size. This is added to the slotter to avoid tiny
+	// overflows causing all txs to move a shelf higher, wasting disk space. A
+	// small buffer is added to the proof overhead.
+	txBlobOverhead = uint32(kzg4844.CellProofsPerBlob*len(kzg4844.Proof{}) + 64)
+
+	// txMaxSize is the maximum size a single transaction can have, including the
+	// blobs. Since blob transactions are pulled instead of pushed, and only a
+	// small metadata is kept in ram, the rest is on disk, there is no critical
+	// limit that should be enforced. Still, capping it to some sane limit can
+	// never hurt, which is aligned with maxBlobsPerTx constraint enforced internally.
 	txMaxSize = 1024 * 1024
+
+	// maxBlobsPerTx is the maximum number of blobs that a single transaction can
+	// carry. We choose a smaller limit than the protocol-permitted MaxBlobsPerBlock
+	// in order to ensure network and txpool stability.
+	// Note: if you increase this, validation will fail on txMaxSize.
+	maxBlobsPerTx = params.BlobTxMaxBlobs
 
 	// maxTxsPerAccount is the maximum number of blob transactions admitted from
 	// a single account. The limit is enforced to minimize the DoS potential of
@@ -81,6 +89,15 @@ const (
 	// limboedTransactionStore is the subfolder containing the currently included
 	// but not yet finalized transaction blobs.
 	limboedTransactionStore = "limbo"
+
+	// storeVersion is the current slotter layout used for the billy.Database
+	// store.
+	storeVersion = 1
+
+	// conversionTimeWindow defines the period after the Osaka fork during which
+	// the pool will still accept and convert legacy blob transactions. After this
+	// window, all legacy blob transactions will be rejected.
+	conversionTimeWindow = time.Hour * 2
 )
 
 // blobTxMeta is the minimal subset of types.BlobTx necessary to validate and
@@ -371,6 +388,9 @@ func (p *BlobPool) Init(gasTip *big.Int, head *types.Header, reserve txpool.Addr
 	}
 	p.head, p.state = head, state
 
+	// Create new slotter for pre-Osaka blob configuration.
+	slotter := newSlotter(eip4844.LatestMaxBlobsPerBlock(p.chain.Config()))
+
 	// Index all transactions on disk and delete anything inprocessable
 	var fails []uint64
 	index := func(id uint64, size uint32, blob []byte) {
@@ -378,7 +398,7 @@ func (p *BlobPool) Init(gasTip *big.Int, head *types.Header, reserve txpool.Addr
 			fails = append(fails, id)
 		}
 	}
-	store, err := billy.Open(billy.Options{Path: queuedir}, newSlotter(), index)
+	store, err := billy.Open(billy.Options{Path: queuedir}, slotter, index)
 	if err != nil {
 		return err
 	}
@@ -409,7 +429,7 @@ func (p *BlobPool) Init(gasTip *big.Int, head *types.Header, reserve txpool.Addr
 
 	// Pool initialized, attach the blob limbo to it to track blobs included
 	// recently but not yet finalized
-	p.limbo, err = newLimbo(limbodir)
+	p.limbo, err = newLimbo(p.chain.Config(), limbodir)
 	if err != nil {
 		p.Close()
 		return err
@@ -1442,7 +1462,8 @@ func (p *BlobPool) updateStorageMetrics() {
 		metrics.GetOrRegisterGauge(fmt.Sprintf(shelfSlotusedGaugeName, shelf.SlotSize/blobSize), nil).Update(int64(shelf.FilledSlots))
 		metrics.GetOrRegisterGauge(fmt.Sprintf(shelfSlotgapsGaugeName, shelf.SlotSize/blobSize), nil).Update(int64(shelf.GappedSlots))
 
-		if shelf.SlotSize/blobSize > maxBlobsPerTransaction {
+		maxBlobs := eip4844.LatestMaxBlobsPerBlock(p.chain.Config())
+		if shelf.SlotSize/blobSize > uint32(maxBlobs) {
 			oversizedDataused += slotDataused
 			oversizedDatagaps += slotDatagaps
 			oversizedSlotused += shelf.FilledSlots

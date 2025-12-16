@@ -6,8 +6,10 @@ import (
 	"io"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	gnode "github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +38,7 @@ type L2Verifier struct {
 	engine     *derive.EngineController
 	derivation *derive.DerivationPipeline
 
-	l1      derive.L1Fetcher
+	l1      *MockL1Fetcher
 	l1State *driver.L1State
 
 	l2PipelineIdle bool
@@ -46,7 +48,8 @@ type L2Verifier struct {
 
 	rpc *rpc.Server
 
-	failRPC error // mock error
+	failRPC       error // mock error
+	L1ChainConfig *params.ChainConfig
 }
 
 type L2API interface {
@@ -63,19 +66,33 @@ type L2API interface {
 // 	node.SafeDBReader
 // }
 
+type MockL1Fetcher struct {
+	derive.L1Fetcher
+	failReceipts bool
+}
+
+func (m *MockL1Fetcher) FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error) {
+	if m.failReceipts {
+		return nil, nil, errors.New("failing on making receipts enabled")
+	}
+	return m.L1Fetcher.FetchReceipts(ctx, blockHash)
+}
+
 func NewL2Verifier(
 	t Testing, log log.Logger, l1 derive.L1Fetcher,
 	blobsSrc derive.L1BlobsFetcher,
 	// plasmaSrc derive.PlasmaInputFetcher,
-	eng L2API, cfg *rollup.Config, syncCfg *sync.Config,
+	eng L2API, cfg *rollup.Config, l1ChainConfig *params.ChainConfig, syncCfg *sync.Config,
 	//safeHeadListener safeDB,
 ) *L2Verifier {
 	metrics := &testutils.TestDerivationMetrics{}
 	engine := derive.NewEngineController(eng, log, metrics, cfg, syncCfg.SyncMode)
+	mck := &MockL1Fetcher{L1Fetcher: l1}
 	pipeline := derive.NewDerivationPipeline(
-		log, cfg, l1, blobsSrc,
+		log, cfg, mck, blobsSrc,
 		// plasmaSrc,
 		eng, engine, metrics, syncCfg,
+		l1ChainConfig,
 		//safeHeadListener,
 	)
 	pipeline.Reset()
@@ -85,8 +102,9 @@ func NewL2Verifier(
 		eng:            eng,
 		engine:         engine,
 		derivation:     pipeline,
-		l1:             l1,
+		l1:             mck,
 		l1State:        driver.NewL1State(log, metrics),
+		L1ChainConfig:  l1ChainConfig,
 		l2PipelineIdle: true,
 		l2Building:     false,
 		rollupCfg:      cfg,

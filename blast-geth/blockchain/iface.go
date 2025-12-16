@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"math/big"
 	"net/rpc"
+	"time"
 
 	"github.com/hashicorp/go-plugin"
 )
@@ -13,15 +14,23 @@ func init() {
 }
 
 type NewChainStartingArgs struct {
-	SerializedGenesis  []byte
-	ExtraAllocs        map[string]*big.Int
-	AssumeMainnet      bool
-	IncludeCatalystAPI bool
-	JWTFilePath        string
-	AuthPort           int
-	UseDatadir         string
-	WhenActivateCancun *uint64
-	WhenActivatePrague *uint64
+	SerializedGenesis      []byte
+	ExtraAllocs            map[string]*big.Int
+	AssumeMainnet          bool
+	IncludeCatalystAPI     bool
+	JWTFilePath            string
+	AuthPort               int
+	WSPort                 int
+	UseDatadir             string
+	WhenActivateCancun     *uint64
+	WhenActivatePrague     *uint64
+	WhenActivateOsaka      *uint64
+	WhenActivateBPO1       *uint64
+	WhenActivateBPO2       *uint64
+	Faucet                 string
+	CatalystAuthEnabled    bool
+	MinerRecommit          time.Duration
+	MinerNewPayloadTimeout time.Duration
 }
 
 type Chain interface {

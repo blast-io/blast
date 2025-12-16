@@ -5,11 +5,14 @@ import (
 	"math/big"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -35,6 +38,73 @@ func randomL1Cfg(rng *rand.Rand, l1Info eth.BlockInfo) eth.SystemConfig {
 		Scalar:      [32]byte{},
 		GasLimit:    1234567,
 	}
+}
+
+func TestPicksPragueBlobPricing(t *testing.T) {
+	var (
+		rollupCfg         rollup.Config
+		excess            uint64 = 200000000
+		blkTime           uint64 = uint64(time.Now().Unix())
+		assumeL2BlockTime uint64 = blkTime
+		ecotoneSepolia    uint64 = 1716843599
+	)
+
+	rollupCfg.EcotoneTime = &ecotoneSepolia
+
+	rng := rand.New(rand.NewSource(int64(1234)))
+	assumeHeader := &types.Header{
+		ExcessBlobGas: &excess,
+		Time:          blkTime,
+		BaseFee:       big.NewInt(100),
+		Number:        big.NewInt(5_000_000),
+	}
+	someL1Block := eth.HeaderBlockInfo(assumeHeader)
+
+	defaultBlobBaseFee := someL1Block.BlobBaseFee(params.SepoliaChainConfig)
+	t.Logf("initial blob base fee %v", defaultBlobBaseFee)
+	bumpFusaka := &blkTime
+
+	require.True(t, params.SepoliaChainConfig.IsPrague(someL1Block.Header().Number, someL1Block.Time()), "should be true already on prague")
+	require.True(t, params.SepoliaChainConfig.IsOsaka(someL1Block.Header().Number, someL1Block.Time()), "should be true already on osaka")
+	require.True(t, params.SepoliaChainConfig.IsBPO1(someL1Block.Header().Number, someL1Block.Time()), "should be true already on bpo1")
+	require.True(t, params.SepoliaChainConfig.IsBPO2(someL1Block.Header().Number, someL1Block.Time()), "should be true already on bpo2")
+
+	rollupCfg.FusakaBlobScheduleTime = bumpFusaka
+	someL1Confg := randomL1Cfg(rng, someL1Block)
+	deposit, err := L1InfoDeposit(&rollupCfg, params.SepoliaChainConfig, someL1Confg, 0, someL1Block, assumeL2BlockTime)
+	require.NoError(t, err, "l1 deposit failed")
+	l1InfoBack, err := L1BlockInfoFromBytes(&rollupCfg, assumeL2BlockTime, deposit.Data)
+	require.NoError(t, err, "l1 info back failed")
+	// NOTE So this is how it ought to be when its correct - that is if all pricing was correct
+	require.True(t, l1InfoBack.BlobBaseFee.Cmp(defaultBlobBaseFee) == 0)
+	// NOTE so now lets see - what if the time now was prague time - that is - just before Osaka
+
+	betweenTime := time.Unix(int64(*params.SepoliaChainConfig.OsakaTime), 0).Add(-1 * time.Minute)
+	assumeHeader.Time = uint64(betweenTime.Unix())
+	someL1BlockPricePrague := eth.HeaderBlockInfo(assumeHeader)
+	shouldBePrague := someL1BlockPricePrague.BlobBaseFee(params.SepoliaChainConfig)
+	t.Logf("prague pricing should be %v", shouldBePrague)
+	require.False(t, defaultBlobBaseFee.Cmp(shouldBePrague) == 0)
+
+	{
+		bpo2Time := time.Unix(int64(*params.SepoliaChainConfig.BPO2Time), 0)
+		bpo2TimeTs := uint64(bpo2Time.Unix())
+		letsSayBeforeBpo2 := uint64(bpo2Time.Add(-2 * time.Minute).Unix())
+		assumeHeader.Time = letsSayBeforeBpo2
+		someL1Block := eth.HeaderBlockInfo(assumeHeader)
+
+		rollupCfg.FusakaBlobScheduleTime = &bpo2TimeTs
+		rollupCfg.Bpo1BlobScheduleTime = &bpo2TimeTs
+		rollupCfg.Bpo2BlobScheduleTime = &bpo2TimeTs
+
+		deposit, err := L1InfoDeposit(&rollupCfg, params.SepoliaChainConfig, someL1Confg, 0, someL1Block, assumeL2BlockTime)
+		require.NoError(t, err, "l1 deposit failed")
+		l1InfoBack, err := L1BlockInfoFromBytes(&rollupCfg, assumeL2BlockTime, deposit.Data)
+		require.NoError(t, err, "l1 info back failed")
+		// NOTE so now this one should be prague based pricing
+		require.True(t, l1InfoBack.BlobBaseFee.Cmp(shouldBePrague) == 0, "picked incorrect block base fee got %v but should be prague %v", l1InfoBack.BlobBaseFee, shouldBePrague)
+	}
+
 }
 
 func TestParseL1InfoDepositTxData(t *testing.T) {
@@ -69,7 +139,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 			info := testCase.mkInfo(rng)
 			l1Cfg := testCase.mkL1Cfg(rng, info)
 			seqNr := testCase.seqNr(rng)
-			depTx, err := L1InfoDeposit(&rollupCfg, l1Cfg, seqNr, info, 0)
+			depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, l1Cfg, seqNr, info, 0)
 			require.NoError(t, err)
 			res, err := L1BlockInfoFromBytes(&rollupCfg, info.Time(), depTx.Data)
 			require.NoError(t, err, "expected valid deposit info")
@@ -99,7 +169,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 	t.Run("invalid selector", func(t *testing.T) {
 		rng := rand.New(rand.NewSource(1234))
 		info := testutils.MakeBlockInfo(nil)(rng)
-		depTx, err := L1InfoDeposit(&rollupCfg, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
+		depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
 		require.NoError(t, err)
 		_, err = crand.Read(depTx.Data[0:4])
 		require.NoError(t, err)
@@ -113,7 +183,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 		rollupCfg := rollup.Config{
 			RegolithTime: &zero,
 		}
-		depTx, err := L1InfoDeposit(&rollupCfg, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
+		depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
 		require.NoError(t, err)
 		require.False(t, depTx.IsSystemTransaction)
 		require.Equal(t, depTx.Gas, uint64(RegolithSystemTxGas))
@@ -126,7 +196,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 			RegolithTime: &zero,
 			EcotoneTime:  &zero,
 		}
-		depTx, err := L1InfoDeposit(&rollupCfg, randomL1Cfg(rng, info), randomSeqNr(rng), info, 1)
+		depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, randomL1Cfg(rng, info), randomSeqNr(rng), info, 1)
 		require.NoError(t, err)
 		require.False(t, depTx.IsSystemTransaction)
 		require.Equal(t, depTx.Gas, uint64(RegolithSystemTxGas))
@@ -141,7 +211,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 			EcotoneTime:  &zero,
 			BlockTime:    2,
 		}
-		depTx, err := L1InfoDeposit(&rollupCfg, randomL1Cfg(rng, info), randomSeqNr(rng), info, 2)
+		depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, randomL1Cfg(rng, info), randomSeqNr(rng), info, 2)
 		require.NoError(t, err)
 		require.False(t, depTx.IsSystemTransaction)
 		require.Equal(t, depTx.Gas, uint64(RegolithSystemTxGas))
@@ -156,7 +226,7 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 			EcotoneTime:  &zero,
 			BlockTime:    2,
 		}
-		depTx, err := L1InfoDeposit(&rollupCfg, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
+		depTx, err := L1InfoDeposit(&rollupCfg, params.MergedTestChainConfig, randomL1Cfg(rng, info), randomSeqNr(rng), info, 0)
 		require.NoError(t, err)
 		require.False(t, depTx.IsSystemTransaction)
 		require.Equal(t, depTx.Gas, uint64(RegolithSystemTxGas))

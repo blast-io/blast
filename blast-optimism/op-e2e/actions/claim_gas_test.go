@@ -7,15 +7,20 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/stretchr/testify/require"
 )
@@ -182,4 +187,20 @@ func TestGasTrackerClaim(gt *testing.T) {
 	if mode != modeExpected {
 		t.Fatalf("incorrect mode %v %v", mode, modeExpected)
 	}
+}
+
+func readConfigAndHeaderFromDB(t *testing.T, pathDB string) (*core.Genesis, *params.ChainConfig, *types.Header, time.Time) {
+	nodeCfg := &node.Config{Name: "geth", DataDir: pathDB, P2P: p2p.Config{NoDiscovery: true, NoDial: true}}
+	n, err := node.New(nodeCfg)
+	require.NoError(t, err, "loading up chain-db died")
+	dbHandle, err := n.OpenDatabase("chaindata", 0, 0, "", true, 0)
+	require.NoError(t, err, "loading up database handle to chaindata died")
+	gen, err := core.ReadGenesis(dbHandle)
+	require.NoError(t, err, "reading genesis in chaindata died")
+	chainCfg, err := core.LoadChainConfig(dbHandle, gen)
+	require.NoError(t, err, "reading chain config in chaindata died")
+	currentHdr := rawdb.ReadHeadHeader(dbHandle)
+	require.NotNil(t, currentHdr, "header off rawdb is nil - can't proceed, is db corrupted")
+	require.Nil(t, n.Close(), "couldnt close node handles")
+	return gen, chainCfg, currentHdr, time.Unix(int64(currentHdr.Time), 0)
 }

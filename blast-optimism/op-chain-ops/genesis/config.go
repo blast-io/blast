@@ -265,10 +265,24 @@ type DeployConfig struct {
 	// Set it to 0 to activate at genesis. Nil to disable the PectraBlobSchedule fix.
 	L2GenesisPectraBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisPectraBlobScheduleTimeOffset,omitempty"`
 
+	// L2GenesisFusakaBlobScheduleTimeOffset is the number of seconds after genesis block that the FusakaBlobSchedule fix activates.
+	// Set it to 0 to activate at genesis. Nil to disable the FusakaBlobSchedule fix.
+	L2GenesisFusakaBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisFusakaBlobScheduleTimeOffset,omitempty"`
+
+	// L2GenesisBpo1BlobScheduleTimeOffset is the number of seconds after genesis block that the Bpo1BlobSchedule fix activates.
+	// Set it to 0 to activate at genesis. Nil to disable the Bpo1BlobSchedule fix.
+	L2GenesisBpo1BlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisBpo1BlobScheduleTimeOffset,omitempty"`
+
+	// L2GenesisBpo2BlobScheduleTimeOffset is the number of seconds after genesis block that the Bpo2BlobSchedule fix activates.
+	// Set it to 0 to activate at genesis. Nil to disable the Bpo2BlobSchedule fix.
+	L2GenesisBpo2BlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisBpo2BlobScheduleTimeOffset,omitempty"`
+
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
 	// When Prague activates. Relative to L1 genesis.
 	L1PragueTimeOffset *hexutil.Uint64 `json:"l1PragueTimeOffset,omitempty"`
+	// When Osaka activates. Relative to L1 genesis.
+	L1OsakaTimeOffset *hexutil.Uint64 `json:"l1OsakaTimeOffset,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -708,6 +722,39 @@ func (d *DeployConfig) PectraBlobScheduleTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
+func (d *DeployConfig) FusakaBlobScheduleTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisFusakaBlobScheduleTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisFusakaBlobScheduleTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) Bpo1BlobScheduleTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisBpo1BlobScheduleTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisBpo1BlobScheduleTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
+func (d *DeployConfig) Bpo2BlobScheduleTime(genesisTime uint64) *uint64 {
+	if d.L2GenesisBpo2BlobScheduleTimeOffset == nil {
+		return nil
+	}
+	v := uint64(0)
+	if offset := *d.L2GenesisBpo2BlobScheduleTimeOffset; offset > 0 {
+		v = genesisTime + uint64(offset)
+	}
+	return &v
+}
+
 // RollupConfig converts a DeployConfig to a rollup.Config
 func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHash common.Hash, l2GenesisBlockNumber uint64) (*rollup.Config, error) {
 	if d.OptimismPortalProxy == (common.Address{}) {
@@ -751,6 +798,9 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		FjordTime:              d.FjordTime(l1StartBlock.Time()),
 		InteropTime:            d.InteropTime(l1StartBlock.Time()),
 		PectraBlobScheduleTime: d.PectraBlobScheduleTime(l1StartBlock.Time()),
+		FusakaBlobScheduleTime: d.FusakaBlobScheduleTime(l1StartBlock.Time()),
+		Bpo1BlobScheduleTime:   d.Bpo1BlobScheduleTime(l1StartBlock.Time()),
+		Bpo2BlobScheduleTime:   d.Bpo2BlobScheduleTime(l1StartBlock.Time()),
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 type Config struct {
@@ -25,6 +26,8 @@ type Config struct {
 	Driver driver.Config
 
 	Rollup rollup.Config
+
+	L1ChainConfig *params.ChainConfig
 
 	// P2PSigner will be used for signing off on published content
 	// if the node is sequencing and if the p2p stack is enabled
@@ -126,6 +129,10 @@ func (cfg *Config) Check() error {
 	if err := cfg.L2.Check(); err != nil {
 		return fmt.Errorf("l2 endpoint config error: %w", err)
 	}
+	if cfg.L1ChainConfig == nil {
+		return fmt.Errorf("missing L1ChainConfig")
+	}
+
 	if cfg.Rollup.EcotoneTime != nil {
 		if cfg.Beacon == nil {
 			return fmt.Errorf("the Ecotone upgrade is scheduled but no L1 Beacon API endpoint is configured")

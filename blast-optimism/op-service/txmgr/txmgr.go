@@ -97,6 +97,7 @@ type ETHBackend interface {
 	// TODO(CLI-3318): Maybe need a generic interface to support different RPC providers
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
+	BlobBaseFee(ctx context.Context) (*big.Int, error)
 	// NonceAt returns the account nonce of the given account.
 	// The block number can be nil, in which case the nonce is taken from the latest known block.
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
@@ -629,8 +630,11 @@ func (m *SimpleTxManager) queryReceipt(ctx context.Context, txHash common.Hash, 
 	}
 
 	m.metr.RecordBaseFee(tip.BaseFee)
-	if tip.ExcessBlobGas != nil {
-		blobFee := eth.CalcBlobFeeDefault(tip)
+
+	if blobFee, err := m.backend.BlobBaseFee(ctx); err != nil {
+		m.metr.RPCError()
+		m.l.Warn("Unable to fetch blob base fee", "err", err)
+	} else {
 		m.metr.RecordBlobBaseFee(blobFee)
 	}
 
@@ -784,11 +788,11 @@ func (m *SimpleTxManager) suggestGasPriceCaps(ctx context.Context) (*big.Int, *b
 		baseFee = new(big.Int).Set(m.cfg.MinBaseFee)
 	}
 
-	var blobFee *big.Int
-	if head.ExcessBlobGas != nil {
-		blobFee = eth.CalcBlobFeeDefault(head)
-		m.metr.RecordBlobBaseFee(blobFee)
+	blobFee, err := m.backend.BlobBaseFee(ctx)
+	if err != nil {
+		return nil, nil, nil, err
 	}
+
 	return tip, baseFee, blobFee, nil
 }
 

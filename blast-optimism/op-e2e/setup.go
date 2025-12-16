@@ -532,6 +532,10 @@ func (cfg SystemConfig) Start(t *testing.T, _opts ...SystemConfigOption) (*Syste
 			EcotoneTime:             cfg.DeployConfig.EcotoneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			FjordTime:               cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			InteropTime:             cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			PectraBlobScheduleTime:  cfg.DeployConfig.PectraBlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			FusakaBlobScheduleTime:  cfg.DeployConfig.FusakaBlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			Bpo1BlobScheduleTime:    cfg.DeployConfig.Bpo1BlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			Bpo2BlobScheduleTime:    cfg.DeployConfig.Bpo2BlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			ProtocolVersionsAddress: cfg.L1Deployments.ProtocolVersionsProxy,
 		}
 	}

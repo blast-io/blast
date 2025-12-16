@@ -18,6 +18,9 @@ const (
 	EcotoneOverrideFlagName            = "override.ecotone"
 	TaigaOverrideFlagName              = "override.taiga"
 	PectraBlobScheduleOverrideFlagName = "override.pectrablobschedule"
+	FusakaBlobScheduleOverrideFlagName = "override.fusakablobschedule"
+	Bpo1BlobScheduleOverrideFlagName   = "override.bpo1blobschedule"
+	Bpo2BlobScheduleOverrideFlagName   = "override.bpo2blobschedule"
 )
 
 func CLIFlags(envPrefix string, category string) []cli.Flag {
@@ -57,6 +60,28 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Hidden:   false,
 			Category: category,
 		},
+		&cli.Uint64Flag{
+			Name:     FusakaBlobScheduleOverrideFlagName,
+			Usage:    "Manually specify the FusakaBlobSchedule fork timestamp, overriding the bundled setting",
+			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_FUSAKABLOBSCHEDULE"),
+			Hidden:   false,
+			Category: category,
+		},
+		&cli.Uint64Flag{
+			Name:     Bpo1BlobScheduleOverrideFlagName,
+			Usage:    "Manually specify the Bpo1BlobSchedule fork timestamp, overriding the bundled setting",
+			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_BPO1BLOBSCHEDULE"),
+			Hidden:   false,
+			Category: category,
+		},
+		&cli.Uint64Flag{
+			Name:     Bpo2BlobScheduleOverrideFlagName,
+			Usage:    "Manually specify the Bpo2BlobSchedule fork timestamp, overriding the bundled setting",
+			EnvVars:  opservice.PrefixEnvVar(envPrefix, "OVERRIDE_BPO2BLOBSCHEDULE"),
+			Hidden:   false,
+			Category: category,
+		},
+
 		CLINetworkFlag(envPrefix, category),
 		CLIRollupConfigFlag(envPrefix, category),
 	}
