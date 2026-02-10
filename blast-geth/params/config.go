@@ -432,16 +432,17 @@ type ChainConfig struct {
 
 	// Fork scheduling was switched from blocks to timestamps here
 
-	ShanghaiTime *uint64 `json:"shanghaiTime,omitempty"` // Shanghai switch time (nil = no fork, 0 = already on shanghai)
-	CancunTime   *uint64 `json:"cancunTime,omitempty"`   // Cancun switch time (nil = no fork, 0 = already on cancun)
-	PragueTime   *uint64 `json:"pragueTime,omitempty"`   // Prague switch time (nil = no fork, 0 = already on prague)
-	OsakaTime    *uint64 `json:"osakaTime,omitempty"`    // Osaka switch time (nil = no fork, 0 = already on osaka)
-	VerkleTime   *uint64 `json:"verkleTime,omitempty"`   // Verkle switch time (nil = no fork, 0 = already on verkle)
-	BPO1Time     *uint64 `json:"bpo1Time,omitempty"`     // BPO1 switch time (nil = no fork, 0 = already on bpo1)
-	BPO2Time     *uint64 `json:"bpo2Time,omitempty"`     // BPO2 switch time (nil = no fork, 0 = already on bpo2)
-	BPO3Time     *uint64 `json:"bpo3Time,omitempty"`     // BPO3 switch time (nil = no fork, 0 = already on bpo3)
-	BPO4Time     *uint64 `json:"bpo4Time,omitempty"`     // BPO4 switch time (nil = no fork, 0 = already on bpo4)
-	BPO5Time     *uint64 `json:"bpo5Time,omitempty"`     // BPO5 switch time (nil = no fork, 0 = already on bpo5)
+	ShanghaiTime  *uint64 `json:"shanghaiTime,omitempty"`  // Shanghai switch time (nil = no fork, 0 = already on shanghai)
+	CancunTime    *uint64 `json:"cancunTime,omitempty"`    // Cancun switch time (nil = no fork, 0 = already on cancun)
+	PragueTime    *uint64 `json:"pragueTime,omitempty"`    // Prague switch time (nil = no fork, 0 = already on prague)
+	OsakaTime     *uint64 `json:"osakaTime,omitempty"`     // Osaka switch time (nil = no fork, 0 = already on osaka)
+	VerkleTime    *uint64 `json:"verkleTime,omitempty"`    // Verkle switch time (nil = no fork, 0 = already on verkle)
+	BPO1Time      *uint64 `json:"bpo1Time,omitempty"`      // BPO1 switch time (nil = no fork, 0 = already on bpo1)
+	BPO2Time      *uint64 `json:"bpo2Time,omitempty"`      // BPO2 switch time (nil = no fork, 0 = already on bpo2)
+	BPO2BlastTime *uint64 `json:"bpo2BlastTime,omitempty"` // BPO2Blast switch time (nil = no fork, 0 = already on bpo2Blast)
+	BPO3Time      *uint64 `json:"bpo3Time,omitempty"`      // BPO3 switch time (nil = no fork, 0 = already on bpo3)
+	BPO4Time      *uint64 `json:"bpo4Time,omitempty"`      // BPO4 switch time (nil = no fork, 0 = already on bpo4)
+	BPO5Time      *uint64 `json:"bpo5Time,omitempty"`      // BPO5 switch time (nil = no fork, 0 = already on bpo5)
 
 	BedrockBlock *big.Int `json:"bedrockBlock,omitempty"` // Bedrock switch block (nil = no fork, 0 = already on optimism bedrock)
 	RegolithTime *uint64  `json:"regolithTime,omitempty"` // Regolith switch time (nil = no fork, 0 = already on optimism regolith)
@@ -483,6 +484,7 @@ type ChainConfig struct {
 
 	// Optimism config, nil if not active
 	Optimism *OptimismConfig `json:"optimism,omitempty"`
+	Blast    *BlastOverrides `json:"blastOverrides,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -632,15 +634,16 @@ type BlobConfig struct {
 
 // BlobScheduleConfig determines target and max number of blobs allow per fork.
 type BlobScheduleConfig struct {
-	Cancun *BlobConfig `json:"cancun,omitempty"`
-	Prague *BlobConfig `json:"prague,omitempty"`
-	Osaka  *BlobConfig `json:"osaka,omitempty"`
-	Verkle *BlobConfig `json:"verkle,omitempty"`
-	BPO1   *BlobConfig `json:"bpo1,omitempty"`
-	BPO2   *BlobConfig `json:"bpo2,omitempty"`
-	BPO3   *BlobConfig `json:"bpo3,omitempty"`
-	BPO4   *BlobConfig `json:"bpo4,omitempty"`
-	BPO5   *BlobConfig `json:"bpo5,omitempty"`
+	Cancun    *BlobConfig `json:"cancun,omitempty"`
+	Prague    *BlobConfig `json:"prague,omitempty"`
+	Osaka     *BlobConfig `json:"osaka,omitempty"`
+	Verkle    *BlobConfig `json:"verkle,omitempty"`
+	BPO1      *BlobConfig `json:"bpo1,omitempty"`
+	BPO2      *BlobConfig `json:"bpo2,omitempty"`
+	BPO2Blast *BlobConfig `json:"bpo2Blast,omitempty"`
+	BPO3      *BlobConfig `json:"bpo3,omitempty"`
+	BPO4      *BlobConfig `json:"bpo4,omitempty"`
+	BPO5      *BlobConfig `json:"bpo5,omitempty"`
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
@@ -756,6 +759,11 @@ func (c *ChainConfig) IsBPO1(num *big.Int, time uint64) bool {
 // IsBPO2 returns whether time is either equal to the BPO2 fork time or greater.
 func (c *ChainConfig) IsBPO2(num *big.Int, time uint64) bool {
 	return c.IsLondon(num) && isTimestampForked(c.BPO2Time, time)
+}
+
+// IsBPO2Blast returns whether time is either equal to the BPO2Blast fork time or greater.
+func (c *ChainConfig) IsBPO2Blast(num *big.Int, time uint64) bool {
+	return c.IsLondon(num) && isTimestampForked(c.BPO2BlastTime, time)
 }
 
 // IsBPO3 returns whether time is either equal to the BPO3 fork time or greater.
@@ -1453,4 +1461,14 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64) Rules 
 
 func (c *ChainConfig) HasOptimismWithdrawalsRoot(blockTime uint64) bool {
 	return c.IsOptimismIsthmus(blockTime)
+}
+
+type BlastOverrides struct {
+	OsakaBlobConfigOverride     *BlobConfig
+	BPO1BlobConfigOverride      *BlobConfig
+	BPO2BlobConfigOverride      *BlobConfig
+	BPO2BlastBlobConfigOverride *BlobConfig
+	BPO3BlobConfigOverride      *BlobConfig
+	BPO4BlobConfigOverride      *BlobConfig
+	BPO5BlobConfigOverride      *BlobConfig
 }

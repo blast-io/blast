@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/cliiface"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	opflags "github.com/ethereum-optimism/optimism/op-service/flags"
+	"github.com/ethereum-optimism/optimism/op-service/forks"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/sources"
@@ -45,6 +46,38 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	l1ChainConfig, err := NewL1ChainConfig(rollupConfig.L1ChainID, ctx, log)
 	if err != nil {
 		return nil, err
+	}
+
+	l1ChainConfig.Blast = &params.BlastOverrides{}
+
+	if ctx.IsSet(opflags.OsakaBlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.OsakaBlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.OsakaBlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo1BlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.Bpo1BlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.BPO1BlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo2BlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.Bpo2BlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.BPO2BlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo2BlastBlobScheduleOverrideFlagName) {
+		bpo2BlastTS := ctx.Uint64(opflags.Bpo2BlastBlobScheduleOverrideFlagName)
+		l1ChainConfig.BPO2BlastTime = &bpo2BlastTS
+		l1ChainConfig.Blast.BPO2BlastBlobConfigOverride = forks.Schedule(l1ChainConfig, forks.BPO2Blast)
 	}
 
 	if !ctx.Bool(flags.RollupLoadProtocolVersions.Name) {
@@ -271,18 +304,6 @@ func applyOverrides(ctx *cli.Context, rollupConfig *rollup.Config) {
 		pectrablobschedule := ctx.Uint64(opflags.PectraBlobScheduleOverrideFlagName)
 		rollupConfig.PectraBlobScheduleTime = &pectrablobschedule
 	}
-	if ctx.IsSet(opflags.FusakaBlobScheduleOverrideFlagName) {
-		fusakablobschedule := ctx.Uint64(opflags.FusakaBlobScheduleOverrideFlagName)
-		rollupConfig.FusakaBlobScheduleTime = &fusakablobschedule
-	}
-	if ctx.IsSet(opflags.Bpo1BlobScheduleOverrideFlagName) {
-		bpo1blobschedule := ctx.Uint64(opflags.PectraBlobScheduleOverrideFlagName)
-		rollupConfig.Bpo1BlobScheduleTime = &bpo1blobschedule
-	}
-	if ctx.IsSet(opflags.Bpo1BlobScheduleOverrideFlagName) {
-		bpo2blobschedule := ctx.Uint64(opflags.Bpo1BlobScheduleOverrideFlagName)
-		rollupConfig.Bpo2BlobScheduleTime = &bpo2blobschedule
-	}
 }
 
 func NewL1ChainConfigFromCLI(log log.Logger, ctx cliiface.Context) (*params.ChainConfig, error) {
@@ -327,6 +348,7 @@ func NewL1ChainConfig(chainId *big.Int, ctx cliiface.Context, log log.Logger) (*
 		// No error if the chain config is an OP-Stack chain and doesn't have a blob schedule config
 		return nil, fmt.Errorf("L1 chain config does not have a blob schedule config")
 	}
+
 	return cf, nil
 }
 

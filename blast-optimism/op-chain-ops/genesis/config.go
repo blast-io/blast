@@ -722,39 +722,6 @@ func (d *DeployConfig) PectraBlobScheduleTime(genesisTime uint64) *uint64 {
 	return &v
 }
 
-func (d *DeployConfig) FusakaBlobScheduleTime(genesisTime uint64) *uint64 {
-	if d.L2GenesisFusakaBlobScheduleTimeOffset == nil {
-		return nil
-	}
-	v := uint64(0)
-	if offset := *d.L2GenesisFusakaBlobScheduleTimeOffset; offset > 0 {
-		v = genesisTime + uint64(offset)
-	}
-	return &v
-}
-
-func (d *DeployConfig) Bpo1BlobScheduleTime(genesisTime uint64) *uint64 {
-	if d.L2GenesisBpo1BlobScheduleTimeOffset == nil {
-		return nil
-	}
-	v := uint64(0)
-	if offset := *d.L2GenesisBpo1BlobScheduleTimeOffset; offset > 0 {
-		v = genesisTime + uint64(offset)
-	}
-	return &v
-}
-
-func (d *DeployConfig) Bpo2BlobScheduleTime(genesisTime uint64) *uint64 {
-	if d.L2GenesisBpo2BlobScheduleTimeOffset == nil {
-		return nil
-	}
-	v := uint64(0)
-	if offset := *d.L2GenesisBpo2BlobScheduleTimeOffset; offset > 0 {
-		v = genesisTime + uint64(offset)
-	}
-	return &v
-}
-
 // RollupConfig converts a DeployConfig to a rollup.Config
 func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHash common.Hash, l2GenesisBlockNumber uint64) (*rollup.Config, error) {
 	if d.OptimismPortalProxy == (common.Address{}) {
@@ -798,9 +765,6 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		FjordTime:              d.FjordTime(l1StartBlock.Time()),
 		InteropTime:            d.InteropTime(l1StartBlock.Time()),
 		PectraBlobScheduleTime: d.PectraBlobScheduleTime(l1StartBlock.Time()),
-		FusakaBlobScheduleTime: d.FusakaBlobScheduleTime(l1StartBlock.Time()),
-		Bpo1BlobScheduleTime:   d.Bpo1BlobScheduleTime(l1StartBlock.Time()),
-		Bpo2BlobScheduleTime:   d.Bpo2BlobScheduleTime(l1StartBlock.Time()),
 	}, nil
 }
 

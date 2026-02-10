@@ -64,17 +64,48 @@ func latestBlobConfig(cfg *params.ChainConfig, time uint64) *BlobConfig {
 	)
 	switch {
 	case cfg.IsBPO5(london, time) && s.BPO5 != nil:
-		bc = s.BPO5
+		if cfg.Blast != nil && cfg.Blast.BPO5BlobConfigOverride != nil {
+			bc = cfg.Blast.BPO5BlobConfigOverride
+		} else {
+			bc = s.BPO5
+		}
 	case cfg.IsBPO4(london, time) && s.BPO4 != nil:
-		bc = s.BPO4
+		if cfg.Blast != nil && cfg.Blast.BPO4BlobConfigOverride != nil {
+			bc = cfg.Blast.BPO4BlobConfigOverride
+		} else {
+			bc = s.BPO4
+		}
 	case cfg.IsBPO3(london, time) && s.BPO3 != nil:
-		bc = s.BPO3
+		if cfg.Blast != nil && cfg.Blast.BPO3BlobConfigOverride != nil {
+			bc = cfg.Blast.BPO3BlobConfigOverride
+		} else {
+			bc = s.BPO3
+		}
+		// NOTE When we get back on track with right blob scheduling
+	case cfg.IsBPO2Blast(london, time) && s.BPO2Blast != nil:
+		if cfg.Blast != nil && cfg.Blast.BPO2BlastBlobConfigOverride != nil {
+			bc = cfg.Blast.BPO2BlastBlobConfigOverride
+		} else {
+			bc = s.BPO2
+		}
 	case cfg.IsBPO2(london, time) && s.BPO2 != nil:
-		bc = s.BPO2
+		if cfg.Blast != nil && cfg.Blast.BPO2BlobConfigOverride != nil {
+			bc = cfg.Blast.BPO2BlobConfigOverride
+		} else {
+			bc = s.BPO2
+		}
 	case cfg.IsBPO1(london, time) && s.BPO1 != nil:
-		bc = s.BPO1
+		if cfg.Blast != nil && cfg.Blast.BPO1BlobConfigOverride != nil {
+			bc = cfg.Blast.BPO1BlobConfigOverride
+		} else {
+			bc = s.BPO1
+		}
 	case cfg.IsOsaka(london, time) && s.Osaka != nil:
-		bc = s.Osaka
+		if cfg.Blast != nil && cfg.Blast.OsakaBlobConfigOverride != nil {
+			bc = cfg.Blast.OsakaBlobConfigOverride
+		} else {
+			bc = s.Osaka
+		}
 	case cfg.IsPrague(london, time) && s.Prague != nil:
 		bc = s.Prague
 	case cfg.IsCancun(london, time) && s.Cancun != nil:

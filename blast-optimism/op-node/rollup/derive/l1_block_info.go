@@ -286,23 +286,6 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 			}
 		}
 
-		if l1ChainConfig.IsPrague(block.Header().Number, block.Time()) {
-			fusaka, bpo1, bpo2 := rollupCfg.FusakaBlobScheduleTime, rollupCfg.Bpo1BlobScheduleTime, rollupCfg.Bpo2BlobScheduleTime
-			switch {
-			// NOTE blast-testnet used wrong blob fee compute for fusaka, bpo1, bpo2
-			case fusaka != nil && bpo1 != nil && bpo2 != nil:
-				allSame := *fusaka == *bpo1 && *fusaka == *bpo2 && *bpo1 == *bpo2
-				if ebg := block.ExcessBlobGas(); ebg != nil && allSame && block.Time() < *bpo2 {
-					l1BlockInfo.BlobBaseFee = eth.CalcBlobFeePrague(*ebg)
-				}
-				// NOTE blast-mainnet used wrong blob fee compute for fusaka, bpo1
-			case fusaka != nil && bpo1 != nil && *fusaka == *bpo1:
-				if ebg := block.ExcessBlobGas(); ebg != nil && block.Time() < *bpo1 {
-					l1BlockInfo.BlobBaseFee = eth.CalcBlobFeePrague(*ebg)
-				}
-			}
-		}
-
 		if l1BlockInfo.BlobBaseFee == nil {
 			// The L2 spec states to use the MIN_BLOB_GASPRICE from EIP-4844 if not yet active on L1.
 			l1BlockInfo.BlobBaseFee = big.NewInt(1)

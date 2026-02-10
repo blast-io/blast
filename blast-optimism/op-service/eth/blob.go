@@ -302,15 +302,4 @@ func CalcBlobFeeCancun(excessBlobGas uint64) *big.Int {
 	return eip4844.CalcBlobFee(dummyChainCfg, cancunHeader)
 }
 
-func CalcBlobFeePrague(excessBlobGas uint64) *big.Int {
-	// Dummy prague header for calculation.
-	pragueHeader := &types.Header{ExcessBlobGas: &excessBlobGas}
-	dummyChainCfg := &params.ChainConfig{
-		LondonBlock:        common.Big0,
-		PragueTime:         ptr(uint64(0)),
-		BlobScheduleConfig: params.DefaultBlobSchedule,
-	}
-	return eip4844.CalcBlobFee(dummyChainCfg, pragueHeader)
-}
-
 func ptr[T any](t T) *T { return &t }

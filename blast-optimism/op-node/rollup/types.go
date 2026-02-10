@@ -119,10 +119,6 @@ type Config struct {
 	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
 	// epoch.
 	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
-	// NOTE the following have the same semantic meaning as prior PectraBlobScheduleTime
-	FusakaBlobScheduleTime *uint64 `json:"fusaka_blob_schedule_time,omitempty"`
-	Bpo1BlobScheduleTime   *uint64 `json:"bpo1_blob_schedule_time,omitempty"`
-	Bpo2BlobScheduleTime   *uint64 `json:"bpo2_blob_schedule_time,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -519,18 +515,6 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 	if c.PectraBlobScheduleTime != nil {
 		// only print in config if set at all
 		ctx = append(ctx, "pectra_blob_schedule_time", fmtForkTimeOrUnset(c.PectraBlobScheduleTime))
-	}
-
-	if c.FusakaBlobScheduleTime != nil {
-		ctx = append(ctx, "fusaka_blob_schedule_time", fmtForkTimeOrUnset(c.FusakaBlobScheduleTime))
-	}
-
-	if c.Bpo1BlobScheduleTime != nil {
-		ctx = append(ctx, "bpo1_blob_schedule_time", fmtForkTimeOrUnset(c.Bpo1BlobScheduleTime))
-	}
-
-	if c.Bpo2BlobScheduleTime != nil {
-		ctx = append(ctx, "bpo2_blob_schedule_time", fmtForkTimeOrUnset(c.Bpo2BlobScheduleTime))
 	}
 
 	log.Info("Rollup Config", ctx...)
