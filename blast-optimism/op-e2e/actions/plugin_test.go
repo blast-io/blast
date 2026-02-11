@@ -35,9 +35,9 @@ func TestLoadBlastPlugin(gt *testing.T) {
 	require.NoError(t, err)
 	addresses := secrets.Addresses()
 	initBal := e2eutils.Ether(50)
-	extraAllocs := map[string]*big.Int{}
+	extraAllocs := map[string]blockchain.Account{}
 	for _, addr := range addresses.All() {
-		extraAllocs[addr.Hex()] = initBal
+		extraAllocs[addr.Hex()] = blockchain.Account{Balance: initBal}
 	}
 
 	result := blastchain.NewChain(&blockchain.NewChainStartingArgs{

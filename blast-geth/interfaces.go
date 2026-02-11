@@ -141,7 +141,13 @@ type CallMsg struct {
 	Value     *big.Int        // amount of wei sent along with the call
 	Data      []byte          // input data, usually an ABI-encoded contract method invocation
 
+	// For BlobTxType
+	BlobGasFeeCap *big.Int
+	BlobHashes    []common.Hash
+
 	AccessList types.AccessList // EIP-2930 access list.
+	// For SetCodeTxType
+	AuthorizationList []types.SetCodeAuthorization
 }
 
 // A ContractCaller provides contract calls, essentially transactions that are executed by

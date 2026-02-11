@@ -6,25 +6,30 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"strings"
 
 	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
 	// plasma "github.com/ethereum-optimism/optimism/op-plasma"
-	"github.com/ethereum-optimism/optimism/op-service/oppprof"
-	"github.com/ethereum-optimism/optimism/op-service/sources"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/urfave/cli/v2"
-
 	"github.com/ethereum-optimism/optimism/op-node/flags"
 	"github.com/ethereum-optimism/optimism/op-node/node"
 	p2pcli "github.com/ethereum-optimism/optimism/op-node/p2p/cli"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/driver"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
+	"github.com/ethereum-optimism/optimism/op-service/cliiface"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	opflags "github.com/ethereum-optimism/optimism/op-service/flags"
+	"github.com/ethereum-optimism/optimism/op-service/forks"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
+	"github.com/ethereum-optimism/optimism/op-service/sources"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/urfave/cli/v2"
 )
 
 // NewConfig creates a Config from the provided flags or environment variables.
@@ -36,6 +41,43 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	rollupConfig, err := NewRollupConfigFromCLI(log, ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	l1ChainConfig, err := NewL1ChainConfig(rollupConfig.L1ChainID, ctx, log)
+	if err != nil {
+		return nil, err
+	}
+
+	l1ChainConfig.Blast = &params.BlastOverrides{}
+
+	if ctx.IsSet(opflags.OsakaBlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.OsakaBlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.OsakaBlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo1BlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.Bpo1BlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.BPO1BlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo2BlobScheduleOverrideFlagName) {
+		name := forks.Blob(strings.ToLower(ctx.String(opflags.Bpo2BlobScheduleOverrideFlagName)))
+		if !forks.IsValid(name) {
+			return nil, fmt.Errorf("unknown blob schedule override requested %s", name)
+		}
+		l1ChainConfig.Blast.BPO2BlobConfigOverride = forks.Schedule(l1ChainConfig, name)
+	}
+
+	if ctx.IsSet(opflags.Bpo2BlastBlobScheduleOverrideFlagName) {
+		bpo2BlastTS := ctx.Uint64(opflags.Bpo2BlastBlobScheduleOverrideFlagName)
+		l1ChainConfig.BPO2BlastTime = &bpo2BlastTS
+		l1ChainConfig.Blast.BPO2BlastBlobConfigOverride = forks.Schedule(l1ChainConfig, forks.BPO2Blast)
 	}
 
 	if !ctx.Bool(flags.RollupLoadProtocolVersions.Name) {
@@ -75,11 +117,12 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	}
 
 	cfg := &node.Config{
-		L1:     l1Endpoint,
-		L2:     l2Endpoint,
-		Rollup: *rollupConfig,
-		Driver: *driverConfig,
-		Beacon: NewBeaconEndpointConfig(ctx),
+		L1:            l1Endpoint,
+		L2:            l2Endpoint,
+		L1ChainConfig: l1ChainConfig,
+		Rollup:        *rollupConfig,
+		Driver:        *driverConfig,
+		Beacon:        NewBeaconEndpointConfig(ctx),
 		RPC: node.RPCConfig{
 			ListenAddr:  ctx.String(flags.RPCListenAddr.Name),
 			ListenPort:  ctx.Int(flags.RPCListenPort.Name),
@@ -261,6 +304,52 @@ func applyOverrides(ctx *cli.Context, rollupConfig *rollup.Config) {
 		pectrablobschedule := ctx.Uint64(opflags.PectraBlobScheduleOverrideFlagName)
 		rollupConfig.PectraBlobScheduleTime = &pectrablobschedule
 	}
+}
+
+func NewL1ChainConfigFromCLI(log log.Logger, ctx cliiface.Context) (*params.ChainConfig, error) {
+	l1ChainConfigPath := ctx.String(flags.L1ChainConfig.Name)
+	file, err := os.Open(l1ChainConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chain spec: %w", err)
+	}
+	defer file.Close()
+
+	// Attempt to decode directly as a ChainConfig
+	var chainConfig params.ChainConfig
+	dec := json.NewDecoder(file)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&chainConfig); err == nil {
+		return &chainConfig, nil
+	}
+
+	// If that fails, try to load the config from the .config property.
+	// This should work if the provided file is a genesis file / chainspec
+	return jsonutil.LoadJSONFieldStrict[params.ChainConfig](l1ChainConfigPath, "config")
+}
+
+func NewL1ChainConfig(chainId *big.Int, ctx cliiface.Context, log log.Logger) (*params.ChainConfig, error) {
+	if chainId == nil {
+		panic("l1 chain id is nil")
+	}
+
+	if cfg := eth.L1ChainConfigByChainID(eth.ChainIDFromBig(chainId)); cfg != nil {
+		return cfg, nil
+	}
+
+	// if the chain id is not known, we fallback to the CLI config
+	cf, err := NewL1ChainConfigFromCLI(log, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if cf.ChainID.Cmp(chainId) != 0 {
+		return nil, fmt.Errorf("l1 chain config chain ID mismatch: %v != %v", cf.ChainID, chainId)
+	}
+	if !cf.IsOptimism() && cf.BlobScheduleConfig == nil {
+		// No error if the chain config is an OP-Stack chain and doesn't have a blob schedule config
+		return nil, fmt.Errorf("L1 chain config does not have a blob schedule config")
+	}
+
+	return cf, nil
 }
 
 func NewSnapshotLogger(ctx *cli.Context) (log.Logger, error) {

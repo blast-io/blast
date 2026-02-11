@@ -26,13 +26,18 @@ var (
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSender = errors.New("invalid sender")
 
-	// ErrUnderpriced is returned if a transaction's gas price is below the minimum
-	// configured for the transaction pool.
+	// ErrUnderpriced is returned if a transaction's gas price is too low to be
+	// included in the pool. If the gas price is lower than the minimum configured
+	// one for the transaction pool, use ErrTxGasPriceTooLow instead.
 	ErrUnderpriced = errors.New("transaction underpriced")
 
 	// ErrReplaceUnderpriced is returned if a transaction is attempted to be replaced
 	// with a different one without the required price bump.
 	ErrReplaceUnderpriced = errors.New("replacement transaction underpriced")
+
+	// ErrTxGasPriceTooLow is returned if a transaction's gas price is below the
+	// minimum configured for the transaction pool.
+	ErrTxGasPriceTooLow = errors.New("transaction gas price below minimum")
 
 	// ErrAccountLimitExceeded is returned if a transaction would exceed the number
 	// allowed by a pool for a single account.
@@ -54,4 +59,22 @@ var (
 	// ErrFutureReplacePending is returned if a future transaction replaces a pending
 	// one. Future transactions should only be able to replace other future transactions.
 	ErrFutureReplacePending = errors.New("future transaction tries to replace pending")
+
+	// ErrTxBlobLimitExceeded is returned if a transaction would exceed the number
+	// of blobs allowed by blobpool.
+	ErrTxBlobLimitExceeded = errors.New("transaction blob limit exceeded")
+
+	// ErrAlreadyReserved is returned if the sender address has a pending transaction
+	// in a different subpool. For example, this error is returned in response to any
+	// input transaction of non-blob type when a blob transaction from this sender
+	// remains pending (and vice-versa).
+	ErrAlreadyReserved = errors.New("address already reserved")
+
+	// ErrInflightTxLimitReached is returned when the maximum number of in-flight
+	// transactions is reached for specific accounts.
+	ErrInflightTxLimitReached = errors.New("in-flight transaction limit reached for delegated accounts")
+
+	// ErrTxGasLimitExceeded is returned if a transaction's gas limit exceeds the
+	// configured maximum per-transaction limit.
+	ErrTxGasLimitExceeded = errors.New("exceeds maximum per-transaction gas limit")
 )

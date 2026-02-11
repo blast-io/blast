@@ -9,13 +9,21 @@ import (
 	"github.com/hashicorp/go-plugin"
 )
 
+type Account struct {
+	Code    []byte            `json:"code,omitempty"`
+	Storage map[string]string `json:"storage,omitempty"`
+	Balance *big.Int          `json:"balance" gencodec:"required"`
+	Nonce   uint64            `json:"nonce,omitempty"`
+}
+
 func init() {
 	gob.Register(plugin.BasicError{})
+	gob.Register(Account{})
 }
 
 type NewChainStartingArgs struct {
 	SerializedGenesis      []byte
-	ExtraAllocs            map[string]*big.Int
+	ExtraAllocs            map[string]Account
 	AssumeMainnet          bool
 	IncludeCatalystAPI     bool
 	JWTFilePath            string
@@ -24,6 +32,10 @@ type NewChainStartingArgs struct {
 	UseDatadir             string
 	WhenActivateCancun     *uint64
 	WhenActivatePrague     *uint64
+	WhenActivateOsaka      *uint64
+	WhenActivateBPO1       *uint64
+	WhenActivateBPO2       *uint64
+	WhenActivateBPO2Blast  *uint64
 	Faucet                 string
 	CatalystAuthEnabled    bool
 	MinerRecommit          time.Duration
@@ -48,11 +60,12 @@ type NewBlockOrError struct {
 }
 
 type NewChainOrError struct {
-	SerializedHeader []byte
-	HeadHash         string
-	SafeHash         string
-	FinalizedHash    string
-	Err              *plugin.BasicError
+	SerializedHeader     []byte
+	SerializedChainParam []byte
+	HeadHash             string
+	SafeHash             string
+	FinalizedHash        string
+	Err                  *plugin.BasicError
 }
 
 type ChainRPC struct {

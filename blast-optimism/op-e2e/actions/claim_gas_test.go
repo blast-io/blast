@@ -297,7 +297,7 @@ func TestBlastE2EMainnet(gt *testing.T) {
 	require.NoError(t, err, "new engine client died")
 	sequencer := NewL2Sequencer(t, lg, &mockL1Fetcher{
 		lg: lg,
-	}, nil, l2Cl, sd.RollupCfg, 0)
+	}, nil, l2Cl, sd.RollupCfg, sd.L1Cfg.Config, 0)
 	lg.Info(
 		"finished loading up nodes, ecotone time picked for next block",
 		"blast mainnet header", hdrTimeBlastMain,

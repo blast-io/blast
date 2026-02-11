@@ -551,10 +551,10 @@ func TestAuthTxPool(gt *testing.T) {
 		AuthPort: 2312,
 		WSPort:   2222,
 		Faucet:   faucet,
-		ExtraAllocs: map[string]*big.Int{
-			dp.Addresses.Mallory.Hex(): bigWheel,
-			dp.Addresses.Alice.Hex():   bigWheel,
-			dp.Addresses.Bob.Hex():     bigWheel,
+		ExtraAllocs: map[string]blockchain.Account{
+			dp.Addresses.Mallory.Hex(): blockchain.Account{Balance: bigWheel},
+			dp.Addresses.Alice.Hex():   blockchain.Account{Balance: bigWheel},
+			dp.Addresses.Bob.Hex():     blockchain.Account{Balance: bigWheel},
 		},
 		MinerRecommit:          100 * time.Millisecond,
 		MinerNewPayloadTimeout: 300 * time.Millisecond,

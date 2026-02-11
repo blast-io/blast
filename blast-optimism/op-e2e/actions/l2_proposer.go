@@ -53,6 +53,10 @@ type fakeTxMgr struct {
 	from common.Address
 }
 
+func (f fakeTxMgr) CraftTx(ctx context.Context, candidate txmgr.TxCandidate) (*types.Transaction, error) {
+	return nil, nil
+}
+
 func (f fakeTxMgr) From() common.Address {
 	return f.from
 }

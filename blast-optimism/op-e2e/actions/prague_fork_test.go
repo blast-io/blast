@@ -34,7 +34,7 @@ func setupSequencerTestWithL1Plugin(
 	engine := NewL2Engine(t, log, sd.L2Cfg, sd.RollupCfg.Genesis.L1, jwtPath)
 	l2Cl, err := sources.NewEngineClient(engine.RPCClient(), log, nil, sources.EngineClientDefaultConfig(sd.RollupCfg))
 	require.NoError(t, err)
-	sequencer := NewL2Sequencer(t, log, l1Client, miner.BlobStore(), l2Cl, sd.RollupCfg, 0)
+	sequencer := NewL2Sequencer(t, log, l1Client, miner.BlobStore(), l2Cl, sd.RollupCfg, sd.L1Cfg.Config, 0)
 	return engine, sequencer
 }
 

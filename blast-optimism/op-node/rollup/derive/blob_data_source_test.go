@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
@@ -42,7 +43,7 @@ func TestDataAndHashesFromTxs(t *testing.T) {
 	}
 	calldataTx, _ := types.SignNewTx(privateKey, signer, txData)
 	txs := types.Transactions{calldataTx}
-	data, blobHashes := dataAndHashesFromTxs(txs, &config, batcherAddr)
+	data, blobHashes := dataAndHashesFromTxs(txs, &config, batcherAddr, log.Root())
 	require.Equal(t, 1, len(data))
 	require.Equal(t, 0, len(blobHashes))
 
@@ -57,14 +58,14 @@ func TestDataAndHashesFromTxs(t *testing.T) {
 	}
 	blobTx, _ := types.SignNewTx(privateKey, signer, blobTxData)
 	txs = types.Transactions{blobTx}
-	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr)
+	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr, log.Root())
 	require.Equal(t, 1, len(data))
 	require.Equal(t, 1, len(blobHashes))
 	require.Nil(t, data[0].calldata)
 
 	// try again with both the blob & calldata transactions and make sure both are picked up
 	txs = types.Transactions{blobTx, calldataTx}
-	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr)
+	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr, log.Root())
 	require.Equal(t, 2, len(data))
 	require.Equal(t, 1, len(blobHashes))
 	require.NotNil(t, data[1].calldata)
@@ -72,7 +73,7 @@ func TestDataAndHashesFromTxs(t *testing.T) {
 	// make sure blob tx to the batch inbox is ignored if not signed by the batcher
 	blobTx, _ = types.SignNewTx(testutils.RandomKey(), signer, blobTxData)
 	txs = types.Transactions{blobTx}
-	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr)
+	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr, log.Root())
 	require.Equal(t, 0, len(data))
 	require.Equal(t, 0, len(blobHashes))
 
@@ -81,7 +82,7 @@ func TestDataAndHashesFromTxs(t *testing.T) {
 	blobTxData.To = testutils.RandomAddress(rng)
 	blobTx, _ = types.SignNewTx(privateKey, signer, blobTxData)
 	txs = types.Transactions{blobTx}
-	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr)
+	data, blobHashes = dataAndHashesFromTxs(txs, &config, batcherAddr, log.Root())
 	require.Equal(t, 0, len(data))
 	require.Equal(t, 0, len(blobHashes))
 }

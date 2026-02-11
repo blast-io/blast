@@ -142,7 +142,14 @@ var (
 		EnvVars: prefixEnvVars("WAIT_NODE_SYNC"),
 	}
 	// Legacy Flags
-	SequencerHDPathFlag = txmgr.SequencerHDPathFlag
+	SequencerHDPathFlag  = txmgr.SequencerHDPathFlag
+	SkipSanityChecksFlag = &cli.BoolFlag{
+		Name: "skip-sanity-check",
+		Usage: "Indicates if, during startup, the batcher should wait for a recent batcher tx on L1 to " +
+			"finalize (via more block confirmations). This should help avoid duplicate batcher txs.",
+		Value:   false,
+		EnvVars: prefixEnvVars("SKIP_SANITY_CHECK"),
+	}
 )
 
 var requiredFlags = []cli.Flag{
@@ -167,6 +174,7 @@ var optionalFlags = []cli.Flag{
 	BatchTypeFlag,
 	DataAvailabilityTypeFlag,
 	ActiveSequencerCheckDurationFlag,
+	SkipSanityChecksFlag,
 }
 
 func init() {

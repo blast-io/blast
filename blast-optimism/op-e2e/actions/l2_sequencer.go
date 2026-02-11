@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-node/metrics"
@@ -65,15 +66,15 @@ func (m *MockL1ReceiptsFetcher) FetchReceipts(ctx context.Context, blockHash com
 
 func NewL2Sequencer(t Testing, log log.Logger, l1 derive.L1Fetcher, blobSrc derive.L1BlobsFetcher,
 	//plasmaSrc derive.PlasmaInputFetcher,
-	eng L2API, cfg *rollup.Config, seqConfDepth uint64) *L2Sequencer {
+	eng L2API, cfg *rollup.Config, l1ChainConfig *params.ChainConfig, seqConfDepth uint64) *L2Sequencer {
 	ver := NewL2Verifier(
 		t, log, l1, blobSrc,
 		//plasmaSrc,
-		eng, cfg, &sync.Config{},
+		eng, cfg, l1ChainConfig, &sync.Config{},
 		//safedb.Disabled,
 	)
 	l1ReceiptWrapper := &MockL1ReceiptsFetcher{L1ReceiptsFetcher: l1}
-	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ReceiptWrapper, eng)
+	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, l1ReceiptWrapper, eng)
 	seqConfDepthL1 := driver.NewConfDepth(seqConfDepth, ver.l1State.L1Head, l1)
 	l1OriginSelector := &MockL1OriginSelector{
 		actual: driver.NewL1OriginSelector(log, cfg, seqConfDepthL1),

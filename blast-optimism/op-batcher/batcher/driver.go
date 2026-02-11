@@ -19,7 +19,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -519,13 +518,13 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 		candidate = l.calldataTxCandidate(data)
 	}
 
-	intrinsicGas, err := core.IntrinsicGas(candidate.TxData, nil, false, true, true, false)
-	if err != nil {
-		// we log instead of return an error here because txmgr can do its own gas estimation
-		l.Log.Error("Failed to calculate intrinsic gas", "err", err)
-	} else {
-		candidate.GasLimit = intrinsicGas
-	}
+	// floorDataGas, err := core.FloorDataGas(candidate.TxData)
+	// if err != nil {
+	// 	// We log instead of return an error here because the txmgr will do its own gas estimation.
+	// 	l.Log.Warn("Failed to calculate floor data gas", "err", err)
+	// } else {
+	// 	candidate.GasLimit = floorDataGas
+	// }
 
 	queue.Send(txdata.ID(), *candidate, receiptsCh)
 	return nil

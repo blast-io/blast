@@ -622,7 +622,7 @@ func RestartOpGeth(gt *testing.T, deltaTimeOffset *hexutil.Uint64) {
 	sequencer := NewL2Sequencer(
 		t, log, l1F, miner.BlobStore(),
 		//plasma.Disabled,
-		l2Cl, sd.RollupCfg, 0,
+		l2Cl, sd.RollupCfg, sd.L1Cfg.Config, 0,
 	)
 
 	batcher := NewL2Batcher(log, sd.RollupCfg, DefaultBatcherCfg(dp),
@@ -714,7 +714,7 @@ func ConflictingL2Blocks(gt *testing.T, deltaTimeOffset *hexutil.Uint64) {
 	altSequencer := NewL2Sequencer(
 		t, log, l1F, miner.BlobStore(),
 		//plasma.Disabled,
-		altSeqEngCl, sd.RollupCfg, 0,
+		altSeqEngCl, sd.RollupCfg, sd.L1Cfg.Config, 0,
 	)
 	altBatcher := NewL2Batcher(log, sd.RollupCfg, DefaultBatcherCfg(dp),
 		altSequencer.RollupClient(), miner.EthClient(), altSeqEng.EthClient(), altSeqEng.EngineClient(t, sd.RollupCfg))

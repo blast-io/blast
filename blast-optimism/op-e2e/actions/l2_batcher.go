@@ -42,6 +42,7 @@ type L1TxAPI interface {
 	PendingNonceAt(ctx context.Context, account common.Address) (uint64, error)
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	SendTransaction(ctx context.Context, tx *types.Transaction) error
+	BlobBaseFee(ctx context.Context) (*big.Int, error)
 }
 
 // type PlasmaInputSetter interface {
@@ -276,17 +277,19 @@ func (s *L2Batcher) ActL2BatchSubmit(t Testing, txOpts ...func(tx *types.Dynamic
 			opt(rawTx)
 		}
 
-		gas, err := core.IntrinsicGas(rawTx.Data, nil, false, true, true, false)
+		gas, err := core.FloorDataGas(rawTx.Data)
 		require.NoError(t, err, "need to compute intrinsic gas")
 		rawTx.Gas = gas
 		txData = rawTx
 	} else if s.l2BatcherCfg.DataAvailabilityType == batcherFlags.BlobsType {
 		var b eth.Blob
 		require.NoError(t, b.FromData(payload), "must turn data into blob")
-		sidecar, blobHashes, err := txmgr.MakeSidecar([]*eth.Blob{&b})
+		sidecar, blobHashes, err := txmgr.MakeSidecar([]*eth.Blob{&b}, false)
 		require.NoError(t, err)
 		require.NotNil(t, pendingHeader.ExcessBlobGas, "need L1 header with 4844 properties")
-		blobBaseFee := eth.CalcBlobFeeDefault(pendingHeader)
+		blobBaseFee, err := s.l1.BlobBaseFee(t.Ctx())
+		require.NoError(t, err, "need blob base fee")
+
 		blobFeeCap := new(uint256.Int).Mul(uint256.NewInt(2), uint256.MustFromBig(blobBaseFee))
 		if blobFeeCap.Lt(uint256.NewInt(params.GWei)) { // ensure we meet 1 gwei geth tx-pool minimum
 			blobFeeCap = uint256.NewInt(params.GWei)
@@ -365,10 +368,11 @@ func (s *L2Batcher) ActL2BatchSubmitMultiBlob(t Testing, numBlobs int) {
 	require.NoError(t, err, "need l1 pending header for gas price estimation")
 	gasFeeCap := new(big.Int).Add(gasTipCap, new(big.Int).Mul(pendingHeader.BaseFee, big.NewInt(2)))
 
-	sidecar, blobHashes, err := txmgr.MakeSidecar(blobs)
+	sidecar, blobHashes, err := txmgr.MakeSidecar(blobs, false)
 	require.NoError(t, err)
 	require.NotNil(t, pendingHeader.ExcessBlobGas, "need L1 header with 4844 properties")
-	blobBaseFee := eth.CalcBlobFeeDefault(pendingHeader)
+	blobBaseFee, err := s.l1.BlobBaseFee(t.Ctx())
+	require.NoError(t, err, "need blob base fee")
 	blobFeeCap := new(uint256.Int).Mul(uint256.NewInt(2), uint256.MustFromBig(blobBaseFee))
 	if blobFeeCap.Lt(uint256.NewInt(params.GWei)) { // ensure we meet 1 gwei geth tx-pool minimum
 		blobFeeCap = uint256.NewInt(params.GWei)

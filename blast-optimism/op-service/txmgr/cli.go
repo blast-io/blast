@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/urfave/cli/v2"
 )
 
@@ -53,6 +54,8 @@ var (
 			"mnemonic. The mnemonic flag must also be set.",
 		EnvVars: []string{"OP_PROPOSER_L2_OUTPUT_HD_PATH"},
 	}
+	// geth enforces a 1 gwei minimum for blob tx fee
+	defaultMinBlobTxFee = big.NewInt(params.GWei)
 )
 
 type DefaultFlagValues struct {
@@ -364,6 +367,7 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		ReceiptQueryInterval:      cfg.ReceiptQueryInterval,
 		NumConfirmations:          cfg.NumConfirmations,
 		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
+		MinBlobTxFee:              defaultMinBlobTxFee,
 		Signer:                    signerFactory(chainID),
 		From:                      from,
 		CellProofTime:             cellProofTime,
@@ -403,6 +407,8 @@ type Config struct {
 
 	// Minimum tip cap (in Wei) to enforce when determining tx fees.
 	MinTipCap *big.Int
+
+	MinBlobTxFee *big.Int
 
 	// ChainID is the chain ID of the L1 chain.
 	ChainID *big.Int

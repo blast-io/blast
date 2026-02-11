@@ -101,10 +101,29 @@ var (
 	// ErrSenderNoEOA is returned if the sender of a transaction is a contract.
 	ErrSenderNoEOA = errors.New("sender not an eoa")
 
+	// ErrSystemTxNotSupported is returned for any deposit tx with IsSystemTx=true after the Regolith fork
+	ErrSystemTxNotSupported = errors.New("system tx not supported")
+	// -- EIP-4844 errors --
+
 	// ErrBlobFeeCapTooLow is returned if the transaction fee cap is less than the
 	// blob gas fee of the block.
 	ErrBlobFeeCapTooLow = errors.New("max fee per blob gas less than block blob gas fee")
 
-	// ErrSystemTxNotSupported is returned for any deposit tx with IsSystemTx=true after the Regolith fork
-	ErrSystemTxNotSupported = errors.New("system tx not supported")
+	// ErrMissingBlobHashes is returned if a blob transaction has no blob hashes.
+	ErrMissingBlobHashes = errors.New("blob transaction missing blob hashes")
+
+	// ErrTooManyBlobs is returned if a blob transaction exceeds the maximum number of blobs.
+	ErrTooManyBlobs = errors.New("blob transaction has too many blobs")
+
+	// ErrBlobTxCreate is returned if a blob transaction has no explicit to field.
+	ErrBlobTxCreate = errors.New("blob transaction of type create")
+
+	// -- EIP-7702 errors --
+
+	// Message validation errors:
+	ErrEmptyAuthList   = errors.New("EIP-7702 transaction with empty auth list")
+	ErrSetCodeTxCreate = errors.New("EIP-7702 transaction cannot be used to create contract")
+
+	// -- EIP-7825 errors --
+	ErrGasLimitTooHigh = errors.New("transaction gas limit too high")
 )

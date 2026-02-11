@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	gnode "github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 
@@ -47,7 +48,8 @@ type L2Verifier struct {
 
 	rpc *rpc.Server
 
-	failRPC error // mock error
+	failRPC       error // mock error
+	L1ChainConfig *params.ChainConfig
 }
 
 type L2API interface {
@@ -80,7 +82,7 @@ func NewL2Verifier(
 	t Testing, log log.Logger, l1 derive.L1Fetcher,
 	blobsSrc derive.L1BlobsFetcher,
 	// plasmaSrc derive.PlasmaInputFetcher,
-	eng L2API, cfg *rollup.Config, syncCfg *sync.Config,
+	eng L2API, cfg *rollup.Config, l1ChainConfig *params.ChainConfig, syncCfg *sync.Config,
 	//safeHeadListener safeDB,
 ) *L2Verifier {
 	metrics := &testutils.TestDerivationMetrics{}
@@ -90,6 +92,7 @@ func NewL2Verifier(
 		log, cfg, mck, blobsSrc,
 		// plasmaSrc,
 		eng, engine, metrics, syncCfg,
+		l1ChainConfig,
 		//safeHeadListener,
 	)
 	pipeline.Reset()
@@ -101,6 +104,7 @@ func NewL2Verifier(
 		derivation:     pipeline,
 		l1:             mck,
 		l1State:        driver.NewL1State(log, metrics),
+		L1ChainConfig:  l1ChainConfig,
 		l2PipelineIdle: true,
 		l2Building:     false,
 		rollupCfg:      cfg,

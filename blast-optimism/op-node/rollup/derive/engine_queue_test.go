@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/ethereum-optimism/optimism/op-node/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -948,7 +949,7 @@ func TestBlockBuildingRace(t *testing.T) {
 	require.NotNil(t, eq.safeAttributes, "still have attributes")
 
 	// Now allow the building to complete
-	a1InfoTx, err := L1InfoDepositBytes(cfg, cfg.Genesis.SystemConfig, refA1.SequenceNumber, &testutils.MockBlockInfo{
+	a1InfoTx, err := L1InfoDepositBytes(cfg, params.MergedTestChainConfig, cfg.Genesis.SystemConfig, refA1.SequenceNumber, &testutils.MockBlockInfo{
 		InfoHash:        refA.Hash,
 		InfoParentHash:  refA.ParentHash,
 		InfoCoinbase:    common.Address{},
