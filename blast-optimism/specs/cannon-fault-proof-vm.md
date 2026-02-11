@@ -24,7 +24,7 @@
 
 This is a description of the Cannon Fault Proof Virtual Machine (FPVM). The Cannon FPVM emulates
 a minimal Linux-based system running on big-endian 32-bit MIPS32 architecture.
-Alot of its behaviors are copied from Linux/MIPS with a few tweaks made for fault proofs.
+A lot of its behaviors are copied from Linux/MIPS with a few tweaks made for fault proofs.
 For the rest of this doc, we refer to the Cannon FPVM as simply the FPVM.
 
 Operationally, the FPVM is a state transition function. This state transition is referred to as a *Step*,
