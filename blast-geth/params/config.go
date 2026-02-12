@@ -1459,6 +1459,7 @@ func (c *ChainConfig) HasOptimismWithdrawalsRoot(blockTime uint64) bool {
 }
 
 type BlastOverrides struct {
+	PragueBlobConfigOverride    *BlobConfig
 	OsakaBlobConfigOverride     *BlobConfig
 	BPO1BlobConfigOverride      *BlobConfig
 	BPO2BlobConfigOverride      *BlobConfig

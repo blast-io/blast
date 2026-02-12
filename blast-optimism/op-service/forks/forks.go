@@ -27,17 +27,17 @@ var All = []Blob{
 func Schedule(cfg *params.ChainConfig, name Blob) *params.BlobConfig {
 	switch name {
 	case Prague:
-		return cfg.BlobScheduleConfig.Prague
+		return cfg.Blast.PragueBlobConfigOverride
 	case Osaka:
-		return cfg.BlobScheduleConfig.Osaka
+		return cfg.Blast.OsakaBlobConfigOverride
 	case BPO1:
-		return cfg.BlobScheduleConfig.BPO1
+		return cfg.Blast.BPO1BlobConfigOverride
 	case BPO2:
-		return cfg.BlobScheduleConfig.BPO2
+		return cfg.Blast.BPO2BlobConfigOverride
 	case BPO2Blast:
-		return cfg.BlobScheduleConfig.BPO2Blast
+		return cfg.Blast.BPO2BlastBlobConfigOverride
 	case BPO3:
-		return cfg.BlobScheduleConfig.BPO3
+		return cfg.Blast.BPO3BlobConfigOverride
 	}
 
 	return nil

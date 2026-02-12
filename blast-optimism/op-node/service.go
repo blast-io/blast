@@ -48,7 +48,15 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		return nil, err
 	}
 
-	l1ChainConfig.Blast = &params.BlastOverrides{}
+	l1ChainConfig.Blast = &params.BlastOverrides{
+		PragueBlobConfigOverride:    params.DefaultPragueBlobConfig,
+		OsakaBlobConfigOverride:     params.DefaultOsakaBlobConfig,
+		BPO1BlobConfigOverride:      params.DefaultBPO1BlobConfig,
+		BPO2BlobConfigOverride:      params.DefaultBPO2BlobConfig,
+		BPO2BlastBlobConfigOverride: params.DefaultBPO2BlobConfig,
+		BPO3BlobConfigOverride:      params.DefaultBPO3BlobConfig,
+		BPO4BlobConfigOverride:      params.DefaultBPO4BlobConfig,
+	}
 
 	if ctx.IsSet(opflags.OsakaBlobScheduleOverrideFlagName) {
 		name := forks.Blob(strings.ToLower(ctx.String(opflags.OsakaBlobScheduleOverrideFlagName)))
@@ -78,6 +86,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		bpo2BlastTS := ctx.Uint64(opflags.Bpo2BlastBlobScheduleOverrideFlagName)
 		l1ChainConfig.BPO2BlastTime = &bpo2BlastTS
 		l1ChainConfig.Blast.BPO2BlastBlobConfigOverride = forks.Schedule(l1ChainConfig, forks.BPO2Blast)
+		l1ChainConfig.BlobScheduleConfig.BPO2Blast = l1ChainConfig.Blast.BPO2BlastBlobConfigOverride
 	}
 
 	if !ctx.Bool(flags.RollupLoadProtocolVersions.Name) {
