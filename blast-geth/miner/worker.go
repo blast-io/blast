@@ -570,7 +570,7 @@ func (w *worker) mainLoop() {
 			func() {
 				defer func() {
 					if err := recover(); err != nil {
-						log.Error("programmer error panic occured during main loop transaction", "panic", err)
+						log.Error("programmer error panic occurred during main loop transaction", "panic", err)
 					}
 				}()
 				// Apply transactions to the pending state if we're not sealing
@@ -1147,7 +1147,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) error {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Error("programmer error panic occured during fill transaction", "panic", err)
+			log.Error("programmer error panic occurred during fill transaction", "panic", err)
 		}
 	}()
 
