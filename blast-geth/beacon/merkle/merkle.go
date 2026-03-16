@@ -42,6 +42,16 @@ func (m *Value) UnmarshalJSON(input []byte) error {
 // VerifyProof verifies a Merkle proof branch for a single value in a
 // binary Merkle tree (index is a generalized tree index).
 func VerifyProof(root common.Hash, index uint64, branch Values, value Value) error {
+	// Check for empty branch
+	if len(branch) == 0 {
+        	return errors.New("empty branch provided")
+    	}
+
+	// Validate index range
+	if index >= (1 << uint(len(branch))) {
+		return errors.New("index out of range for provided branch length")
+	}
+	
 	hasher := sha256.New()
 	for _, sibling := range branch {
 		hasher.Reset()
