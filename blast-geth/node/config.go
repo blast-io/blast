@@ -302,6 +302,8 @@ func (c *Config) NodeName() string {
 	// Backwards compatibility: previous versions used title-cased "Geth", keep that.
 	if name == "geth" || name == "geth-testnet" {
 		name = "Geth"
+	} else if name == "blast" {
+		name = "Blast"
 	}
 	if c.UserIdent != "" {
 		name += "/" + c.UserIdent

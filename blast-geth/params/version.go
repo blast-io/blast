@@ -32,10 +32,10 @@ const (
 
 // OPVersion is the version of op-geth
 var (
-	OPVersionMajor = 0          // Major version component of the current release
-	OPVersionMinor = 1          // Minor version component of the current release
-	OPVersionPatch = 0          // Patch version component of the current release
-	OPVersionMeta  = "unstable" // Version metadata to append to the version string
+	OPVersionMajor = 1        // Major version component of the current release
+	OPVersionMinor = 8        // Minor version component of the current release
+	OPVersionPatch = 0        // Patch version component of the current release
+	OPVersionMeta  = "stable" // Version metadata to append to the version string
 )
 
 // This is set at build-time by the linker when the build is done by build/ci.go.
