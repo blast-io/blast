@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	pble "github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -152,7 +153,7 @@ func TestNodeCloseClosesDB(t *testing.T) {
 	stack, _ := New(testNodeConfig())
 	defer stack.Close()
 
-	db, err := stack.OpenDatabase("mydb", 0, 0, "", false)
+	db, err := stack.OpenDatabase("mydb", 0, 0, "", false, pble.FormatMostCompatible)
 	if err != nil {
 		t.Fatal("can't open DB:", err)
 	}
@@ -175,7 +176,7 @@ func TestNodeOpenDatabaseFromLifecycleStart(t *testing.T) {
 	var err error
 	stack.RegisterLifecycle(&InstrumentedService{
 		startHook: func() {
-			db, err = stack.OpenDatabase("mydb", 0, 0, "", false)
+			db, err = stack.OpenDatabase("mydb", 0, 0, "", false, pble.FormatMostCompatible)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}
@@ -196,7 +197,7 @@ func TestNodeOpenDatabaseFromLifecycleStop(t *testing.T) {
 
 	stack.RegisterLifecycle(&InstrumentedService{
 		stopHook: func() {
-			db, err := stack.OpenDatabase("mydb", 0, 0, "", false)
+			db, err := stack.OpenDatabase("mydb", 0, 0, "", false, pble.FormatMostCompatible)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}
